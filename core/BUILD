@@ -1,4 +1,5 @@
-load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_library")
+load("//tools/install:install.bzl", "install", "install_files")
 load("//tools:cpplint.bzl", "cpplint")
 
 package(default_visibility = ["//visibility:public"])
@@ -7,31 +8,40 @@ cc_library(
     name = "cyber",
     linkstatic = False,
     deps = [
-        "//cyber:cyber_core",
+        ":cyber_core",
     ],
 )
 
-cc_binary(
-    name = "mainboard",
-    srcs = [
-        "mainboard/mainboard.cc",
-        "mainboard/module_argument.cc",
-        "mainboard/module_argument.h",
-        "mainboard/module_controller.cc",
-        "mainboard/module_controller.h",
+install(
+    name = "install",
+    data = [
+        ":.release.bash",
+        ":cyber_conf",
+        "//cyber/python/cyber_py3:runtime_files",
     ],
-    linkopts = ["-pthread"],
-    linkstatic = False,
+    rename = {
+        "cyber/.release.bash": "setup.bash",
+    },
     deps = [
-        ":cyber_core",
-        "//cyber/proto:dag_conf_cc_proto",
+        ":pb_cyber",
+        "//cyber/mainboard:install",
+        "//cyber/python/internal:install",
+        "//cyber/tools:install",
+    ],
+)
+
+install_files(
+    name = "pb_cyber",
+    dest = "cyber",
+    files = [
+        "//cyber/proto:record_py_pb2",
     ],
 )
 
 cc_library(
     name = "binary",
-    hdrs = ["binary.h"],
     srcs = ["binary.cc"],
+    hdrs = ["binary.h"],
 )
 
 cc_library(
@@ -104,12 +114,11 @@ cc_library(
         "//cyber/time:rate",
         "//cyber/timer",
         "//cyber/transport",
-        "//cyber/transport:participant",
-        "//cyber/transport:sub_listener",
-        "@com_google_glog//:glog",
+        "//cyber/transport/rtps:participant",
+        "//cyber/transport/rtps:sub_listener",
+        "@com_github_google_glog//:glog",
         "@com_google_protobuf//:protobuf",
         "@fastrtps",
-        "@uuid",
     ],
 )
 
