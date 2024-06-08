@@ -10,13 +10,4 @@ digraph {
   "cyber" -> "POCO Foundation";
   "cyber" -> "python3-dev";
   "cyber" -> "uuid-dev";
-
-  "modules" -> "multiple" -> "boost 1.54/1.65";
-  "multiple" -> "pcl 1.9.1";
-
-  "modules" -> "perception" -> "cuda 10.0";
-  "perception" -> "opencv 2.4.8";
-
-  "offline" -> "bosfs 1.0.0";
-  "caffe 1.0" -> "protobuf";
 }
