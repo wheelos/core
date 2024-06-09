@@ -1,0 +1,9 @@
+# Common build options
+build --cxxopt=-std=c++17
+build --jobs=4
+build --verbose_failures
+build --keep_going
+
+# Compilation modes
+build:release --compilation_mode=opt --strip=always --copt=-O3
+build:debug --compilation_mode=dbg --copt=-g --copt=-O0
