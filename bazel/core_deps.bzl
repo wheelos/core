@@ -27,6 +27,16 @@ def core_deps():
     )
 
     http_archive(
+        name = "com_github_google_glog",
+        sha256 = "f28359aeba12f30d73d9e4711ef356dc842886968112162bc73002645139c39c",
+        strip_prefix = "glog-0.4.0",
+        urls = [
+            "https://apollo-system.cdn.bcebos.com/archive/6.0/v0.4.0.tar.gz",
+            "https://github.com/google/glog/archive/v0.4.0.tar.gz",
+        ],
+    )    
+
+    http_archive(
         name = "com_github_gflags_gflags",
         sha256 = "34af2f15cf7367513b352bdcd2493ab14ce43692d2dcd9dfc499492966c64dcf",
         strip_prefix = "gflags-2.2.2",
@@ -35,10 +45,11 @@ def core_deps():
 
     http_archive(
         name = "com_google_protobuf",
-        sha256 = "6fbe2e6f703bcd3a246529c2cab586ca12a98c4e641f5f71d51fde09eb48e9e7",
-        strip_prefix = "protobuf-27.1",
+        sha256 = "d0f5f605d0d656007ce6c8b5a82df3037e1d8fe8b121ed42e536f569dec16113",
+        strip_prefix = "protobuf-3.14.0",
         urls = [
-            "https://github.com/protocolbuffers/protobuf/archive/refs/tags/v27.1.tar.gz",
+            "https://apollo-system.cdn.bcebos.com/archive/6.0/v3.14.0.tar.gz",
+            "https://github.com/protocolbuffers/protobuf/archive/v3.14.0.tar.gz",
         ],
     )
 
