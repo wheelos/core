@@ -29,9 +29,9 @@ export RCFILES_DIR="/opt/apollo/rcfiles"
 export PKGS_DIR="/opt/apollo/pkgs"
 export SYSROOT_DIR="/opt/apollo/sysroot"
 
-export APOLLO_PROFILE="/etc/profile.d/apollo.sh"
-export APOLLO_LD_FILE="/etc/ld.so.conf.d/apollo.conf"
-export DOWNLOAD_LOG="/opt/apollo/build.log"
+export WHEEL_PROFILE="/etc/profile.d/wheel.sh"
+export WHEEL_LD_FILE="/etc/ld.so.conf.d/wheel.conf"
+export DOWNLOAD_LOG="/opt/wheel/build.log"
 export LOCAL_HTTP_ADDR="http://172.17.0.1:8388"
 
 # export SUPPORTED_NVIDIA_SMS="3.7 5.0 5.2 6.0 6.1 7.0 7.2 7.5"
@@ -78,12 +78,12 @@ function apollo_environ_setup() {
     if [ ! -d "${SYSROOT_DIR}" ]; then
         mkdir -p ${SYSROOT_DIR}/{bin,include,lib,share}
     fi
-    if [ ! -f "${APOLLO_LD_FILE}" ]; then
-        echo "${SYSROOT_DIR}/lib" | tee -a "${APOLLO_LD_FILE}"
+    if [ ! -f "${WHEEL_LD_FILE}" ]; then
+        echo "${SYSROOT_DIR}/lib" | tee -a "${WHEEL_LD_FILE}"
     fi
-    # if [ ! -f "${APOLLO_PROFILE}" ]; then
-    #     cp -f /opt/apollo/rcfiles/apollo.sh.sample "${APOLLO_PROFILE}"
-    #     echo "add_to_path ${SYSROOT_DIR}/bin" >> "${APOLLO_PROFILE}"
+    # if [ ! -f "${WHEEL_PROFILE}" ]; then
+    #     cp -f scripts/deps/installer_base.sh "${WHEEL_PROFILE}"
+    #     echo "add_to_path ${SYSROOT_DIR}/bin" >> "${WHEEL_PROFILE}"
     # fi
     if [ ! -f "${DOWNLOAD_LOG}" ]; then
         echo "##==== Summary: Apollo Package Downloads ====##" > "${DOWNLOAD_LOG}"
