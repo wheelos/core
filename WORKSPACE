@@ -10,15 +10,18 @@ http_archive(
 )
 
 http_archive(
-    name = "rules_pkg",
+    name = "com_github_grpc_grpc",
+    sha256 = "419dba362eaf8f1d36849ceee17c3e2ff8ff12ac666b42d3ff02a164ebe090e9",
+    strip_prefix = "grpc-1.30.0",
     urls = [
-        "https://github.com/bazelbuild/rules_pkg/releases/download/1.0.0/rules_pkg-1.0.0.tar.gz",
+        "https://github.com/grpc/grpc/archive/v1.30.0.tar.gz",
     ],
-    sha256 = "cad05f864a32799f6f9022891de91ac78f30e0fa07dc68abac92a628121b5b11",
 )
-load("@rules_pkg//:deps.bzl", "rules_pkg_dependencies")
-rules_pkg_dependencies()
 
-load("//:bazel/repositories.bzl", "core_repositories")
+load("@com_github_grpc_grpc//bazel:grpc_deps.bzl", "grpc_deps")
 
-core_repositories()
+grpc_deps()
+
+load("//:bazel/core_deps.bzl", "core_deps")
+
+core_deps()

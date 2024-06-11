@@ -1,28 +1,21 @@
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
-def core_repositories():
-    http_archive(
-        name = "zlib",
-        build_file = "@com_google_protobuf//:third_party/zlib.BUILD",
-        sha256 = "629380c90a77b964d896ed37163f5c3a34f6e6d897311f1df2a7016355c45eff",
-        strip_prefix = "zlib-1.2.11",
-        urls = ["https://github.com/madler/zlib/archive/v1.2.11.tar.gz"],
-    )
+def core_deps():
+# ref https://github.com/grpc/grpc/blob/master/bazel/grpc_deps.bzl
 
-    http_archive(
-        name = "com_google_absl",
-        urls = ["https://github.com/abseil/abseil-cpp/archive/refs/tags/20240116.2.tar.gz"],
-        strip_prefix = "abseil-cpp-20240116.2",
-    )
+#    http_archive(
+#        name = "zlib",
+#        build_file = "@com_google_protobuf//:third_party/zlib.BUILD",
+#        sha256 = "629380c90a77b964d896ed37163f5c3a34f6e6d897311f1df2a7016355c45eff",
+#        strip_prefix = "zlib-1.2.11",
+#        urls = ["https://github.com/madler/zlib/archive/v1.2.11.tar.gz"],
+#    )
 
-    http_archive(
-        name = "com_github_grpc_grpc",
-        sha256 = "419dba362eaf8f1d36849ceee17c3e2ff8ff12ac666b42d3ff02a164ebe090e9",
-        strip_prefix = "grpc-1.30.0",
-        urls = [
-            "https://github.com/grpc/grpc/archive/v1.30.0.tar.gz",
-        ],
-    )    
+#    http_archive(
+#        name = "com_google_absl",
+#        urls = ["https://github.com/abseil/abseil-cpp/archive/refs/tags/20240116.2.tar.gz"],
+#        strip_prefix = "abseil-cpp-20240116.2",
+#    )
 
     http_archive(
         name = "com_github_google_glog",
@@ -31,7 +24,7 @@ def core_repositories():
         urls = [
             "https://github.com/google/glog/archive/refs/tags/v0.7.1.tar.gz",
         ],
-    )        
+    )
 
     http_archive(
         name = "com_github_gflags_gflags",
@@ -53,16 +46,16 @@ def core_repositories():
         name = "uuid",
         build_file = "@core//bazel/third_party:uuid.BUILD",
         path = "/usr/include",
-    )  
-    
+    )
+
     native.new_local_repository(
         name = "fastcdr",
         build_file = "@core//bazel/third_party:fastcdr.BUILD",
         path = "/usr/local/fast-rtps/include",
-    )    
+    )
 
     native.new_local_repository(
         name = "fastrtps",
         build_file = "@core//bazel/third_party:fastrtps.BUILD",
         path = "/usr/local/fast-rtps/include",
-    )   
+    )

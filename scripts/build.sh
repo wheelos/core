@@ -1,1 +1,1 @@
-bazel build //cyber
+bazel build //cyber --distdir=/tmp/cache/
