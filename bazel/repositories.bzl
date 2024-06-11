@@ -1,7 +1,20 @@
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
-#load("@bazel_tools//tools/build_defs/repo:local.bzl", "new_local_repository")
 
 def core_repositories():
+    http_archive(
+        name = "zlib",
+        build_file = "@com_google_protobuf//:third_party/zlib.BUILD",
+        sha256 = "629380c90a77b964d896ed37163f5c3a34f6e6d897311f1df2a7016355c45eff",
+        strip_prefix = "zlib-1.2.11",
+        urls = ["https://github.com/madler/zlib/archive/v1.2.11.tar.gz"],
+    )
+
+    http_archive(
+        name = "com_google_absl",
+        urls = ["https://github.com/abseil/abseil-cpp/archive/refs/tags/20240116.2.tar.gz"],
+        strip_prefix = "abseil-cpp-20240116.2",
+    )
+
     http_archive(
         name = "com_github_grpc_grpc",
         sha256 = "419dba362eaf8f1d36849ceee17c3e2ff8ff12ac666b42d3ff02a164ebe090e9",
@@ -28,12 +41,6 @@ def core_repositories():
     )
 
     http_archive(
-        name = "com_google_absl",
-        urls = ["https://github.com/abseil/abseil-cpp/archive/98eb410c93ad059f9bba1bf43f5bb916fc92a5ea.zip"],
-        strip_prefix = "abseil-cpp-98eb410c93ad059f9bba1bf43f5bb916fc92a5ea",
-    )
-
-    http_archive(
         name = "com_google_protobuf",
         sha256 = "6fbe2e6f703bcd3a246529c2cab586ca12a98c4e641f5f71d51fde09eb48e9e7",
         strip_prefix = "protobuf-27.1",
@@ -42,8 +49,20 @@ def core_repositories():
         ],
     )
 
-#    new_local_repository(
-#        name = "uuid",
-#        build_file = "@cyber//bazel/third_party:uuid.BUILD",
-#        path = "/usr/include",
-#    )
+    native.new_local_repository(
+        name = "uuid",
+        build_file = "@core//bazel/third_party:uuid.BUILD",
+        path = "/usr/include",
+    )  
+    
+    native.new_local_repository(
+        name = "fastcdr",
+        build_file = "@core//bazel/third_party:fastcdr.BUILD",
+        path = "/usr/local/fast-rtps/include",
+    )    
+
+    native.new_local_repository(
+        name = "fastrtps",
+        build_file = "@core//bazel/third_party:fastrtps.BUILD",
+        path = "/usr/local/fast-rtps/include",
+    )   
