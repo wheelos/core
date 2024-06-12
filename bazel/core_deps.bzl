@@ -19,22 +19,13 @@ def core_deps():
 
     http_archive(
         name = "com_github_google_glog",
-        sha256 = "00e4a87e87b7e7612f519a41e491f16623b12423620006f59f5688bfd8d13b08",
-        strip_prefix = "glog-0.7.1",
-        urls = [
-            "https://github.com/google/glog/archive/refs/tags/v0.7.1.tar.gz",
-        ],
-    )
-
-    http_archive(
-        name = "com_github_google_glog",
         sha256 = "f28359aeba12f30d73d9e4711ef356dc842886968112162bc73002645139c39c",
         strip_prefix = "glog-0.4.0",
         urls = [
             "https://apollo-system.cdn.bcebos.com/archive/6.0/v0.4.0.tar.gz",
             "https://github.com/google/glog/archive/v0.4.0.tar.gz",
         ],
-    )    
+    )
 
     http_archive(
         name = "com_github_gflags_gflags",
