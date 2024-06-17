@@ -23,15 +23,16 @@ function ok() {
     (>&2 echo -e "[${GREEN}${BOLD} OK ${NO_COLOR}] $*")
 }
 
+export OPT_DIR="/opt/wheel/"
 export ARCHIVE_DIR="/tmp/archive"
-export RCFILES_DIR="/opt/apollo/rcfiles"
+export RCFILES_DIR="${OPT_DIR}/rcfiles"
 
-export PKGS_DIR="/opt/apollo/pkgs"
-export SYSROOT_DIR="/opt/apollo/sysroot"
+export PKGS_DIR="${OPT_DIR}/pkgs"
+export SYSROOT_DIR="${OPT_DIR}/sysroot"
 
 export WHEEL_PROFILE="/etc/profile.d/wheel.sh"
 export WHEEL_LD_FILE="/etc/ld.so.conf.d/wheel.conf"
-export DOWNLOAD_LOG="/opt/wheel/build.log"
+export DOWNLOAD_LOG="${OPT_DIR}/build.log"
 export LOCAL_HTTP_ADDR="http://172.17.0.1:8388"
 
 # export SUPPORTED_NVIDIA_SMS="3.7 5.0 5.2 6.0 6.1 7.0 7.2 7.5"
@@ -68,6 +69,10 @@ function source_date_epoch_setup() {
 }
 
 function apollo_environ_setup() {
+    if [ ! -d "${OPT_DIR}" ]; then
+        mkdir -p "${OPT_DIR}"
+    fi
+
     if [ -z "${SOURCE_DATE_EPOCH}" ]; then
         source_date_epoch_setup
     fi
