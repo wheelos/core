@@ -201,8 +201,9 @@ bool LogFileObject::CreateLogfile(const string& time_pid_string) {
   return true;  // Everything worked
 }
 
-void LogFileObject::Write(bool force_flush, time_t timestamp,
-                          const char* message, int message_len) {
+void LogFileObject::Write(bool force_flush,
+             const std::chrono::system_clock::time_point& timestamp,
+             const char* message, size_t message_len) {
   std::lock_guard<std::mutex> lock(lock_);
 
   // We don't log if the base_name_ is "" (which means "don't write")
@@ -230,7 +231,8 @@ void LogFileObject::Write(bool force_flush, time_t timestamp,
     rollover_attempt_ = 0;
 
     struct ::tm tm_time;
-    localtime_r(&timestamp, &tm_time);
+    std::time_t timestamp_t = std::chrono::system_clock::to_time_t(timestamp);
+    localtime_r(&timestamp_t, &tm_time);
 
     // The logfile's filename will have the date/time & pid in it
     ostringstream time_pid_stream;

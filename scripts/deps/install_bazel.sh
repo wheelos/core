@@ -1,93 +1,86 @@
-#!/usr/bin/env bash
+#!/bin/bash
 
-###############################################################################
-# Copyright 2020 The Apollo Authors. All Rights Reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-# http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-###############################################################################
 
-# Fail on first error.
+# Exit immediately on error
 set -e
 
 CURR_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
-. ${CURR_DIR}/installer_base.sh
+source "${CURR_DIR}/installer_base.sh"
 
+# Determine target architecture
 TARGET_ARCH=$(uname -m)
 
+# Get Bazel version from file
 BAZEL_VERSION=$(<"${CURR_DIR}/../../.bazelversion")
-echo "Start installing bazel ${BAZEL_VERSION}"
+BUILDTOOLS_VERSION="7.1.2"
+SYSROOT_BIN_DIR="${SYSROOT_DIR}/bin"
 
-if [ "$TARGET_ARCH" == "x86_64" ]; then
-  # https://bazel.build/install/ubuntu#binary-installer
-  PKG_NAME="bazel_${BAZEL_VERSION}-linux-x86_64.deb"
-  DOWNLOAD_LINK="https://github.com/bazelbuild/bazel/releases/download/${BAZEL_VERSION}/${PKG_NAME}"
-  SHA256SUM="70c0166145f649d53f1306f19ff8763ff3ac5777f0e9eb48e30f4abb0dfb4caf"
-  download_if_not_cached $PKG_NAME $SHA256SUM $DOWNLOAD_LINK
+install_bazel() {
+  local pkg_name=$1
+  local checksum=$2
+  local download_link="https://github.com/bazelbuild/bazel/releases/download/${BAZEL_VERSION}/${pkg_name}"
 
-  apt_get_update_and_install \
-    g++ unzip zip
+  download_if_not_cached "${pkg_name}" "${checksum}" "${download_link}"
 
-  # https://docs.bazel.build/versions/master/install-ubuntu.html#step-3-install-a-jdk-optional
-  # openjdk-11-jdk
+  if [[ "${pkg_name}" == *.deb ]]; then
+    apt_get_update_and_install g++ unzip zip
+    dpkg -i "${pkg_name}"
+  else
+    cp -f "${pkg_name}" "${SYSROOT_BIN_DIR}/bazel"
+    chmod a+x "${SYSROOT_BIN_DIR}/bazel"
+  fi
 
-  dpkg -i "${PKG_NAME}"
+  rm -f "${pkg_name}"
+}
 
-  # Cleanup right after installation
-  rm -rf "${PKG_NAME}"
+install_buildifier() {
+  local arch=$1
+  local checksum=$2
 
-  ## buildifier ##
-  BUILDTOOLS_VERSION="7.1.2"
-  PKG_NAME="buildifier-linux-amd64"
-  CHECKSUM="5d47f5f452bace65686448180ff63b4a6aaa0fb0ce0fe69976888fa4d8606940"
-  DOWNLOAD_LINK="https://github.com/bazelbuild/buildtools/releases/download/v${BUILDTOOLS_VERSION}/${PKG_NAME}"
-  download_if_not_cached "${PKG_NAME}" "${CHECKSUM}" "${DOWNLOAD_LINK}"
+  local pkg_name="buildifier-linux-${arch}"
+  local download_link="https://github.com/bazelbuild/buildtools/releases/download/v${BUILDTOOLS_VERSION}/${pkg_name}"
 
-  cp -f ${PKG_NAME} "${SYSROOT_DIR}/bin/buildifier"
-  chmod a+x "${SYSROOT_DIR}/bin/buildifier"
-  rm -rf ${PKG_NAME}
+  download_if_not_cached "${pkg_name}" "${checksum}" "${download_link}"
 
-  info "Done installing bazel ${BAZEL_VERSION} with buildifier ${BUILDTOOLS_VERSION}"
+  cp -f "${pkg_name}" "${SYSROOT_BIN_DIR}/buildifier"
+  chmod a+x "${SYSROOT_BIN_DIR}/buildifier"
+  rm -f "${pkg_name}"
+}
 
-elif [ "$TARGET_ARCH" == "aarch64" ]; then
-  ARM64_BINARY="bazel-${BAZEL_VERSION}-linux-arm64"
-  CHECKSUM="d621ba80c471531e208773f005913169ce226d885eebd9c81ca156bd25761149"
-  DOWNLOAD_LINK="https://github.com/bazelbuild/bazel/releases/download/${BAZEL_VERSION}/${ARM64_BINARY}"
-  # https://github.com/bazelbuild/bazel/releases/download/7.2.0/bazel-7.2.0-linux-arm64
-  download_if_not_cached "${ARM64_BINARY}" "${CHECKSUM}" "${DOWNLOAD_LINK}"
-  cp -f ${ARM64_BINARY} "${SYSROOT_DIR}/bin/bazel"
-  chmod a+x "${SYSROOT_DIR}/bin/bazel"
-  rm -rf "${ARM64_BINARY}"
+cleanup() {
+  apt-get clean
+  rm -rf /var/lib/apt/lists/*
+}
 
-  cp /opt/apollo/rcfiles/bazel_completion.bash /etc/bash_completion.d/bazel
-  
-  ## buildifier ##
-  BUILDTOOLS_VERSION="7.1.2"
-  PKG_NAME="buildifier-linux-arm64"
-  CHECKSUM="c22a44eee37b8927167ee6ee67573303f4e31171e7ec3a8ea021a6a660040437"
-  DOWNLOAD_LINK="https://github.com/bazelbuild/buildtools/releases/download/v${BUILDTOOLS_VERSION}/${PKG_NAME}"
-  download_if_not_cached "${PKG_NAME}" "${CHECKSUM}" "${DOWNLOAD_LINK}"
+trap cleanup EXIT
 
-  cp -f ${PKG_NAME} "${SYSROOT_DIR}/bin/buildifier"
-  chmod a+x "${SYSROOT_DIR}/bin/buildifier"
-  rm -rf ${PKG_NAME}
+echo "Installing Bazel ${BAZEL_VERSION}..."
 
-  info "Done installing bazel ${BAZEL_VERSION} with buildifier ${BUILDTOOLS_VERSION}"
-else
-  error "Target arch ${TARGET_ARCH} not supported yet"
-  exit 1
-fi
+case "$TARGET_ARCH" in
+  x86_64)
+    BAZEL_PKG="bazel_${BAZEL_VERSION}-linux-x86_64.deb"
+    BAZEL_CHECKSUM="70c0166145f649d53f1306f19ff8763ff3ac5777f0e9eb48e30f4abb0dfb4caf"
+    install_bazel "${BAZEL_PKG}" "${BAZEL_CHECKSUM}"
 
-# Clean up cache to reduce layer size.
-apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+    BUILDTOOLS_CHECKSUM="5d47f5f452bace65686448180ff63b4a6aaa0fb0ce0fe69976888fa4d8606940"
+    install_buildifier "amd64" "${BUILDTOOLS_CHECKSUM}"
+    ;;
 
+  aarch64)
+    BAZEL_PKG="bazel-${BAZEL_VERSION}-linux-arm64"
+    BAZEL_CHECKSUM="d621ba80c471531e208773f005913169ce226d885eebd9c81ca156bd25761149"
+    install_bazel "${BAZEL_PKG}" "${BAZEL_CHECKSUM}"
+
+    cp /opt/apollo/rcfiles/bazel_completion.bash /etc/bash_completion.d/bazel
+
+    BUILDTOOLS_CHECKSUM="c22a44eee37b8927167ee6ee67573303f4e31171e7ec3a8ea021a6a660040437"
+    install_buildifier "arm64" "${BUILDTOOLS_CHECKSUM}"
+    ;;
+
+  *)
+    echo "Error: Target architecture ${TARGET_ARCH} not supported yet"
+    exit 1
+    ;;
+esac
+
+info "Done installing Bazel ${BAZEL_VERSION} with Buildifier ${BUILDTOOLS_VERSION}"

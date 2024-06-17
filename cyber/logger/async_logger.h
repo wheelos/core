@@ -101,8 +101,9 @@ class AsyncLogger : public google::base::Logger {
    * @param message is the info to be written
    * @param message_len is the length of message
    */
-  void Write(bool force_flush, time_t timestamp, const char* message,
-             int message_len) override;
+  void Write(bool force_flush,
+             const std::chrono::system_clock::time_point& timestamp,
+             const char* message, size_t message_len) override;
 
   /**
    * @brief Flush any buffered messages.
@@ -133,11 +134,11 @@ class AsyncLogger : public google::base::Logger {
   // Arenas and allocate both the message data and Msg struct from them, forming
   // a linked list.
   struct Msg {
-    time_t ts;
+    std::chrono::system_clock::time_point ts;
     std::string message;
     int32_t level;
-    Msg() : ts(0), message(), level(google::INFO) {}
-    Msg(time_t ts, std::string&& message, int32_t level)
+    Msg() : ts(), message(), level(google::INFO) {}
+    Msg(std::chrono::system_clock::time_point ts, std::string&& message, int32_t level)
         : ts(ts), message(std::move(message)), level(level) {}
     Msg(const Msg& rsh) {
       ts = rsh.ts;
