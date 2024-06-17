@@ -74,7 +74,8 @@ void AsyncLogger::Write(bool force_flush,
     flag_.clear(std::memory_order_release);
   }
 
-  if (force_flush && timestamp == 0 && message && message_len == 0) {
+  if (force_flush && timestamp == std::chrono::system_clock::time_point{}
+      && message && message_len == 0) {
     Stop();
   }
 }

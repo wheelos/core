@@ -231,8 +231,8 @@ void LogFileObject::Write(bool force_flush,
     rollover_attempt_ = 0;
 
     struct ::tm tm_time;
-    std::time_t timestamp = std::chrono::system_clock::to_time_t(timestamp);
-    localtime_r(&timestamp, &tm_time);
+    std::time_t timestamp_t = std::chrono::system_clock::to_time_t(timestamp);
+    localtime_r(&timestamp_t, &tm_time);
 
     // The logfile's filename will have the date/time & pid in it
     ostringstream time_pid_stream;
