@@ -46,9 +46,9 @@ class LogFileObject : public google::base::Logger {
   LogFileObject(LogSeverity severity, const char* base_filename);
   ~LogFileObject();
 
-  void Write(bool force_flush,  // Should we force a flush here?
-             time_t timestamp,  // Timestamp for this entry
-             const char* message, int message_len) override;
+  void Write(bool force_flush,
+             const std::chrono::system_clock::time_point& timestamp,
+             const char* message, size_t message_len) override;
 
   // Configuration options
   void SetBasename(const char* basename);
