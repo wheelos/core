@@ -9,6 +9,7 @@ Latency of publish and subscribe messages.
 1. Run the installation script
 
 ```bash
+sudo bash scripts/deps/install_bazel.sh
 sudo bash scripts/deps/install_fast-rtps.sh
 ```
 
