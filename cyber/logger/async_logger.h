@@ -134,12 +134,12 @@ class AsyncLogger : public google::base::Logger {
   // Arenas and allocate both the message data and Msg struct from them, forming
   // a linked list.
   struct Msg {
-    time_t ts;
+    std::chrono::system_clock::time_point ts;
     std::string message;
     int32_t level;
-    Msg() : ts(0), message(), level(google::INFO) {}
+    Msg() : ts(), message(), level(google::INFO) {}
     Msg(std::chrono::system_clock::time_point ts, std::string&& message, int32_t level)
-        : ts(std::chrono::system_clock::to_time_t(ts)), message(std::move(message)), level(level) {}
+        : ts(ts), message(std::move(message)), level(level) {}
     Msg(const Msg& rsh) {
       ts = rsh.ts;
       message = rsh.message;

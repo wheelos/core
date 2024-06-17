@@ -29,8 +29,10 @@ class Logger : public google::base::Logger {
  public:
   explicit Logger(google::base::Logger* wrapped);
   ~Logger();
-  void Write(bool force_flush, time_t timestamp, const char* message,
-             int message_len) override;
+
+  void Write(bool force_flush,
+             const std::chrono::system_clock::time_point& timestamp,
+             const char* message, size_t message_len) override;
   void Flush() override;
   uint32_t LogSize() override;
 

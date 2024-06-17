@@ -30,8 +30,7 @@ TEST(AsyncLoggerTest, WriteAndFlush) {
   AsyncLogger logger(google::base::GetLogger(google::INFO));
 
   // write in stop state
-  time_t timep;
-  time(&timep);
+  const auto timep = std::chrono::system_clock::now();
   std::string message = "I0909 99:99:99.999999 99999 logger_test.cc:999] ";
   message.append(LEFT_BRACKET);
   message.append("AsyncLoggerTest");
