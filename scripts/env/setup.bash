@@ -1,11 +1,7 @@
 #! /usr/bin/env bash
 
-# Define the top directory
-TOP_DIR="$(cd "$( dirname "${BASH_SOURCE[0]}" )/.." && pwd -P)"
-source "${TOP_DIR}/scripts/env/common.bashrc"
-
-# Define wheel root directory
-WHEEL_ROOT_DIR="${TOP_DIR}"
+# Define the root directory
+WHEEL_ROOT_DIR="$(cd "$( dirname "${BASH_SOURCE[0]}" )/.." && pwd -P)"
 
 # Prepend each tool path to PATH
 bazel_bin_path="${WHEEL_ROOT_DIR}/bazel-bin"

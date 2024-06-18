@@ -35,7 +35,7 @@ bash scripts/build.sh
 
 2. Set Environment Variable
    ```bash
-   export CYBER_PATH="/workspaces/core/cyber"
+   source scripts/setup.bash
    ```
 
 3. Run the Publisher and Subscriber

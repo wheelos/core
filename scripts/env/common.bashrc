@@ -47,4 +47,34 @@ pathappend() {
     export $PATHVARIABLE="${!PATHVARIABLE:+${!PATHVARIABLE}:}$1"
 }
 
-export -f pathremove pathprepend pathappend
+add_to_profile() {
+    local setup_script_path="$1"
+    local profile_file="$HOME/.profile"
+
+    # Check if the setup script path is provided
+    if [[ -z "$setup_script_path" ]]; then
+        echo "Usage: add_to_profile /path/to/scripts/setup.bash"
+        return 1
+    fi
+
+    # Check if the .profile file exists, create it if it does not
+    if [[ ! -f "$profile_file" ]]; then
+        touch "$profile_file"
+    fi
+
+    # Check if the setup script is already sourced in .profile
+    if grep -Fxq "source $setup_script_path" "$profile_file"; then
+        echo "The setup script is already sourced in $profile_file"
+    else
+        # Add the source command to .profile
+        echo "source $setup_script_path" >> "$profile_file"
+        echo "Added source command to $profile_file"
+    fi
+
+    # Source the .profile file to apply changes immediately
+    source "$profile_file"
+    echo "Sourced $profile_file to apply changes"
+}
+
+
+export -f pathremove pathprepend pathappend add_to_profile
