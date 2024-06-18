@@ -23,7 +23,7 @@ function ok() {
     (>&2 echo -e "[${GREEN}${BOLD} OK ${NO_COLOR}] $*")
 }
 
-OPT_DIR="/opt/wheel/"
+OPT_DIR="/opt/wheel"
 export PKGS_DIR="${OPT_DIR}/pkgs"
 export SYSROOT_DIR="${OPT_DIR}/sysroot"
 export DOWNLOAD_LOG="${OPT_DIR}/build.log"
@@ -67,13 +67,6 @@ function apollo_environ_setup() {
     fi
     if [ ! -d "${SYSROOT_DIR}" ]; then
         mkdir -p ${SYSROOT_DIR}/{bin,include,lib,share}
-    fi
-    if [ ! -f "${APOLLO_LD_FILE}" ]; then
-        echo "${SYSROOT_DIR}/lib" | tee -a "${APOLLO_LD_FILE}"
-    fi
-    if [ ! -f "${APOLLO_PROFILE}" ]; then
-        cp -f ${OPT_DIR}/rcfiles/wheel.sh.sample "${APOLLO_PROFILE}"
-        echo "add_to_path ${SYSROOT_DIR}/bin" >> "${APOLLO_PROFILE}"
     fi
     if [ ! -f "${DOWNLOAD_LOG}" ]; then
         echo "##==== Summary: Wheel Package Downloads ====##" > "${DOWNLOAD_LOG}"

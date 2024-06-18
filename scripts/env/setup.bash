@@ -2,6 +2,10 @@
 export WHEEL_ROOT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/../.." && pwd )"
 source "${WHEEL_ROOT_DIR}/scripts/env/common.bashrc"
 
+if [ ! -d "${WHEEL_ROOT_DIR}/data/log" ]; then
+    mkdir -p "${WHEEL_ROOT_DIR}/data/log"
+fi
+
 # Prepend each tool path to PATH
 bazel_bin_path="${WHEEL_ROOT_DIR}/bazel-bin"
 declare -A tools_paths=(
