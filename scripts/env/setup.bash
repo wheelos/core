@@ -1,7 +1,6 @@
 #! /usr/bin/env bash
-
-# Define the root directory
-WHEEL_ROOT_DIR="$(cd "$( dirname "${BASH_SOURCE[0]}" )/.." && pwd -P)"
+export WHEEL_ROOT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/../.." && pwd )"
+source "${WHEEL_ROOT_DIR}/scripts/env/common.bashrc"
 
 # Prepend each tool path to PATH
 bazel_bin_path="${WHEEL_ROOT_DIR}/bazel-bin"

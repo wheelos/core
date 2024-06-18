@@ -35,7 +35,7 @@ bash scripts/build.sh
 
 2. Set Environment Variable
    ```bash
-   source scripts/setup.bash
+   bash scripts/env/setup_host.sh
    ```
 
 3. Run the Publisher and Subscriber
