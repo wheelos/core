@@ -9,8 +9,7 @@ Latency of publish and subscribe messages.
 1. Run the installation script
 
 ```bash
-sudo bash scripts/deps/install_bazel.sh
-sudo bash scripts/deps/install_fast-rtps.sh
+sudo bash scripts/deploy.sh
 ```
 
 2. Set environment variables
@@ -35,7 +34,7 @@ bash scripts/build.sh
 
 2. Set Environment Variable
    ```bash
-   bash scripts/env/setup_host.sh
+   source scripts/env/setup.bash
    ```
 
 3. Run the Publisher and Subscriber
