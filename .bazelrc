@@ -2,6 +2,7 @@
 build --cxxopt=-std=c++17
 build --jobs=4
 build --verbose_failures
+build --keep_going
 
 # Enable Bzlmod for every Bazel command
 common --enable_bzlmod
