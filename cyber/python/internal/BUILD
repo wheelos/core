@@ -1,19 +1,8 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
-load("//:bazel/install/install.bzl", "install")
 
 
 package(default_visibility = ["//visibility:public"])
 
-install(
-    name = "install",
-    targets = [
-        ":_cyber_wrapper.so",
-        ":_cyber_record_wrapper.so",
-        ":_cyber_time_wrapper.so",
-        ":_cyber_timer_wrapper.so",
-        ":_cyber_parameter_wrapper.so",
-    ],
-)
 
 cc_binary(
     name = "_cyber_wrapper.so",

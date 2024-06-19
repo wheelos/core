@@ -1,15 +1,8 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
 
-load("//:bazel/install/install.bzl", "install")
 
 package(default_visibility = ["//visibility:public"])
 
-install(
-    name = "install",
-    targets = [
-        ":cyber_monitor",
-    ],
-)
 
 cc_binary(
     name = "cyber_monitor",

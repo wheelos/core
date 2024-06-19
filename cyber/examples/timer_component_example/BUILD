@@ -1,5 +1,4 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
-load("//:bazel/install/install.bzl", "install")
 
 
 package(default_visibility = ["//visibility:public"])
@@ -30,15 +29,3 @@ filegroup(
         ":timer.launch",
     ],
 )
-
-install(
-    name = "install",
-    data = [
-        ":conf",
-    ],
-    targets = [
-        ":libtimer_component_example.so",
-    ],
-)
-
-

@@ -1,5 +1,4 @@
 load("@rules_cc//cc:defs.bzl", "cc_library")
-load("//:bazel/install/install.bzl", "install", "install_files")
 
 
 package(default_visibility = ["//visibility:public"])
@@ -9,32 +8,6 @@ cc_library(
     linkstatic = False,
     deps = [
         ":cyber_core",
-    ],
-)
-
-install(
-    name = "install",
-    data = [
-        ":.release.bash",
-        ":cyber_conf",
-        "//cyber/python/cyber_py3:runtime_files",
-    ],
-    rename = {
-        "cyber/.release.bash": "setup.bash",
-    },
-    deps = [
-        ":pb_cyber",
-        "//cyber/mainboard:install",
-        "//cyber/python/internal:install",
-        "//cyber/tools:install",
-    ],
-)
-
-install_files(
-    name = "pb_cyber",
-    dest = "cyber",
-    files = [
-        "//cyber/proto:record_py_pb2",
     ],
 )
 

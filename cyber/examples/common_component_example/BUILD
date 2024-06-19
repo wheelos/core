@@ -1,5 +1,4 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
-load("//:bazel/install/install.bzl", "install")
 
 
 package(default_visibility = ["//visibility:public"])
@@ -47,20 +46,3 @@ filegroup(
         ":common.launch",
     ],
 )
-
-install(
-    name = "install",
-    data = [
-        ":conf",
-    ],
-    # We want to install channel_*_writer into runtime_dest
-    # rather than bin/
-    runtime_dest = "cyber/examples/common_component_example",
-    targets = [
-        ":channel_prediction_writer",
-        ":channel_test_writer",
-        ":libcommon_component_example.so",
-    ],
-)
-
-

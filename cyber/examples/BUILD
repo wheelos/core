@@ -1,5 +1,4 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary")
-load("//:bazel/install/install.bzl", "install")
 
 
 package(default_visibility = ["//visibility:public"])
@@ -19,19 +18,6 @@ cc_binary(
     deps = [
         "//cyber",
         "//cyber/examples/proto:examples_cc_proto",
-    ],
-)
-
-install(
-    name = "install",
-    targets = [
-        ":talker",
-        ":listener",
-    ],
-    runtime_dest = "cyber/examples",
-    deps = [
-        "//cyber/examples/common_component_example:install",
-        "//cyber/examples/timer_component_example:install",
     ],
 )
 

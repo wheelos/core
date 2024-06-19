@@ -1,5 +1,4 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
-load("//tools/install:install.bzl", "install")
 load("//tools:cpplint.bzl", "cpplint")
 
 package(default_visibility = ["//visibility:public"])
@@ -12,19 +11,6 @@ cc_binary(
     linkstatic = False,
     deps = [
         ":microphone_component_lib",
-    ],
-)
-
-install(
-    name = "install",
-    data = [
-        ":runtime_data",
-    ],
-    targets = [
-        ":libmicrophone_component.so",
-    ],
-    deps = [
-        "//cyber:install",
     ],
 )
 

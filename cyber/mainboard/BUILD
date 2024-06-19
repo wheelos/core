@@ -1,6 +1,5 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary")
 
-load("//:bazel/install/install.bzl", "install")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -20,10 +19,3 @@ cc_binary(
         "//cyber/proto:dag_conf_cc_proto",
     ],
 )
-
-install(
-    name = "install",
-    targets = [":mainboard"],
-)
-
-

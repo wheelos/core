@@ -1,5 +1,4 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
-load("//tools/install:install.bzl", "install")
 load("//tools:cpplint.bzl", "cpplint")
 
 package(default_visibility = ["//visibility:public"])
@@ -31,18 +30,6 @@ cc_library(
     ],
 )
 
-install(
-    name = "install",
-    data = [
-        ":runtime_data",
-    ],
-    targets = [
-        ":libgnss_component.so",
-    ],
-    deps = [
-        "//cyber:install",
-    ],
-)
 
 filegroup(
     name = "runtime_data",
