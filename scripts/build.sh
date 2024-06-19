@@ -6,4 +6,4 @@ set -e
 
 LOCAL_CACHE="/tmp/cache/"
 
-bazel build //cyber --distdir="$LOCAL_CACHE"
+bazel build //cyber/... --distdir="$LOCAL_CACHE"

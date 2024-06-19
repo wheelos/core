@@ -26,24 +26,13 @@ bash scripts/build.sh
 
 ## Example
 
-1. Build the Publisher and Subscriber
-   ```bash
-   bazel build //cyber/examples:talker
-   bazel build //cyber/examples:listener
-   ```
-
-2. Set Environment Variable
+1. Set Environment Variable
    ```bash
    source scripts/env/setup.bash
    ```
 
-3. Run the Publisher and Subscriber
-   - In two separate terminals, run the following commands:
-     ```bash
-     ./bazel-bin/cyber/examples/listener
-     ./bazel-bin/cyber/examples/talker
-     ```
-   - **Explanation**:
-     - In the first terminal, run `./bazel-bin/cyber/examples/listener` to start the subscriber program.
-     - In the second terminal, run `./bazel-bin/cyber/examples/talker` to start the publisher program.
-     - The publisher (`talker`) will begin publishing messages, and the subscriber (`listener`) will receive and process these messages.
+2. Run the Publisher and Subscriber
+   - In the first terminal, run `./bazel-bin/cyber/examples/listener` to start the subscriber program.
+   - In the second terminal, run `./bazel-bin/cyber/examples/talker` to start the publisher program.
+
+3. Check the log in `data/log`
