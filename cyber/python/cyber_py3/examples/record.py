@@ -27,12 +27,11 @@ import time
 
 from google.protobuf.descriptor_pb2 import FileDescriptorProto
 
-from cyber.proto.unit_test_pb2 import Chatter
+from cyber.proto.unit_test_pb2 import Chatter, ChatterBenchmark
 from cyber.python.cyber_py3 import record
-from modules.common.util.testdata.simple_pb2 import SimpleMessage
 
 
-MSG_TYPE = "apollo.common.util.test.SimpleMessage"
+MSG_TYPE = "apollo.cyber.proto.ChatterBenchmark"
 MSG_TYPE_CHATTER = "apollo.cyber.proto.Chatter"
 
 
@@ -49,9 +48,9 @@ def test_record_writer(writer_path):
         return
     print('+++ Begin to writer +++')
 
-    # Writer 2 SimpleMessage
-    msg = SimpleMessage()
-    msg.text = "AAAAAA"
+    # Writer 2 ChatterBenchmark
+    msg = ChatterBenchmark()
+    msg.content = "AAAAAA"
 
     file_desc = msg.DESCRIPTOR.file
     proto = FileDescriptorProto()
@@ -104,7 +103,7 @@ def test_record_reader(reader_path):
         print('message is -> %s' % msg)
         print('***After parse(if needed),the message is ->')
         if datatype == MSG_TYPE:
-            msg_new = SimpleMessage()
+            msg_new = ChatterBenchmark()
             msg_new.ParseFromString(msg)
             print(msg_new)
         elif datatype == MSG_TYPE_CHATTER:

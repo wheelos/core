@@ -85,7 +85,7 @@ _generate_pb2_src = rule(
             cfg = "host",
         ),
         "_protoc": attr.label(
-            default = Label("//external:protocol_compiler"),
+            default = Label("@com_google_protobuf//:protoc"),
             providers = ["files_to_run"],
             executable = True,
             cfg = "host",
@@ -210,7 +210,7 @@ _generate_pb2_grpc_src = rule(
             executable = True,
             providers = ["files_to_run"],
             cfg = "host",
-            default = Label("//external:protocol_compiler"),
+            default = Label("@com_google_protobuf//:protoc"),
         ),
     },
     implementation = _generate_pb2_grpc_src_impl,

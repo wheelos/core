@@ -49,7 +49,7 @@ TEST(LoggerTest, SetLoggerToGlog) {
   google::SetLogDestination(google::WARNING, "");
   google::SetLogDestination(google::FATAL, "");
   Logger* logger = new Logger(google::base::GetLogger(google::INFO));
-  google::base::SetLogger(FLAGS_minloglevel, logger);
+  google::base::SetLogger(static_cast<google::LogSeverity>(FLAGS_minloglevel), logger);
 
   ALOG_MODULE("LoggerTest2", INFO) << "test set logger to glog";
   ALOG_MODULE("LoggerTest2", WARN) << "test set logger to glog";

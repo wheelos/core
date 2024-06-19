@@ -19,3 +19,9 @@ def core_deps():
         build_file = "@core//bazel/third_party:fastrtps.BUILD",
         path = "/usr/local/fast-rtps/include",
     )
+
+    native.new_local_repository(
+        name = "ncurses5",
+        build_file = "@core//bazel/third_party:ncurses5.BUILD",
+        path = "/usr/include",
+    )

@@ -59,7 +59,7 @@ TEST(AsyncLoggerTest, SetLoggerToGlog) {
   google::SetLogDestination(google::WARNING, "");
   google::SetLogDestination(google::FATAL, "");
   AsyncLogger logger(google::base::GetLogger(google::INFO));
-  google::base::SetLogger(FLAGS_minloglevel, &logger);
+  google::base::SetLogger(static_cast<google::LogSeverity>(FLAGS_minloglevel), &logger);
   logger.Start();
   ALOG_MODULE("AsyncLoggerTest2", INFO) << "test set async logger to glog";
   ALOG_MODULE("AsyncLoggerTest2", WARN) << "test set async logger to glog";
