@@ -6,19 +6,13 @@ Latency of publish and subscribe messages.
 
 ## How to build
 
-1. Run the installation script
+1. Deploy build env
 
 ```bash
-sudo bash scripts/deploy.sh
+sudo bash scripts/deploy/build.sh
 ```
 
-2. Set environment variables
-
-```bash
-export CPLUS_INCLUDE_PATH="/usr/local/fast-rtps/include"
-```
-
-3. Run the build script
+2. Run the build script
 
 ```bash
 bash scripts/build.sh
@@ -28,7 +22,7 @@ bash scripts/build.sh
 
 1. Set Environment Variable
    ```bash
-   source scripts/env/setup.bash
+   source scripts/env/runtime.bash
    ```
 
 2. Run the Publisher and Subscriber
