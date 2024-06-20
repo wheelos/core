@@ -35,5 +35,11 @@ fi
 # Add udev rules.
 sudo cp -r ${WHEEL_ROOT_DIR}/scripts/env/etc/* /etc/
 
+
+# Install dependent libraries
+# scripts/deps/install_fast-rtps.sh
+# scripts/deps/install_uuid.sh
+
+
 # Setup cyber env
-add_to_bashrc "${WHEEL_ROOT_DIR}/scripts/env/setup.bash"
+add_to_bashrc "${WHEEL_ROOT_DIR}/scripts/env/runtime.bash"

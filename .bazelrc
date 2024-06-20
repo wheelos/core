@@ -2,7 +2,10 @@
 build --cxxopt=-std=c++17
 build --jobs=4
 build --verbose_failures
-build --keep_going
+# build --keep_going
+
+build --action_env=PYTHON_BIN_PATH="/usr/bin/python3"
+build --action_env=CPLUS_INCLUDE_PATH="/usr/local/fast-rtps/include"
 
 # Enable Bzlmod for every Bazel command
 common --enable_bzlmod
