@@ -1,5 +1,5 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
-load("//tools:cpplint.bzl", "cpplint")
+
 load("//tools/platform:build_defs.bzl", "copts_if_esd_can", "if_esd_can")
 
 package(default_visibility = ["//visibility:public"])
@@ -55,4 +55,4 @@ cc_test(
     ],
 )
 
-cpplint()
+

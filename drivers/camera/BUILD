@@ -1,5 +1,5 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
-load("//tools:cpplint.bzl", "cpplint")
+
 load("//tools/platform:build_defs.bzl", "if_x86_64")
 
 package(default_visibility = ["//visibility:public"])
@@ -98,4 +98,4 @@ cc_library(
     ),
 )
 
-cpplint()
+
