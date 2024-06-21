@@ -1,5 +1,3 @@
-load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
-
 def core_deps():
     # ref https://github.com/grpc/grpc/blob/master/bazel/grpc_deps.bzl
     native.new_local_repository(

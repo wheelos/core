@@ -2,8 +2,6 @@
 Tailored from @com_github_grpc_grpc:bazel/python_rules.bzl
 """
 
-load("@rules_python//python:defs.bzl", "py_library")
-load("@rules_proto//proto:defs.bzl", "ProtoInfo")
 load("@bazel_skylib//lib:paths.bzl", "paths")
 load(
     "@com_github_grpc_grpc//bazel:protobuf.bzl",
@@ -15,6 +13,8 @@ load(
     "includes_from_deps",
     "protos_from_context",
 )
+load("@rules_proto//proto:defs.bzl", "ProtoInfo")
+load("@rules_python//python:defs.bzl", "py_library")
 
 _GENERATED_PROTO_FORMAT = "{}_pb2.py"
 _GENERATED_GRPC_PROTO_FORMAT = "{}_pb2_grpc.py"
@@ -82,13 +82,13 @@ _generate_pb2_src = rule(
             mandatory = False,
             executable = True,
             providers = ["files_to_run"],
-            cfg = "host",
+            cfg = "exec",
         ),
         "_protoc": attr.label(
             default = Label("@com_google_protobuf//:protoc"),
             providers = ["files_to_run"],
             executable = True,
-            cfg = "host",
+            cfg = "exec",
         ),
     },
     implementation = _generate_py_impl,
@@ -198,18 +198,18 @@ _generate_pb2_grpc_src = rule(
             mandatory = False,
             executable = True,
             providers = ["files_to_run"],
-            cfg = "host",
+            cfg = "exec",
         ),
         "_grpc_plugin": attr.label(
             executable = True,
             providers = ["files_to_run"],
-            cfg = "host",
+            cfg = "exec",
             default = Label("@com_github_grpc_grpc//src/compiler:grpc_python_plugin"),
         ),
         "_protoc": attr.label(
             executable = True,
             providers = ["files_to_run"],
-            cfg = "host",
+            cfg = "exec",
             default = Label("@com_google_protobuf//:protoc"),
         ),
     },

@@ -6,9 +6,9 @@
 ###############################################################################
 
 module(
-  name = "core",
-  version = "1.0.0",
-  compatibility_level = 1,
+    name = "core",
+    version = "1.0.0",
+    compatibility_level = 1,
 )
 
 # LOWER BOUND dependency versions.
@@ -23,7 +23,6 @@ bazel_dep(name = "rules_cc", version = "0.0.9")
 bazel_dep(name = "rules_pkg", version = "0.10.1")
 bazel_dep(name = "rules_proto", version = "6.0.0")
 bazel_dep(name = "rules_python", version = "0.33.1")
-
 bazel_dep(name = "abseil-cpp", version = "20240116.2", repo_name = "com_google_absl")
 bazel_dep(name = "gflags", version = "2.2.2", repo_name = "com_github_gflags_gflags")
 bazel_dep(name = "glog", version = "0.7.1", repo_name = "com_github_google_glog")

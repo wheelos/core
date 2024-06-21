@@ -1,8 +1,6 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
 
-
 package(default_visibility = ["//visibility:public"])
-
 
 cc_binary(
     name = "_cyber_wrapper.so",
@@ -130,5 +128,3 @@ cc_library(
         "@local_config_python//:python_lib",
     ],
 )
-
-

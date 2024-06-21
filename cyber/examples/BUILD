@@ -1,6 +1,5 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary")
 
-
 package(default_visibility = ["//visibility:public"])
 
 cc_binary(
@@ -47,5 +46,3 @@ cc_binary(
         "//cyber/proto:record_cc_proto",
     ],
 )
-
-

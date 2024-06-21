@@ -1,6 +1,5 @@
 load("@rules_cc//cc:defs.bzl", "cc_library")
 
-
 cc_library(
     name = "qos",
     visibility = ["//visibility:public"],
@@ -17,5 +16,3 @@ cc_library(
         "//cyber/proto:qos_profile_cc_proto",
     ],
 )
-
-

@@ -1,17 +1,16 @@
-load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
-
+load("@rules_cc//cc:defs.bzl", "cc_library")
 
 package(default_visibility = ["//visibility:public"])
 
 cc_library(
-  name = "transmitter",
-  deps = [
-    ":hybrid_transmitter",
-    ":intra_transmitter",
-    ":rtps_transmitter",
-    ":shm_transmitter",
+    name = "transmitter",
+    deps = [
+        ":hybrid_transmitter",
+        ":intra_transmitter",
+        ":rtps_transmitter",
+        ":shm_transmitter",
     ],
-    )
+)
 
 cc_library(
     name = "hybrid_transmitter",
@@ -54,5 +53,3 @@ cc_library(
         ":transmitter_interface",
     ],
 )
-
-

@@ -1,8 +1,6 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
 
-
 package(default_visibility = ["//visibility:public"])
-
 
 cc_binary(
     name = "cyber_recorder",
@@ -70,5 +68,3 @@ cc_library(
         "//cyber/record:record_writer",
     ],
 )
-
-
