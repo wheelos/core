@@ -1,7 +1,5 @@
 def core_deps():
     # ref https://github.com/grpc/grpc/blob/master/bazel/grpc_deps.bzl
-
-
     native.new_local_repository(
         name = "fastcdr",
         build_file = "@core//bazel/third_party:fastcdr.BUILD",
