@@ -29,7 +29,7 @@ cc_library(
     hdrs = ["identity.h"],
     deps = [
         "//cyber/common:util",
-        "@uuid",
+        "@libuuid",
     ],
 )
 
