@@ -7,6 +7,8 @@ build --verbose_failures
 build --action_env="PYTHON_BIN_PATH=/usr/bin/python3"
 build --action_env="CPLUS_INCLUDE_PATH=/usr/local/fast-rtps/include"
 
+build --registry=https://raw.githubusercontent.com/wep21/bazel-central-registry/cyberrt/
+
 # Enable Bzlmod for every Bazel command
 common --enable_bzlmod
 
