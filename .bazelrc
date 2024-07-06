@@ -5,7 +5,6 @@ build --verbose_failures
 # build --keep_going
 
 build --action_env="PYTHON_BIN_PATH=/usr/bin/python3"
-build --action_env="CPLUS_INCLUDE_PATH=/usr/local/fast-rtps/include"
 
 build --registry=https://raw.githubusercontent.com/wep21/bazel-central-registry/cyberrt/
 
