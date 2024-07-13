@@ -20,8 +20,8 @@
 #include <string>
 
 #include "cyber/proto/qos_profile.pb.h"
-#include "fastrtps/attributes/PublisherAttributes.h"
-#include "fastrtps/attributes/SubscriberAttributes.h"
+#include "xmlparser/attributes/PublisherAttributes.hpp"
+#include "xmlparser/attributes/SubscriberAttributes.hpp"
 
 namespace apollo {
 namespace cyber {
@@ -39,11 +39,11 @@ class AttributesFiller {
 
   static bool FillInPubAttr(const std::string& channel_name,
                             const QosProfile& qos,
-                            eprosima::fastrtps::PublisherAttributes* pub_attr);
+                            eprosima::fastdds::PublisherAttributes* pub_attr);
 
   static bool FillInSubAttr(const std::string& channel_name,
                             const QosProfile& qos,
-                            eprosima::fastrtps::SubscriberAttributes* sub_attr);
+                            eprosima::fastdds::SubscriberAttributes* sub_attr);
 };
 
 }  // namespace transport

@@ -67,8 +67,8 @@ class TopologyManager {
   using ChangeFunc = std::function<void(const ChangeMsg&)>;
   using ChangeConnection = base::Connection<const ChangeMsg&>;
   using PartNameContainer =
-      std::map<eprosima::fastrtps::rtps::GUID_t, std::string>;
-  using PartInfo = eprosima::fastrtps::ParticipantDiscoveryInfo;
+      std::map<eprosima::fastdds::rtps::GUID_t, std::string>;
+  using PartInfo = eprosima::fastdds::ParticipantDiscoveryInfo;
 
   virtual ~TopologyManager();
 

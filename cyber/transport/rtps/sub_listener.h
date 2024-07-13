@@ -23,13 +23,13 @@
 #include <mutex>
 #include <string>
 
+#include "fastdds/dds/subscriber/Subscriber.hpp"
+#include "fastdds/dds/subscriber/SubscriberListener.hpp"
+#include "fastdds/rtps/common/MatchingInfo.hpp"
+
 #include "cyber/transport/message/message_info.h"
 #include "cyber/transport/rtps/underlay_message.h"
 #include "cyber/transport/rtps/underlay_message_type.h"
-#include "fastrtps/Domain.h"
-#include "fastrtps/subscriber/SampleInfo.h"
-#include "fastrtps/subscriber/Subscriber.h"
-#include "fastrtps/subscriber/SubscriberListener.h"
 
 namespace apollo {
 namespace cyber {
@@ -38,7 +38,7 @@ namespace transport {
 class SubListener;
 using SubListenerPtr = std::shared_ptr<SubListener>;
 
-class SubListener : public eprosima::fastrtps::SubscriberListener {
+class SubListener : public eprosima::fastdds::dds::SubscriberListener {
  public:
   using NewMsgCallback = std::function<void(
       uint64_t channel_id, const std::shared_ptr<std::string>& msg_str,
@@ -47,9 +47,10 @@ class SubListener : public eprosima::fastrtps::SubscriberListener {
   explicit SubListener(const NewMsgCallback& callback);
   virtual ~SubListener();
 
-  void onNewDataMessage(eprosima::fastrtps::Subscriber* sub);
-  void onSubscriptionMatched(eprosima::fastrtps::Subscriber* sub,
-                             eprosima::fastrtps::MatchingInfo& info);  // NOLINT
+  void onNewDataMessage(eprosima::fastdds::dds::Subscriber* sub);
+  void onSubscriptionMatched(
+      eprosima::fastdds::dds::Subscribe* sub,
+      eprosima::fastdds::rtps::MatchingInfo& info);  // NOLINT
 
  private:
   NewMsgCallback callback_;

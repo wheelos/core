@@ -20,15 +20,15 @@
 #include <memory>
 #include <string>
 
+#include "fastdds/dds/publisher/Publisher.hpp"
+#include "fastdds/rtps/common/WriteParams.hpp"
+#include "xmlparser/attributes/PublisherAttributes.hpp"
+
 #include "cyber/common/log.h"
 #include "cyber/message/message_traits.h"
 #include "cyber/transport/rtps/attributes_filler.h"
 #include "cyber/transport/rtps/participant.h"
 #include "cyber/transport/transmitter/transmitter.h"
-#include "fastrtps/Domain.h"
-#include "fastrtps/attributes/PublisherAttributes.h"
-#include "fastrtps/participant/Participant.h"
-#include "fastrtps/publisher/Publisher.h"
 
 namespace apollo {
 namespace cyber {
@@ -52,7 +52,7 @@ class RtpsTransmitter : public Transmitter<M> {
   bool Transmit(const M& msg, const MessageInfo& msg_info);
 
   ParticipantPtr participant_;
-  eprosima::fastrtps::Publisher* publisher_;
+  eprosima::fastdds::dds::Publisher* publisher_;
 };
 
 template <typename M>
@@ -73,10 +73,10 @@ void RtpsTransmitter<M>::Enable() {
 
   RETURN_IF_NULL(participant_);
 
-  eprosima::fastrtps::PublisherAttributes pub_attr;
+  eprosima::fastdds::PublisherAttributes pub_attr;
   RETURN_IF(!AttributesFiller::FillInPubAttr(
       this->attr_.channel_name(), this->attr_.qos_profile(), &pub_attr));
-  publisher_ = eprosima::fastrtps::Domain::createPublisher(
+  publisher_ = eprosima::fastdds::fastdds::Publisher(
       participant_->fastrtps_participant(), pub_attr);
   RETURN_IF_NULL(publisher_);
   this->enabled_ = true;
@@ -106,7 +106,7 @@ bool RtpsTransmitter<M>::Transmit(const M& msg, const MessageInfo& msg_info) {
   UnderlayMessage m;
   RETURN_VAL_IF(!message::SerializeToString(msg, &m.data()), false);
 
-  eprosima::fastrtps::rtps::WriteParams wparams;
+  eprosima::fastdds::rtps::WriteParams wparams;
 
   char* ptr =
       reinterpret_cast<char*>(&wparams.related_sample_identity().writer_guid());

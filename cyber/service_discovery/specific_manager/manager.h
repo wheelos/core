@@ -22,15 +22,14 @@
 #include <mutex>
 #include <string>
 
-#include "fastrtps/Domain.h"
-#include "fastrtps/attributes/PublisherAttributes.h"
-#include "fastrtps/attributes/SubscriberAttributes.h"
-#include "fastrtps/participant/Participant.h"
-#include "fastrtps/publisher/Publisher.h"
-#include "fastrtps/subscriber/Subscriber.h"
+#include "fastdds/dds/publisher/Publisher.hpp"
+#include "fastdds/dds/subscriber/Subscriber.hpp"
+#include "xmlparser/attributes/PublisherAttributes.hpp"
+#include "xmlparser/attributes/SubscriberAttributes.hpp"
+
+#include "cyber/proto/topology_change.pb.h"
 
 #include "cyber/base/signal.h"
-#include "cyber/proto/topology_change.pb.h"
 #include "cyber/service_discovery/communication/subscriber_listener.h"
 
 namespace apollo {
@@ -54,9 +53,9 @@ class Manager {
   using ChangeFunc = std::function<void(const ChangeMsg&)>;
   using ChangeConnection = base::Connection<const ChangeMsg&>;
 
-  using RtpsParticipant = eprosima::fastrtps::Participant;
-  using RtpsPublisherAttr = eprosima::fastrtps::PublisherAttributes;
-  using RtpsSubscriberAttr = eprosima::fastrtps::SubscriberAttributes;
+  using RtpsParticipant = eprosima::fastdds::rtps::RTPSParticipant;
+  using RtpsPublisherAttr = eprosima::fastdds::PublisherAttributes;
+  using RtpsSubscriberAttr = eprosima::fastdds::SubscriberAttributes;
 
   /**
    * @brief Construct a new Manager object
@@ -158,9 +157,9 @@ class Manager {
   std::string host_name_;
   int process_id_;
   std::string channel_name_;
-  eprosima::fastrtps::Publisher* publisher_;
+  eprosima::fastdds::dds::Publisher* publisher_;
   std::mutex lock_;
-  eprosima::fastrtps::Subscriber* subscriber_;
+  eprosima::fastdds::dds::Subscriber* subscriber_;
   SubscriberListener* listener_;
 
   ChangeSignal signal_;

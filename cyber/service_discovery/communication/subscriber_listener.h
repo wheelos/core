@@ -21,25 +21,25 @@
 #include <mutex>
 #include <string>
 
-#include "fastrtps/Domain.h"
-#include "fastrtps/subscriber/SampleInfo.h"
-#include "fastrtps/subscriber/Subscriber.h"
-#include "fastrtps/subscriber/SubscriberListener.h"
+#include "fastdds/dds/subscriber/Subscriber.hpp"
+#include "fastdds/dds/subscriber/SubscriberListener.hpp"
+#include "fastdds/rtps/common/MatchingInfo.hpp"
 
 namespace apollo {
 namespace cyber {
 namespace service_discovery {
 
-class SubscriberListener : public eprosima::fastrtps::SubscriberListener {
+class SubscriberListener : public eprosima::fastdds::dds::SubscriberListener {
  public:
   using NewMsgCallback = std::function<void(const std::string&)>;
 
   explicit SubscriberListener(const NewMsgCallback& callback);
   virtual ~SubscriberListener();
 
-  void onNewDataMessage(eprosima::fastrtps::Subscriber* sub);
-  void onSubscriptionMatched(eprosima::fastrtps::Subscriber* sub,
-                             eprosima::fastrtps::MatchingInfo& info);  // NOLINT
+  void onNewDataMessage(eprosima::fastdds::dds::Subscriber* sub);
+  void onSubscriptionMatched(
+      eprosima::fastdds::dds::Subscriber* sub,
+      eprosima::fastdds::rtps::MatchingInfo& info);  // NOLINT
 
  private:
   NewMsgCallback callback_;

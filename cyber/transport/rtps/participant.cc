@@ -16,16 +16,21 @@
 
 #include "cyber/transport/rtps/participant.h"
 
+#include "fastdds/rtps/common/Locator.hpp"
+#include "xmlparser/attributes/ParticipantAttributes.hpp"
+
+#include "cyber/proto/transport_conf.pb.h"
+
 #include "cyber/common/global_data.h"
 #include "cyber/common/log.h"
-#include "cyber/proto/transport_conf.pb.h"
 
 namespace apollo {
 namespace cyber {
 namespace transport {
 
-Participant::Participant(const std::string& name, int send_port,
-                         eprosima::fastrtps::ParticipantListener* listener)
+Participant::Participant(
+    const std::string& name, int send_port,
+    eprosima::fastdds::rtps::RTPSParticipantListener* listener)
     : shutdown_(false),
       name_(name),
       send_port_(send_port),
@@ -47,7 +52,7 @@ void Participant::Shutdown() {
   }
 }
 
-eprosima::fastrtps::Participant* Participant::fastrtps_participant() {
+eprosima::fastdds::rtps::RTPSParticipant* Participant::fastrtps_participant() {
   if (shutdown_.load()) {
     return nullptr;
   }
@@ -63,7 +68,7 @@ eprosima::fastrtps::Participant* Participant::fastrtps_participant() {
 
 void Participant::CreateFastRtpsParticipant(
     const std::string& name, int send_port,
-    eprosima::fastrtps::ParticipantListener* listener) {
+    eprosima::fastdds::rtps::RTPSParticipantListener* listener) {
   uint32_t domain_id = 80;
 
   const char* val = ::getenv("CYBER_DOMAIN_ID");
@@ -83,7 +88,7 @@ void Participant::CreateFastRtpsParticipant(
     part_attr_conf->CopyFrom(global_conf.transport_conf().participant_attr());
   }
 
-  eprosima::fastrtps::ParticipantAttributes attr;
+  eprosima::fastdds::ParticipantAttributes attr;
   attr.rtps.defaultSendPort = send_port;
   attr.rtps.port.domainIDGain =
       static_cast<uint16_t>(part_attr_conf->domain_id_gain());
@@ -120,7 +125,7 @@ void Participant::CreateFastRtpsParticipant(
   }
   ADEBUG << "cyber ip: " << ip_env;
 
-  eprosima::fastrtps::rtps::Locator_t locator;
+  eprosima::fastdds::rtps::Locator_t locator;
   locator.port = 0;
   RETURN_IF(!locator.set_IP4_address(ip_env));
 

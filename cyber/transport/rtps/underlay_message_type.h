@@ -18,7 +18,7 @@
 #define CYBER_TRANSPORT_RTPS_UNDERLAY_MESSAGE_TYPE_H_
 
 #include "cyber/transport/rtps/underlay_message.h"
-#include "fastrtps/TopicDataType.h"
+#include "fastdds/dds/topic/TopicDataType.hpp"
 
 namespace apollo {
 namespace cyber {
@@ -29,7 +29,7 @@ namespace transport {
  * defined by the user in the IDL file.
  * @ingroup UNDERLAYMESSAGE
  */
-class UnderlayMessageType : public eprosima::fastrtps::TopicDataType {
+class UnderlayMessageType : public eprosima::fastdds::dds::TopicDataType {
  public:
   using type = UnderlayMessage;
 

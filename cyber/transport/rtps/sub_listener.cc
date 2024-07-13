@@ -28,7 +28,7 @@ SubListener::SubListener(const NewMsgCallback& callback)
 
 SubListener::~SubListener() {}
 
-void SubListener::onNewDataMessage(eprosima::fastrtps::Subscriber* sub) {
+void SubListener::onNewDataMessage(eprosima::fastdds::dds::Subscribe* sub) {
   RETURN_IF_NULL(sub);
   RETURN_IF_NULL(callback_);
   std::lock_guard<std::mutex> lock(mutex_);
@@ -39,7 +39,7 @@ void SubListener::onNewDataMessage(eprosima::fastrtps::Subscriber* sub) {
   UnderlayMessage m;
 
   RETURN_IF(!sub->takeNextData(reinterpret_cast<void*>(&m), &m_info));
-  RETURN_IF(m_info.sampleKind != eprosima::fastrtps::ALIVE);
+  RETURN_IF(m_info.sampleKind != eprosima::fastdds::rtps::ALIVE);
 
   // fetch MessageInfo
   char* ptr =
@@ -66,8 +66,8 @@ void SubListener::onNewDataMessage(eprosima::fastrtps::Subscriber* sub) {
 }
 
 void SubListener::onSubscriptionMatched(
-    eprosima::fastrtps::Subscriber* sub,
-    eprosima::fastrtps::MatchingInfo& info) {
+    eprosima::fastdds::dds::Subscribe* sub,
+    eprosima::fastdds::rtps::MatchingInfo& info) {
   (void)sub;
   (void)info;
 }

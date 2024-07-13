@@ -38,7 +38,7 @@ namespace transport {
 struct Subscriber {
   Subscriber() : sub(nullptr), sub_listener(nullptr) {}
 
-  eprosima::fastrtps::Subscriber* sub;
+  eprosima::fastdds::dds::Subscriber* sub;
   SubListenerPtr sub_listener;
 };
 
