@@ -63,7 +63,7 @@ cc_test(
         ":py_record",
         "//cyber/proto:unit_test_cc_proto",
         "@com_google_googletest//:gtest_main",
-        #"@fastrtps",
+        #"@fastdds",
     ],
 )
 
@@ -82,7 +82,7 @@ cc_library(
     hdrs = ["py_time.h"],
     deps = [
         "//cyber:cyber_core",
-        "@fastrtps",
+        "@fastdds",
         "@local_config_python//:python_headers",
         "@local_config_python//:python_lib",
     ],
