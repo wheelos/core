@@ -3,9 +3,9 @@ build --cxxopt="-std=c++17"
 build --jobs=4
 build --verbose_failures
 # build --keep_going
+build --registry=https://raw.githubusercontent.com/wheelos/bazel-central-registry/fast-dds
 
 build --action_env="PYTHON_BIN_PATH=/usr/bin/python3"
-build --action_env="CPLUS_INCLUDE_PATH=/usr/local/fast-rtps/include"
 
 # Enable Bzlmod for every Bazel command
 common --enable_bzlmod
