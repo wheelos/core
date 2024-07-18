@@ -9,6 +9,5 @@ scripts/deps/install_bazel.sh
 
 # Install dependent libraries
 scripts/deps/install_fast-rtps.sh
-scripts/deps/install_uuid.sh
 
 echo "All dependencies have been successfully installed."
