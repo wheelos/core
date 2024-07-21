@@ -32,25 +32,18 @@ SubscriberListener::~SubscriberListener() {
   callback_ = nullptr;
 }
 
-void SubscriberListener::onNewDataMessage(eprosima::fastdds::dds::Subscriber* sub) {
+void SubscriberListener::on_data_available(eprosima::fastdds::dds::DataReader* reader) {
   RETURN_IF_NULL(callback_);
 
   std::lock_guard<std::mutex> lock(mutex_);
-  eprosima::fastrtps::SampleInfo_t m_info;
+  eprosima::fastdds::dds::SampleInfo m_info;
   cyber::transport::UnderlayMessage m;
-  RETURN_IF(!sub->takeNextData(reinterpret_cast<void*>(&m), &m_info));
-  RETURN_IF(m_info.sampleKind != eprosima::fastdds::rtps::ALIVE);
+  RETURN_IF(
+    reader->take_next_sample(reinterpret_cast<void*>(&m), &m_info) != eprosima::fastdds::dds::RETCODE_OK);
+  RETURN_IF(m_info.instance_state != eprosima::fastdds::dds::ALIVE_INSTANCE_STATE);
 
   callback_(m.data());
 }
-
-void SubscriberListener::onSubscriptionMatched(
-    eprosima::fastdds::dds::Subscriber* sub,
-    eprosima::fastdds::rtps::MatchingInfo& info) {
-  (void)sub;
-  (void)info;
-}
-
 }  // namespace service_discovery
 }  // namespace cyber
 }  // namespace apollo

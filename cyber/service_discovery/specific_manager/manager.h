@@ -24,6 +24,7 @@
 
 #include "fastdds/dds/publisher/Publisher.hpp"
 #include "fastdds/dds/subscriber/Subscriber.hpp"
+#include "fastdds/dds/domain/DomainParticipant.hpp"
 #include "xmlparser/attributes/PublisherAttributes.hpp"
 #include "xmlparser/attributes/SubscriberAttributes.hpp"
 
@@ -53,7 +54,6 @@ class Manager {
   using ChangeFunc = std::function<void(const ChangeMsg&)>;
   using ChangeConnection = base::Connection<const ChangeMsg&>;
 
-  using RtpsParticipant = eprosima::fastdds::rtps::RTPSParticipant;
   using RtpsPublisherAttr = eprosima::fastdds::PublisherAttributes;
   using RtpsSubscriberAttr = eprosima::fastdds::SubscriberAttributes;
 
@@ -74,7 +74,7 @@ class Manager {
    * @return true if start successfully
    * @return false if start fail
    */
-  bool StartDiscovery(RtpsParticipant* participant);
+  bool StartDiscovery(eprosima::fastdds::dds::DomainParticipant* participant);
 
   /**
    * @brief Stop topology discovery
@@ -135,8 +135,8 @@ class Manager {
                                  int process_id) = 0;
 
  protected:
-  bool CreatePublisher(RtpsParticipant* participant);
-  bool CreateSubscriber(RtpsParticipant* participant);
+  bool CreatePublisher(eprosima::fastdds::dds::DomainParticipant* participant);
+  bool CreateSubscriber(eprosima::fastdds::dds::DomainParticipant* participant);
 
   virtual bool Check(const RoleAttributes& attr) = 0;
   virtual void Dispose(const ChangeMsg& msg) = 0;
@@ -157,6 +157,7 @@ class Manager {
   std::string host_name_;
   int process_id_;
   std::string channel_name_;
+  eprosima::fastdds::dds::DomainParticipant* participant_;
   eprosima::fastdds::dds::Publisher* publisher_;
   std::mutex lock_;
   eprosima::fastdds::dds::Subscriber* subscriber_;

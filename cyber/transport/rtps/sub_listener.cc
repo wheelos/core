@@ -28,18 +28,19 @@ SubListener::SubListener(const NewMsgCallback& callback)
 
 SubListener::~SubListener() {}
 
-void SubListener::onNewDataMessage(eprosima::fastdds::dds::Subscribe* sub) {
-  RETURN_IF_NULL(sub);
+void SubListener::on_data_available(eprosima::fastdds::dds::DataReader* reader) {
+  RETURN_IF_NULL(reader);
   RETURN_IF_NULL(callback_);
   std::lock_guard<std::mutex> lock(mutex_);
 
   // fetch channel name
-  auto channel_id = common::Hash(sub->getAttributes().topic.getTopicName());
-  eprosima::fastrtps::SampleInfo_t m_info;
+  auto channel_id = common::Hash(reader->get_topicdescription()->get_name());
+  eprosima::fastdds::dds::SampleInfo m_info;
   UnderlayMessage m;
 
-  RETURN_IF(!sub->takeNextData(reinterpret_cast<void*>(&m), &m_info));
-  RETURN_IF(m_info.sampleKind != eprosima::fastdds::rtps::ALIVE);
+  RETURN_IF(
+    reader->take_next_sample(reinterpret_cast<void*>(&m), &m_info) != eprosima::fastdds::dds::RETCODE_OK);
+  RETURN_IF(m_info.instance_state != eprosima::fastdds::dds::ALIVE_INSTANCE_STATE);
 
   // fetch MessageInfo
   char* ptr =
@@ -63,13 +64,6 @@ void SubListener::onNewDataMessage(eprosima::fastdds::dds::Subscribe* sub) {
 
   // callback
   callback_(channel_id, msg_str, msg_info_);
-}
-
-void SubListener::onSubscriptionMatched(
-    eprosima::fastdds::dds::Subscribe* sub,
-    eprosima::fastdds::rtps::MatchingInfo& info) {
-  (void)sub;
-  (void)info;
 }
 
 }  // namespace transport

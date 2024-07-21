@@ -23,8 +23,12 @@
 #include <mutex>
 #include <string>
 
-#include "fastdds/dds/subscriber/Subscriber.hpp"
-#include "fastdds/dds/subscriber/SubscriberListener.hpp"
+#include "fastdds/dds/subscriber/SampleInfo.hpp"
+#include "fastdds/dds/subscriber/DataReader.hpp"
+#include "fastdds/dds/subscriber/DataReaderListener.hpp"
+#include "fastdds/dds/topic/TopicDescription.hpp"
+// #include "fastdds/dds/subscriber/Subscriber.hpp"
+// #include "fastdds/dds/subscriber/SubscriberListener.hpp"
 #include "fastdds/rtps/common/MatchingInfo.hpp"
 
 #include "cyber/transport/message/message_info.h"
@@ -38,7 +42,7 @@ namespace transport {
 class SubListener;
 using SubListenerPtr = std::shared_ptr<SubListener>;
 
-class SubListener : public eprosima::fastdds::dds::SubscriberListener {
+class SubListener : public eprosima::fastdds::dds::DataReaderListener {
  public:
   using NewMsgCallback = std::function<void(
       uint64_t channel_id, const std::shared_ptr<std::string>& msg_str,
@@ -47,10 +51,7 @@ class SubListener : public eprosima::fastdds::dds::SubscriberListener {
   explicit SubListener(const NewMsgCallback& callback);
   virtual ~SubListener();
 
-  void onNewDataMessage(eprosima::fastdds::dds::Subscriber* sub);
-  void onSubscriptionMatched(
-      eprosima::fastdds::dds::Subscribe* sub,
-      eprosima::fastdds::rtps::MatchingInfo& info);  // NOLINT
+  virtual void on_data_available(eprosima::fastdds::dds::DataReader* reader) override;
 
  private:
   NewMsgCallback callback_;

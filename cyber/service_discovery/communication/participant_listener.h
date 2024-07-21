@@ -29,7 +29,7 @@ namespace cyber {
 namespace service_discovery {
 
 class ParticipantListener
-    : public eprosima::fastdds::dds::DomainParticipantImpl {
+    : public eprosima::fastdds::rtps::RTPSParticipantListener {
  public:
   using ChangeFunc = std::function<void(
       const eprosima::fastdds::rtps::ParticipantDiscoveryInfo& info)>;
