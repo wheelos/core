@@ -47,10 +47,11 @@ Manager::Manager()
 
 Manager::~Manager() { Shutdown(); }
 
-bool Manager::StartDiscovery(RtpsParticipant* participant) {
+bool Manager::StartDiscovery(eprosima::fastdds::dds::DomainParticipant* participant) {
   if (participant == nullptr) {
     return false;
   }
+  participant_ = participant;
   if (is_discovery_started_.exchange(true)) {
     return true;
   }
@@ -70,13 +71,17 @@ void Manager::StopDiscovery() {
   {
     std::lock_guard<std::mutex> lg(lock_);
     if (publisher_ != nullptr) {
-      eprosima::fastrtps::Domain::removePublisher(publisher_);
+      if (participant_) {
+        participant_->delete_publisher(publisher_);
+      }
       publisher_ = nullptr;
     }
   }
 
   if (subscriber_ != nullptr) {
-    eprosima::fastrtps::Domain::removeSubscriber(subscriber_);
+    if (participant_) {
+      participant_->delete_subscriber(subscriber_);
+    }
     subscriber_ = nullptr;
   }
 
@@ -137,7 +142,7 @@ void Manager::RemoveChangeListener(const ChangeConnection& conn) {
   local_conn.Disconnect();
 }
 
-bool Manager::CreatePublisher(RtpsParticipant* participant) {
+bool Manager::CreatePublisher(eprosima::fastdds::dds::DomainParticipant* participant) {
   RtpsPublisherAttr pub_attr;
   RETURN_VAL_IF(
       !AttributesFiller::FillInPubAttr(
@@ -148,7 +153,7 @@ bool Manager::CreatePublisher(RtpsParticipant* participant) {
   return publisher_ != nullptr;
 }
 
-bool Manager::CreateSubscriber(RtpsParticipant* participant) {
+bool Manager::CreateSubscriber(eprosima::fastdds::dds::DomainParticipant* participant) {
   RtpsSubscriberAttr sub_attr;
   RETURN_VAL_IF(
       !AttributesFiller::FillInSubAttr(

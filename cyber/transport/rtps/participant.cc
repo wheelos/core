@@ -16,7 +16,9 @@
 
 #include "cyber/transport/rtps/participant.h"
 
+#include "fastdds/dds/domain/DomainParticipantFactory.hpp"
 #include "fastdds/rtps/common/Locator.hpp"
+#include "fastdds/utils/QosConverters.hpp"
 #include "xmlparser/attributes/ParticipantAttributes.hpp"
 
 #include "cyber/proto/transport_conf.pb.h"
@@ -28,14 +30,17 @@ namespace apollo {
 namespace cyber {
 namespace transport {
 
+using eprosima::fastdds::dds::DomainParticipantFactory;
+
 Participant::Participant(
     const std::string& name, int send_port,
-    eprosima::fastdds::rtps::RTPSParticipantListener* listener)
+    eprosima::fastdds::dds::DomainParticipantListener* listener)
     : shutdown_(false),
       name_(name),
       send_port_(send_port),
       listener_(listener),
-      fastrtps_participant_(nullptr) {}
+      fastrtps_participant_(nullptr),
+      type_(new UnderlayMessageType()) {}
 
 Participant::~Participant() {}
 
@@ -46,13 +51,13 @@ void Participant::Shutdown() {
 
   std::lock_guard<std::mutex> lk(mutex_);
   if (fastrtps_participant_ != nullptr) {
-    eprosima::fastrtps::Domain::removeParticipant(fastrtps_participant_);
+    DomainParticipantFactory::get_instance()->delete_participant(fastrtps_participant_);
     fastrtps_participant_ = nullptr;
     listener_ = nullptr;
   }
 }
 
-eprosima::fastdds::rtps::RTPSParticipant* Participant::fastrtps_participant() {
+eprosima::fastdds::dds::DomainParticipant* Participant::fastrtps_participant() {
   if (shutdown_.load()) {
     return nullptr;
   }
@@ -68,7 +73,7 @@ eprosima::fastdds::rtps::RTPSParticipant* Participant::fastrtps_participant() {
 
 void Participant::CreateFastRtpsParticipant(
     const std::string& name, int send_port,
-    eprosima::fastdds::rtps::RTPSParticipantListener* listener) {
+    eprosima::fastdds::dds::DomainParticipantListener* listener) {
   uint32_t domain_id = 80;
 
   const char* val = ::getenv("CYBER_DOMAIN_ID");
@@ -89,18 +94,16 @@ void Participant::CreateFastRtpsParticipant(
   }
 
   eprosima::fastdds::ParticipantAttributes attr;
-  attr.rtps.defaultSendPort = send_port;
   attr.rtps.port.domainIDGain =
       static_cast<uint16_t>(part_attr_conf->domain_id_gain());
   attr.rtps.port.portBase = static_cast<uint16_t>(part_attr_conf->port_base());
-  attr.rtps.use_IP6_to_send = false;
-  attr.rtps.builtin.use_SIMPLE_RTPSParticipantDiscoveryProtocol = true;
-  attr.rtps.builtin.use_SIMPLE_EndpointDiscoveryProtocol = true;
-  attr.rtps.builtin.m_simpleEDP.use_PublicationReaderANDSubscriptionWriter =
+  attr.rtps.builtin.discovery_config.discoveryProtocol = eprosima::fastdds::rtps::DiscoveryProtocol::SIMPLE;
+  attr.rtps.builtin.discovery_config.use_SIMPLE_EndpointDiscoveryProtocol = true;
+  attr.rtps.builtin.discovery_config.m_simpleEDP.use_PublicationReaderANDSubscriptionWriter =
       true;
-  attr.rtps.builtin.m_simpleEDP.use_PublicationWriterANDSubscriptionReader =
+  attr.rtps.builtin.discovery_config.m_simpleEDP.use_PublicationWriterANDSubscriptionReader =
       true;
-  attr.rtps.builtin.domainId = domain_id;
+  attr.domainId = domain_id;
 
   /**
    * The user should set the lease_duration and the announcement_period with
@@ -108,8 +111,8 @@ void Participant::CreateFastRtpsParticipant(
    * cause the failure of the writer liveliness assertion in networks with high
    * latency or with lots of communication errors.
    */
-  attr.rtps.builtin.leaseDuration.seconds = part_attr_conf->lease_duration();
-  attr.rtps.builtin.leaseDuration_announcementperiod.seconds =
+  attr.rtps.builtin.discovery_config.leaseDuration.seconds = part_attr_conf->lease_duration();
+  attr.rtps.builtin.discovery_config.leaseDuration_announcementperiod.seconds =
       part_attr_conf->announcement_period();
 
   attr.rtps.setName(name.c_str());
@@ -126,22 +129,25 @@ void Participant::CreateFastRtpsParticipant(
   ADEBUG << "cyber ip: " << ip_env;
 
   eprosima::fastdds::rtps::Locator_t locator;
-  locator.port = 0;
-  RETURN_IF(!locator.set_IP4_address(ip_env));
+  locator.port = send_port;
+  RETURN_IF(!eprosima::fastdds::rtps::IPLocator::setIPv4(locator, ip_env));
 
   locator.kind = LOCATOR_KIND_UDPv4;
 
   attr.rtps.defaultUnicastLocatorList.push_back(locator);
-  attr.rtps.defaultOutLocatorList.push_back(locator);
   attr.rtps.builtin.metatrafficUnicastLocatorList.push_back(locator);
 
-  locator.set_IP4_address(239, 255, 0, 1);
+  eprosima::fastdds::rtps::IPLocator::setIPv4(locator, std::string("239.255.0.1"));
   attr.rtps.builtin.metatrafficMulticastLocatorList.push_back(locator);
 
+  eprosima::fastdds::dds::DomainParticipantExtendedQos extended_qos;
+  eprosima::fastdds::dds::utils::set_attributes_from_extended_qos(
+    attr, extended_qos
+  );
   fastrtps_participant_ =
-      eprosima::fastrtps::Domain::createParticipant(attr, listener);
+    DomainParticipantFactory::get_instance()->create_participant(extended_qos, listener_);
   RETURN_IF_NULL(fastrtps_participant_);
-  eprosima::fastrtps::Domain::registerType(fastrtps_participant_, &type_);
+  type_.register_type(fastrtps_participant_);
 }
 
 }  // namespace transport

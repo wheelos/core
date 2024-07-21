@@ -35,13 +35,16 @@ class UnderlayMessageType : public eprosima::fastdds::dds::TopicDataType {
 
   UnderlayMessageType();
   virtual ~UnderlayMessageType();
-  bool serialize(void* data, SerializedPayload_t* payload);
-  bool deserialize(SerializedPayload_t* payload, void* data);
-  std::function<uint32_t()> getSerializedSizeProvider(void* data);
-  bool getKey(void* data, InstanceHandle_t* ihandle);
+  virtual bool serialize(const void* const data, eprosima::fastdds::rtps::SerializedPayload_t* payload) override;
+  virtual bool deserialize(eprosima::fastdds::rtps::SerializedPayload_t* payload, void* data) override;
+  virtual std::function<uint32_t()> getSerializedSizeProvider(const void* const data) override;
+  virtual bool getKey(
+    const void* const data,
+    eprosima::fastdds::rtps::InstanceHandle_t* ihandle,
+    bool force_md5 = false) override;
   void* createData();
   void deleteData(void* data);
-  MD5 m_md5;
+  eprosima::fastdds::MD5 m_md5;
   unsigned char* m_keyBuffer;
 };
 

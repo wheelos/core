@@ -21,6 +21,9 @@
 #include <mutex>
 #include <string>
 
+#include "fastdds/dds/subscriber/SampleInfo.hpp"
+#include "fastdds/dds/subscriber/DataReader.hpp"
+#include "fastdds/dds/subscriber/DataReaderListener.hpp"
 #include "fastdds/dds/subscriber/Subscriber.hpp"
 #include "fastdds/dds/subscriber/SubscriberListener.hpp"
 #include "fastdds/rtps/common/MatchingInfo.hpp"
@@ -29,17 +32,14 @@ namespace apollo {
 namespace cyber {
 namespace service_discovery {
 
-class SubscriberListener : public eprosima::fastdds::dds::SubscriberListener {
+class SubscriberListener : public eprosima::fastdds::dds::DataReaderListener {
  public:
   using NewMsgCallback = std::function<void(const std::string&)>;
 
   explicit SubscriberListener(const NewMsgCallback& callback);
   virtual ~SubscriberListener();
 
-  void onNewDataMessage(eprosima::fastdds::dds::Subscriber* sub);
-  void onSubscriptionMatched(
-      eprosima::fastdds::dds::Subscriber* sub,
-      eprosima::fastdds::rtps::MatchingInfo& info);  // NOLINT
+  virtual void on_data_available(eprosima::fastdds::dds::DataReader* reader) override;
 
  private:
   NewMsgCallback callback_;
