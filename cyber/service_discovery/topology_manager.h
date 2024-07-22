@@ -68,7 +68,7 @@ class TopologyManager {
   using ChangeConnection = base::Connection<const ChangeMsg&>;
   using PartNameContainer =
       std::map<eprosima::fastrtps::rtps::GUID_t, std::string>;
-  using PartInfo = eprosima::fastrtps::ParticipantDiscoveryInfo;
+  using PartInfo = eprosima::fastrtps::rtps::ParticipantDiscoveryInfo;
 
   virtual ~TopologyManager();
 
