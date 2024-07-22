@@ -48,8 +48,8 @@ TEST(AttributesFillerTest, fill_in_pub_attr_test) {
             attrs.qos.m_durability.kind);
   EXPECT_EQ(eprosima::fastrtps::BEST_EFFORT_RELIABILITY_QOS,
             attrs.qos.m_reliability.kind);
-  AINFO << "heartbeat period: " << attrs.times.heartbeatPeriod.seconds << ", "
-        << attrs.times.heartbeatPeriod.fraction;
+  AINFO << "heartbeat period: " << attrs.times.heartbeatPeriod.seconds() << ", "
+        << attrs.times.heartbeatPeriod.fraction();
   qos.set_depth(1024);
   attrs.topic.historyQos.depth = 512;
   filler.FillInPubAttr("channel", qos, &attrs);
@@ -69,8 +69,8 @@ TEST(AttributesFillerTest, fill_in_pub_attr_test) {
             attrs.qos.m_durability.kind);
   EXPECT_EQ(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS,
             attrs.qos.m_reliability.kind);
-  AINFO << "heartbeat period: " << attrs.times.heartbeatPeriod.seconds << ", "
-        << attrs.times.heartbeatPeriod.fraction;
+  AINFO << "heartbeat period: " << attrs.times.heartbeatPeriod.seconds() << ", "
+        << attrs.times.heartbeatPeriod.fraction();
 
   qos.set_history(QosHistoryPolicy::HISTORY_SYSTEM_DEFAULT);
   qos.set_durability(QosDurabilityPolicy::DURABILITY_SYSTEM_DEFAULT);
@@ -83,12 +83,12 @@ TEST(AttributesFillerTest, fill_in_pub_attr_test) {
             attrs.qos.m_durability.kind);
   EXPECT_EQ(eprosima::fastrtps::RELIABLE_RELIABILITY_QOS,
             attrs.qos.m_reliability.kind);
-  AINFO << "heartbeat period: " << attrs.times.heartbeatPeriod.seconds << ", "
-        << attrs.times.heartbeatPeriod.fraction;
+  AINFO << "heartbeat period: " << attrs.times.heartbeatPeriod.seconds() << ", "
+        << attrs.times.heartbeatPeriod.fraction();
   qos.set_mps(0);
   filler.FillInPubAttr("channel", qos, &attrs);
-  AINFO << "heartbeat period: " << attrs.times.heartbeatPeriod.seconds << ", "
-        << attrs.times.heartbeatPeriod.fraction;
+  AINFO << "heartbeat period: " << attrs.times.heartbeatPeriod.seconds() << ", "
+        << attrs.times.heartbeatPeriod.fraction();
 }
 
 TEST(AttributesFillerTest, fill_in_sub_attr_test) {

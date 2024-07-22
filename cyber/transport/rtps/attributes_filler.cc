@@ -88,7 +88,7 @@ bool AttributesFiller::FillInPubAttr(
   // transform messages per second to rtps heartbeat
   // set default heartbeat period
   pub_attr->times.heartbeatPeriod.seconds = 1;
-  pub_attr->times.heartbeatPeriod.fraction = 0;
+  pub_attr->times.heartbeatPeriod.fraction(0);
   if (qos.mps() != 0) {
     uint64_t mps = qos.mps();
 
@@ -104,7 +104,7 @@ bool AttributesFiller::FillInPubAttr(
     int32_t seconds = static_cast<int32_t>(fractions >> 32);
 
     pub_attr->times.heartbeatPeriod.seconds = seconds;
-    pub_attr->times.heartbeatPeriod.fraction = fraction;
+    pub_attr->times.heartbeatPeriod.fraction(fraction);
   }
 
   pub_attr->qos.m_publishMode.kind =
