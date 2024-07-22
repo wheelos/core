@@ -90,7 +90,7 @@ cc_library(
         "//cyber/transport/rtps:sub_listener",
         "@com_github_google_glog//:glog",
         "@com_google_protobuf//:protobuf",
-        "@fastrtps",
+        "@fastdds",
     ],
 )
 

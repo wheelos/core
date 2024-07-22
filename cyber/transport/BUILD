@@ -21,7 +21,7 @@ cc_library(
         "//cyber/transport/rtps:underlay_message",
         "//cyber/transport/rtps:underlay_message_type",
         "//cyber/transport/transmitter",
-        "@fastrtps",
+        "@fastdds",
     ],
 )
 

@@ -7,7 +7,4 @@ set -e
 # Install the compilation tools
 scripts/deps/install_bazel.sh
 
-# Install dependent libraries
-scripts/deps/install_fast-rtps.sh
-
 echo "All dependencies have been successfully installed."
