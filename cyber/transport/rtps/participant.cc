@@ -130,7 +130,7 @@ void Participant::CreateFastRtpsParticipant(
   attr.rtps.defaultMulticastLocatorList.push_back(locator);
   attr.rtps.builtin.metatrafficUnicastLocatorList.push_back(locator);
 
-  eprosima::fastrtps::rtps::IPLocator::setIPv4(locator, "239, 255, 0, 1");
+  eprosima::fastrtps::rtps::IPLocator::setIPv4(locator, "239.255.0.1");
   attr.rtps.builtin.metatrafficMulticastLocatorList.push_back(locator);
 
   fastrtps_participant_ =
