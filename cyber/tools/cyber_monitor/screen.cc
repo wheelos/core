@@ -28,7 +28,7 @@
 #include "cyber/tools/cyber_monitor/general_channel_message.h"
 #include "cyber/tools/cyber_monitor/renderable_message.h"
 
-#include <ncurses.h> // NOLINT
+#include <curses.h> // NOLINT
 
 namespace {
 constexpr double MinHalfFrameRatio = 12.5;
@@ -109,8 +109,8 @@ void Screen::Init(void) {
   init_pair(WHITE_BLACK, COLOR_WHITE, COLOR_BLACK);
   init_pair(BLACK_WHITE, COLOR_BLACK, COLOR_WHITE);
 
-  refresh();
-  clear();
+  wrefresh(stdscr);
+  wclear(stdscr);
 
   canRun_ = true;
 }
@@ -159,7 +159,7 @@ void Screen::MoveOffsetXY(int offsetX, int offsetY) const {
   if (IsInit()) {
     int x, y;
     getyx(stdscr, y, x);
-    move(y + offsetY, x + offsetX);
+    wmove(stdscr, y + offsetY, x + offsetX);
   }
 }
 
@@ -189,14 +189,14 @@ int Screen::SwitchState(int ch) {
     case State::RenderInterCmdInfo:
       if (KEY_BACKSPACE == ch) {
         current_state_ = State::RenderMessage;
-        clear();
+        wclear(stdscr);
         ch = 27;
       }
       break;
     case State::RenderMessage:
       if ('h' == ch || 'H' == ch) {
         current_state_ = State::RenderInterCmdInfo;
-        clear();
+        wclear(stdscr);
       }
       break;
     default: {
@@ -239,21 +239,21 @@ void Screen::Run() {
 
 void Screen::Resize(void) {
   if (IsInit()) {
-    clear();
-    refresh();
+    wclear(stdscr);
+    wrefresh(stdscr);
   }
 }
 
 void Screen::ShowRenderMessage(int ch) {
-  erase();
+  werase(stdscr);
   int line_num = current_render_obj_->Render(this, ch);
   const int max_height = std::min(Height(), line_num);
 
   int* y = current_render_obj_->line_no();
 
   HighlightLine(*y);
-  move(*y, 0);
-  refresh();
+  wmove(stdscr, *y, 0);
+  wrefresh(stdscr);
 
   switch (ch) {
     case 's':
@@ -287,7 +287,7 @@ void Screen::ShowRenderMessage(int ch) {
       if (p) {
         current_render_obj_ = p;
         y = p->line_no();
-        clear();
+        wclear(stdscr);
       }
       break;
     }
@@ -303,7 +303,7 @@ void Screen::ShowRenderMessage(int ch) {
         child->reset_line_page();
         current_render_obj_ = child;
         y = child->line_no();
-        clear();
+        wclear(stdscr);
       }
       break;
     }
