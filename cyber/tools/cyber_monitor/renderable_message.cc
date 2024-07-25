@@ -16,7 +16,7 @@
 
 #include "cyber/tools/cyber_monitor/renderable_message.h"
 
-#include <ncurses.h>
+#include <curses.h>
 
 #include "cyber/tools/cyber_monitor/screen.h"
 
