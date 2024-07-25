@@ -127,7 +127,7 @@ cc_library(
         "//cyber/transport/qos",
         "//cyber/transport/rtps:attributes_filler",
         "//cyber/transport/rtps:underlay_message_type",
-        "@fastrtps",
+        "@fastdds",
     ],
 )
 

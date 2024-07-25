@@ -39,14 +39,14 @@ void SubscriberListener::onNewDataMessage(eprosima::fastrtps::Subscriber* sub) {
   eprosima::fastrtps::SampleInfo_t m_info;
   cyber::transport::UnderlayMessage m;
   RETURN_IF(!sub->takeNextData(reinterpret_cast<void*>(&m), &m_info));
-  RETURN_IF(m_info.sampleKind != eprosima::fastrtps::ALIVE);
+  RETURN_IF(m_info.sampleKind != eprosima::fastrtps::rtps::ALIVE);
 
   callback_(m.data());
 }
 
 void SubscriberListener::onSubscriptionMatched(
     eprosima::fastrtps::Subscriber* sub,
-    eprosima::fastrtps::MatchingInfo& info) {
+    eprosima::fastrtps::rtps::MatchingInfo& info) {
   (void)sub;
   (void)info;
 }

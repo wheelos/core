@@ -9,7 +9,7 @@ cc_library(
     deps = [
         "//cyber/common:log",
         "//cyber/transport/qos",
-        "@fastrtps",
+        "@fastdds",
     ],
 )
 
@@ -52,7 +52,7 @@ cc_library(
     deps = [
         ":underlay_message",
         "@fastcdr",
-        "@fastrtps",
+        "@fastdds",
     ],
 )
 
