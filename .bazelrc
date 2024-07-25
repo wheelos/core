@@ -5,8 +5,6 @@ build --verbose_failures
 build --keep_going
 build --registry=https://raw.githubusercontent.com/wheelos/bazel-central-registry/fastdds-2.14.x
 
-build --action_env="PYTHON_BIN_PATH=/usr/bin/python3"
-
 # Enable Bzlmod for every Bazel command
 common --enable_bzlmod
 
