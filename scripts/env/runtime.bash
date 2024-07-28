@@ -41,4 +41,7 @@ export GLOG_minloglevel=0
 # for DEBUG log
 #export GLOG_v=4
 
+
+export TERMINFO=/lib/terminfo/
+
 export sysmo_start=0
