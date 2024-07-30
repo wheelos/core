@@ -597,7 +597,7 @@ PyObject *cyber_PyNode_shutdown(PyObject *self, PyObject *args) {
 PyObject *cyber_PyNode_register_message(PyObject *self, PyObject *args) {
   PyObject *pyobj_node = nullptr;
   char *desc = nullptr;
-  int len = 0;
+  Py_ssize_t len = 0;
   if (!PyArg_ParseTuple(args,
                         const_cast<char *>("Os#:cyber_PyNode_register_message"),
                         &pyobj_node, &desc, &len)) {
