@@ -22,60 +22,60 @@
 # Fail on error
 set -e
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 source "${ROOT_DIR}/scripts/deps/installer_base.sh"
 
 AUTOPEP8_CMD="autopep8"
 
 # Function to check if autopep8 is installed
 function check_autopep8() {
-  if ! command -v ${AUTOPEP8_CMD} &> /dev/null; then
-    error "Command \"${AUTOPEP8_CMD}\" not found."
-    error "Please make sure autopep8 is installed and check your PATH settings."
-    error "For Debian/Ubuntu, you can run the following command:"
-    error "  sudo pip3 install --upgrade --no-cache-dir autopep8"
-    exit 1
-  fi
+	if ! command -v ${AUTOPEP8_CMD} &>/dev/null; then
+		error "Command \"${AUTOPEP8_CMD}\" not found."
+		error "Please make sure autopep8 is installed and check your PATH settings."
+		error "For Debian/Ubuntu, you can run the following command:"
+		error "  sudo pip3 install --upgrade --no-cache-dir autopep8"
+		exit 1
+	fi
 }
 
 # Function to run autopep8 on given files
 function autopep8_run() {
-  ${AUTOPEP8_CMD} --in-place "$@"
+	${AUTOPEP8_CMD} --in-place "$@"
 }
 
 # Function to process files or directories
 function run_autopep8() {
-  for target in "$@"; do
-    if [[ -f "${target}" ]]; then
-      if py_ext "${target}"; then
-        autopep8_run "${target}"
-        info "Done formatting ${target}"
-      else
-        warning "Do nothing. ${target} is not a Python file."
-      fi
-    else
-      local srcs
-      srcs="$(find_py_srcs "${target}")"
-      if [[ -z "${srcs}" ]]; then
-        warning "Do nothing. No Python files found under ${target}."
-        continue
-      fi
-      autopep8_run ${srcs}
-      ok "Done formatting Python files under ${target}"
-    fi
-  done
+	for target in "$@"; do
+		if [[ -f "${target}" ]]; then
+			if py_ext "${target}"; then
+				autopep8_run "${target}"
+				info "Done formatting ${target}"
+			else
+				warning "Do nothing. ${target} is not a Python file."
+			fi
+		else
+			local srcs
+			srcs="$(find_py_srcs "${target}")"
+			if [[ -z "${srcs}" ]]; then
+				warning "Do nothing. No Python files found under ${target}."
+				continue
+			fi
+			autopep8_run ${srcs}
+			ok "Done formatting Python files under ${target}"
+		fi
+	done
 }
 
 # Main function to execute script logic
 function main() {
-  check_autopep8
+	check_autopep8
 
-  if [[ "$#" -eq 0 ]]; then
-    error "Usage: $0 <path/to/python/dirs/or/files>"
-    exit 1
-  fi
+	if [[ "$#" -eq 0 ]]; then
+		error "Usage: $0 <path/to/python/dirs/or/files>"
+		exit 1
+	fi
 
-  run_autopep8 "$@"
+	run_autopep8 "$@"
 }
 
 main "$@"
