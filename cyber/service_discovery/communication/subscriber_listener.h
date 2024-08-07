@@ -39,7 +39,7 @@ class SubscriberListener : public eprosima::fastrtps::SubscriberListener {
 
   void onNewDataMessage(eprosima::fastrtps::Subscriber* sub);
   void onSubscriptionMatched(eprosima::fastrtps::Subscriber* sub,
-                             eprosima::fastrtps::rtps::MatchingInfo& info);  // NOLINT
+                             eprosima::fastrtps::MatchingInfo& info);  // NOLINT
 
  private:
   NewMsgCallback callback_;

@@ -84,18 +84,18 @@ void Participant::CreateFastRtpsParticipant(
   }
 
   eprosima::fastrtps::ParticipantAttributes attr;
-  // attr.rtps.defaultSendPort = send_port;
+  attr.rtps.defaultSendPort = send_port;
   attr.rtps.port.domainIDGain =
       static_cast<uint16_t>(part_attr_conf->domain_id_gain());
   attr.rtps.port.portBase = static_cast<uint16_t>(part_attr_conf->port_base());
-  // attr.rtps.use_IP6_to_send = false;
-  // attr.rtps.builtin.discovery_config.use_SIMPLE_RTPSParticipantDiscoveryProtocol = true;
-  attr.rtps.builtin.discovery_config.use_SIMPLE_EndpointDiscoveryProtocol = true;
-  attr.rtps.builtin.discovery_config.m_simpleEDP.use_PublicationReaderANDSubscriptionWriter =
+  attr.rtps.use_IP6_to_send = false;
+  attr.rtps.builtin.use_SIMPLE_RTPSParticipantDiscoveryProtocol = true;
+  attr.rtps.builtin.use_SIMPLE_EndpointDiscoveryProtocol = true;
+  attr.rtps.builtin.m_simpleEDP.use_PublicationReaderANDSubscriptionWriter =
       true;
-  attr.rtps.builtin.discovery_config.m_simpleEDP.use_PublicationWriterANDSubscriptionReader =
+  attr.rtps.builtin.m_simpleEDP.use_PublicationWriterANDSubscriptionReader =
       true;
-  attr.domainId = domain_id;
+  attr.rtps.builtin.domainId = domain_id;
 
   /**
    * The user should set the lease_duration and the announcement_period with
@@ -103,8 +103,8 @@ void Participant::CreateFastRtpsParticipant(
    * cause the failure of the writer liveliness assertion in networks with high
    * latency or with lots of communication errors.
    */
-  attr.rtps.builtin.discovery_config.leaseDuration.seconds = part_attr_conf->lease_duration();
-  attr.rtps.builtin.discovery_config.leaseDuration_announcementperiod.seconds =
+  attr.rtps.builtin.leaseDuration.seconds = part_attr_conf->lease_duration();
+  attr.rtps.builtin.leaseDuration_announcementperiod.seconds =
       part_attr_conf->announcement_period();
 
   attr.rtps.setName(name.c_str());
@@ -122,15 +122,15 @@ void Participant::CreateFastRtpsParticipant(
 
   eprosima::fastrtps::rtps::Locator_t locator;
   locator.port = 0;
-  RETURN_IF(!eprosima::fastrtps::rtps::IPLocator::setIPv4(locator, ip_env));
+  RETURN_IF(!locator.set_IP4_address(ip_env));
 
   locator.kind = LOCATOR_KIND_UDPv4;
 
   attr.rtps.defaultUnicastLocatorList.push_back(locator);
-  attr.rtps.defaultMulticastLocatorList.push_back(locator);
+  attr.rtps.defaultOutLocatorList.push_back(locator);
   attr.rtps.builtin.metatrafficUnicastLocatorList.push_back(locator);
 
-  eprosima::fastrtps::rtps::IPLocator::setIPv4(locator, "239.255.0.1");
+  locator.set_IP4_address(239, 255, 0, 1);
   attr.rtps.builtin.metatrafficMulticastLocatorList.push_back(locator);
 
   fastrtps_participant_ =

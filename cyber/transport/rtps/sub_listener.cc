@@ -34,12 +34,12 @@ void SubListener::onNewDataMessage(eprosima::fastrtps::Subscriber* sub) {
   std::lock_guard<std::mutex> lock(mutex_);
 
   // fetch channel name
-  auto channel_id = common::Hash(sub->getAttributes().topic.getTopicName().to_string());
+  auto channel_id = common::Hash(sub->getAttributes().topic.getTopicName());
   eprosima::fastrtps::SampleInfo_t m_info;
   UnderlayMessage m;
 
   RETURN_IF(!sub->takeNextData(reinterpret_cast<void*>(&m), &m_info));
-  RETURN_IF(m_info.sampleKind != eprosima::fastrtps::rtps::ALIVE);
+  RETURN_IF(m_info.sampleKind != eprosima::fastrtps::ALIVE);
 
   // fetch MessageInfo
   char* ptr =
@@ -67,7 +67,7 @@ void SubListener::onNewDataMessage(eprosima::fastrtps::Subscriber* sub) {
 
 void SubListener::onSubscriptionMatched(
     eprosima::fastrtps::Subscriber* sub,
-    eprosima::fastrtps::rtps::MatchingInfo& info) {
+    eprosima::fastrtps::MatchingInfo& info) {
   (void)sub;
   (void)info;
 }
