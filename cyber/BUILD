@@ -95,10 +95,34 @@ cc_library(
 )
 
 filegroup(
-    name = "cyber_internal_header",
+    name = "cyber_conf",
+    srcs = glob([
+        "conf/*.conf",
+    ]),
+)
+
+filegroup(
+    name = "cyber_header",
     srcs = [
         "cyber.h",
         "init.h",
         "state.h",
+        "//cyber/base:base_header",
+        "//cyber/blocker:blocker_header",
+        "//cyber/common:common_header",
+        "//cyber/component:component_header",
+        "//cyber/croutine:croutine_header",
+        "//cyber/data:data_header",
+        "//cyber/message:message_header",
+        "//cyber/node:node_header",
+        "//cyber/parameter:parameter_header",
+        "//cyber/record:record_header",
+        "//cyber/scheduler:scheduler_header",
+        "//cyber/service:service_header",
+        "//cyber/service_discovery:service_discovery_header",
+        "//cyber/task:task_header",
+        "//cyber/time:time_header",
+        "//cyber/timer:timer_header",
+        "//cyber/transport:transport_header",
     ]
 )
