@@ -183,3 +183,23 @@ cc_library(
     name = "wait_strategy",
     hdrs = ["wait_strategy.h"],
 )
+
+filegroup(
+    name = "base_header",
+    srcs = [
+        "atomic_hash_map.h",
+        "atomic_rw_lock.h",
+        "bounded_queue.h",
+        "concurrent_object_pool.h",
+        "for_each.h",
+        "macros.h",
+        "object_pool.h",
+        "reentrant_rw_lock.h",
+        "rw_lock_guard.h",
+        "signal.h",
+        "thread_pool.h",
+        "thread_safe_queue.h",
+        "unbounded_queue.h",
+        "wait_strategy.h",
+    ]
+)

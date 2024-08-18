@@ -48,3 +48,10 @@ cc_test(
         "@com_google_googletest//:gtest_main",
     ],
 )
+
+filegroup(
+    name = "timer_header",
+    srcs = [
+        "timer.h",
+    ]
+)

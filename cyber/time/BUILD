@@ -73,3 +73,13 @@ cc_test(
         "@com_google_googletest//:gtest_main",
     ],
 )
+
+filegroup(
+    name = "time_header",
+    srcs = [
+        "clock.h",
+        "duration.h",
+        "rate.h",
+        "time.h",
+    ]
+)

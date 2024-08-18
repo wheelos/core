@@ -35,3 +35,10 @@ cc_test(
         "@com_google_googletest//:gtest",
     ],
 )
+
+filegroup(
+    name = "transport_header",
+    srcs = [
+        "transport.h",
+    ]
+)

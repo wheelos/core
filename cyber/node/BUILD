@@ -142,3 +142,16 @@ cc_test(
         "@com_google_googletest//:gtest",
     ],
 )
+
+filegroup(
+    name = "node_header",
+    srcs = [
+        "node_channel_impl.h",
+        "node_service_impl.h",
+        "node.h",
+        "reader_base.h",
+        "reader.h",
+        "writer_base.h",
+        "writer.h",
+    ]
+)

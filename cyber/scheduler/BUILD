@@ -163,3 +163,10 @@ cc_test(
         "@com_google_googletest//:gtest_main",
     ],
 )
+
+filegroup(
+    name = "scheduler_header",
+    srcs = [
+        "scheduler_factory.h",
+    ]
+)

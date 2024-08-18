@@ -18,7 +18,8 @@ pkg_tar(
     name = "wheelos_cyber",
     package_dir = "/usr/local/bin",
     srcs = [
-        "//cyber:cyber_core",
+        ":cyber_header",
+        "//cyber:cyber_core"
     ],
     deps = [
         ":wheelos_cyber_conf",
@@ -33,6 +34,30 @@ pkg_tar(
         "cyber/conf/*.conf",
     ]),
     mode = "0644",
+)
+
+filegroup(
+    name = "cyber_header",
+    srcs = [
+        "//cyber:cyber_internal_header",
+        "//cyber/base:base_header",
+        "//cyber/blocker:blocker_header",
+        "//cyber/common:common_header",
+        "//cyber/component:component_header",
+        "//cyber/croutine:croutine_header",
+        "//cyber/data:data_header",
+        "//cyber/message:message_header",
+        "//cyber/node:node_header",
+        "//cyber/parameter:parameter_header",
+        "//cyber/record:record_header",
+        "//cyber/scheduler:scheduler_header",
+        "//cyber/service:service_header",
+        "//cyber/service_discovery:service_discovery_header",
+        "//cyber/task:task_header",
+        "//cyber/time:time_header",
+        "//cyber/timer:timer_header",
+        "//cyber/transport:transport_header",
+    ]
 )
 
 pkg_tar(

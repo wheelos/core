@@ -65,3 +65,11 @@ cc_test(
         "@com_google_googletest//:gtest_main",
     ],
 )
+
+filegroup(
+    name = "croutine_header",
+    srcs = [
+        "croutine.h",
+        "routine_factory.h",
+    ]
+)

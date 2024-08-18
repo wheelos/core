@@ -195,3 +195,10 @@ cc_test(
         "@com_google_googletest//:gtest_main",
     ],
 )
+
+filegroup(
+    name = "service_discovery_header",
+    srcs = [
+        "topology_manager.h",
+    ]
+)

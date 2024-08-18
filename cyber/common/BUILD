@@ -121,3 +121,15 @@ cc_library(
     name = "util",
     hdrs = ["util.h"],
 )
+
+filegroup(
+    name = "common_header",
+    srcs = [
+        "environment.h",
+        "file.h",
+        "global_data.h",
+        "log.h",
+        "time_conversion.h",
+        "util.h",
+    ]
+)

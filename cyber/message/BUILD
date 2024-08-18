@@ -2,10 +2,6 @@ load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 
 package(default_visibility = ["//visibility:public"])
 
-cc_library(
-    name = "message_header",
-    hdrs = ["message_header.h"],
-)
 
 cc_test(
     name = "message_header_test",
@@ -19,9 +15,11 @@ cc_test(
 
 cc_library(
     name = "message_traits",
-    hdrs = ["message_traits.h"],
+    hdrs = [
+        "message_traits.h",
+        "message_header.h"
+    ],
     deps = [
-        ":message_header",
         ":protobuf_traits",
         ":py_message_traits",
         ":raw_message_traits",
@@ -113,4 +111,11 @@ cc_library(
         ":protobuf_factory",
         ":raw_message",
     ],
+)
+
+filegroup(
+    name = "message_header",
+    srcs = [
+        "message_traits.h",
+    ]
 )

@@ -93,3 +93,12 @@ cc_library(
         "@wheelos_fastdds//:fastdds",
     ],
 )
+
+filegroup(
+    name = "cyber_internal_header",
+    srcs = [
+        "cyber.h",
+        "init.h",
+        "state.h",
+    ]
+)
