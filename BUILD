@@ -18,7 +18,7 @@ pkg_tar(
     name = "wheelos_cyber",
     package_dir = "/usr/local/bin",
     srcs = [
-        "//cyber",
+        "//cyber:cyber_core",
     ],
     deps = [
         ":wheelos_cyber_conf",
