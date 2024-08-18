@@ -16,20 +16,34 @@ pkg_deb(
 
 pkg_tar(
     name = "wheelos_cyber",
-    package_dir = "/usr/local/bin",
+    deps = [
+        "wheelos_cyber_core",
+        "wheelos_cyber_header",
+        "wheelos_cyber_conf"
+    ],
+)
+
+pkg_tar(
+    name = "wheelos_cyber_core",
+    package_dir = "/usr/local/lib",
     srcs = [
-        ":cyber_header",
         "//cyber:cyber_core"
     ],
-    deps = [
-        ":wheelos_cyber_conf",
+    mode = "0755",
+)
+
+pkg_tar(
+    name = "wheelos_cyber_header",
+    package_dir = "/usr/local/include",
+    srcs = [
+        ":cyber_header",
     ],
     mode = "0755",
 )
 
 pkg_tar(
     name = "wheelos_cyber_conf",
-    package_dir = "/etc/cyber/conf",
+    package_dir = "/etc/cyber",
     srcs = glob([
         "cyber/conf/*.conf",
     ]),
@@ -58,25 +72,4 @@ filegroup(
         "//cyber/timer:timer_header",
         "//cyber/transport:transport_header",
     ]
-)
-
-pkg_tar(
-    name = "wheelos_smart_recorder",
-    package_dir = "/usr/local/bin",
-    srcs = [
-        "//tools/smart_recorder",
-    ],
-    deps = [
-        ":wheelos_smart_recorder_conf",
-    ],
-    mode = "0755",
-)
-
-pkg_tar(
-    name = "wheelos_smart_recorder_conf",
-    package_dir = "/etc/tools/smart_recorder/conf",
-    srcs = glob([
-        "tools/smart_recorder/conf/*.conf",
-    ]),
-    mode = "0644",
 )
