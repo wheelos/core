@@ -300,26 +300,6 @@ py_proto_library(
 )
 
 cc_proto_library(
-    name = "simple_cc_proto",
-    deps = [
-        ":simple_proto",
-    ],
-)
-
-proto_library(
-    name = "simple_proto",
-    srcs = ["simple.proto"],
-    deps = [
-        "//modules/common_msgs/basic_msgs:header_proto",
-    ],
-)
-
-py_proto_library(
-    name = "simple_py_pb2",
-    deps = [":simple_proto"],
-)
-
-cc_proto_library(
     name = "transport_conf_cc_proto",
     deps = [
         ":transport_conf_proto",
