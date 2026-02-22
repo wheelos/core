@@ -3,6 +3,8 @@ build --cxxopt="-std=c++17"
 build --jobs=4
 build --verbose_failures
 build --keep_going
+
+build --registry=https://bcr.wheelos.cn/
 build --registry=https://raw.githubusercontent.com/wheelos/bazel-central-registry/fastdds-2.14.x
 
 # Enable Bzlmod for every Bazel command
