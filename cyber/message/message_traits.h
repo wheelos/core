@@ -23,6 +23,7 @@
 #include "cyber/common/log.h"
 #include "cyber/message/message_header.h"
 #include "cyber/message/protobuf_traits.h"
+#include "cyber/message/flatbuffers_message_traits.h"
 #include "cyber/message/py_message_traits.h"
 #include "cyber/message/raw_message_traits.h"
 
