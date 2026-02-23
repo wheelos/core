@@ -127,7 +127,7 @@ cc_library(
         "//cyber/transport/qos",
         "//cyber/transport/rtps:attributes_filler",
         "//cyber/transport/rtps:underlay_message_type",
-        "@fastdds",
+        "@wheelos_fastdds//:fastdds",
     ],
 )
 
@@ -194,4 +194,11 @@ cc_test(
         "//cyber",
         "@com_google_googletest//:gtest_main",
     ],
+)
+
+filegroup(
+    name = "service_discovery_header",
+    srcs = [
+        "topology_manager.h",
+    ]
 )

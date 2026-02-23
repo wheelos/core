@@ -53,3 +53,12 @@ cc_library(
         ":blocker_manager",
     ],
 )
+
+filegroup(
+    name = "blocker_header",
+    srcs = [
+        "blocker.h",
+        "intra_reader.h",
+        "intra_writer.h",
+    ]
+)

@@ -2,10 +2,6 @@ load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 
 package(default_visibility = ["//visibility:public"])
 
-cc_library(
-    name = "message_header",
-    hdrs = ["message_header.h"],
-)
 
 cc_test(
     name = "message_header_test",
@@ -19,7 +15,10 @@ cc_test(
 
 cc_library(
     name = "message_traits",
-    hdrs = ["message_traits.h"],
+    hdrs = [
+        "message_traits.h",
+        "message_header.h"
+    ],
     deps = [
         ":flatbuffers_message_traits",
         ":message_header",
@@ -142,4 +141,11 @@ cc_test(
         "@com_google_googletest//:gtest_main",
         "@flatbuffers//:flatbuffers",
     ],
+)
+
+filegroup(
+    name = "message_header",
+    srcs = [
+        "message_traits.h",
+    ]
 )

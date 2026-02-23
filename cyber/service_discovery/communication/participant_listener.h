@@ -21,8 +21,8 @@
 #include <mutex>
 
 #include "fastrtps/Domain.h"
+#include "fastrtps/participant/Participant.h"
 #include "fastrtps/participant/ParticipantListener.h"
-#include "fastdds/rtps/participant/ParticipantDiscoveryInfo.h"
 
 namespace apollo {
 namespace cyber {
@@ -31,14 +31,14 @@ namespace service_discovery {
 class ParticipantListener : public eprosima::fastrtps::ParticipantListener {
  public:
   using ChangeFunc = std::function<void(
-      const eprosima::fastrtps::rtps::ParticipantDiscoveryInfo& info)>;
+      const eprosima::fastrtps::ParticipantDiscoveryInfo& info)>;
 
   explicit ParticipantListener(const ChangeFunc& callback);
   virtual ~ParticipantListener();
 
   virtual void onParticipantDiscovery(
       eprosima::fastrtps::Participant* p,
-      eprosima::fastrtps::rtps::ParticipantDiscoveryInfo&& info);
+      eprosima::fastrtps::ParticipantDiscoveryInfo info);
 
  private:
   ChangeFunc callback_;

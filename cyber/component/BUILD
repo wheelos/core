@@ -55,3 +55,11 @@ cc_library(
         "@com_github_gflags_gflags//:gflags",
     ],
 )
+
+filegroup(
+    name = "component_header",
+    srcs = [
+        "component.h",
+        "timer_component.h",
+    ]
+)

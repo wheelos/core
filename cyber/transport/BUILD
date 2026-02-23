@@ -21,7 +21,7 @@ cc_library(
         "//cyber/transport/rtps:underlay_message",
         "//cyber/transport/rtps:underlay_message_type",
         "//cyber/transport/transmitter",
-        "@fastdds",
+        "@wheelos_fastdds//:fastdds",
     ],
 )
 
@@ -34,4 +34,11 @@ cc_test(
         "//cyber/proto:unit_test_cc_proto",
         "@com_google_googletest//:gtest",
     ],
+)
+
+filegroup(
+    name = "transport_header",
+    srcs = [
+        "transport.h",
+    ]
 )

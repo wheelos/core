@@ -29,3 +29,10 @@ cc_library(
         "//cyber/scheduler:scheduler_factory",
     ],
 )
+
+filegroup(
+    name = "task_header",
+    srcs = [
+        "task.h",
+    ]
+)

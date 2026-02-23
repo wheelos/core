@@ -31,7 +31,7 @@ cc_library(
         ":parameter_service_names",
         "//cyber/node",
         "//cyber/service:client",
-        "@fastdds",
+        "@wheelos_fastdds//:fastdds",
     ],
 )
 
@@ -54,7 +54,7 @@ cc_library(
         ":parameter_service_names",
         "//cyber/node",
         "//cyber/service",
-        "@fastdds",
+        "@wheelos_fastdds//:fastdds",
     ],
 )
 
@@ -71,4 +71,12 @@ cc_test(
 cc_library(
     name = "parameter_service_names",
     hdrs = ["parameter_service_names.h"],
+)
+
+filegroup(
+    name = "parameter_header",
+    srcs = [
+        "parameter_server.h",
+        "parameter_client.h",
+    ]
 )

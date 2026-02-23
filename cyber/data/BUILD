@@ -119,3 +119,10 @@ cc_test(
         "@com_google_googletest//:gtest_main",
     ],
 )
+
+filegroup(
+    name = "data_header",
+    srcs = [
+        "data_visitor.h",
+    ]
+)

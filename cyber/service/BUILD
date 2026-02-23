@@ -28,3 +28,11 @@ cc_library(
     name = "service_base",
     hdrs = ["service_base.h"],
 )
+
+filegroup(
+    name = "service_header",
+    srcs = [
+        "client.h",
+        "service.h",
+    ]
+)

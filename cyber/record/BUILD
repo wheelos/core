@@ -157,3 +157,12 @@ cc_library(
         "//cyber/proto:record_cc_proto",
     ],
 )
+
+filegroup(
+    name = "record_header",
+    srcs = [
+        "record_reader.h",
+        "record_viewer.h",
+        "record_writer.h"
+    ]
+)

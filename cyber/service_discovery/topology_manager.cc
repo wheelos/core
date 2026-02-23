@@ -136,20 +136,20 @@ void TopologyManager::OnParticipantChange(const PartInfo& info) {
 }
 
 bool TopologyManager::Convert(const PartInfo& info, ChangeMsg* msg) {
-  auto guid = info.info.m_guid;
-  auto status = info.status;
+  auto guid = info.rtps.m_guid;
+  auto status = info.rtps.m_status;
   std::string participant_name("");
   OperateType opt_type = OperateType::OPT_JOIN;
 
   switch (status) {
-    case eprosima::fastrtps::rtps::ParticipantDiscoveryInfo::DISCOVERY_STATUS::DISCOVERED_PARTICIPANT:
-      participant_name = info.info.m_participantName;
+    case eprosima::fastrtps::rtps::DISCOVERY_STATUS::DISCOVERED_RTPSPARTICIPANT:
+      participant_name = info.rtps.m_RTPSParticipantName;
       participant_names_[guid] = participant_name;
       opt_type = OperateType::OPT_JOIN;
       break;
 
-    case eprosima::fastrtps::rtps::ParticipantDiscoveryInfo::DISCOVERY_STATUS::REMOVED_PARTICIPANT:
-    case eprosima::fastrtps::rtps::ParticipantDiscoveryInfo::DISCOVERY_STATUS::DROPPED_PARTICIPANT:
+    case eprosima::fastrtps::rtps::DISCOVERY_STATUS::REMOVED_RTPSPARTICIPANT:
+    case eprosima::fastrtps::rtps::DISCOVERY_STATUS::DROPPED_RTPSPARTICIPANT:
       if (participant_names_.find(guid) != participant_names_.end()) {
         participant_name = participant_names_[guid];
         participant_names_.erase(guid);

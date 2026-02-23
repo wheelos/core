@@ -78,9 +78,6 @@ cc_library(
     name = "global_data",
     srcs = ["global_data.cc"],
     hdrs = ["global_data.h"],
-    data = [
-        "//cyber:cyber_conf",
-    ],
     deps = [
         "//cyber/base:atomic_hash_map",
         "//cyber/base:atomic_rw_lock",
@@ -123,4 +120,16 @@ cc_library(
 cc_library(
     name = "util",
     hdrs = ["util.h"],
+)
+
+filegroup(
+    name = "common_header",
+    srcs = [
+        "environment.h",
+        "file.h",
+        "global_data.h",
+        "log.h",
+        "time_conversion.h",
+        "util.h",
+    ]
 )
