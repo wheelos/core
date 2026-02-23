@@ -143,9 +143,9 @@ cc_test(
     ],
 )
 
-filegroup(
+cc_library(
     name = "message_header",
-    srcs = [
-        "message_traits.h",
-    ]
+    hdrs = [
+        "message_header.h",
+    ],
 )
