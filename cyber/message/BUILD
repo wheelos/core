@@ -20,6 +20,8 @@ cc_library(
         "message_header.h"
     ],
     deps = [
+        ":flatbuffers_message_traits",
+        ":message_header",
         ":protobuf_traits",
         ":py_message_traits",
         ":raw_message_traits",
@@ -113,9 +115,37 @@ cc_library(
     ],
 )
 
-filegroup(
+cc_library(
+    name = "flatbuffers_message",
+    hdrs = ["flatbuffers_message.h"],
+    deps = [
+        "@flatbuffers//:flatbuffers",
+    ],
+)
+
+cc_library(
+    name = "flatbuffers_message_traits",
+    hdrs = ["flatbuffers_message_traits.h"],
+    deps = [
+        ":flatbuffers_message",
+    ],
+)
+
+cc_test(
+    name = "flatbuffers_message_test",
+    size = "small",
+    srcs = ["flatbuffers_message_test.cc"],
+    deps = [
+        ":flatbuffers_message",
+        "//cyber/examples/proto:examples_fbs",
+        "@com_google_googletest//:gtest_main",
+        "@flatbuffers//:flatbuffers",
+    ],
+)
+
+cc_library(
     name = "message_header",
-    srcs = [
-        "message_traits.h",
-    ]
+    hdrs = [
+        "message_header.h",
+    ],
 )
