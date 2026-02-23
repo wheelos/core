@@ -17,3 +17,5 @@ jobs:
       run: sudo bash scripts/deps/install_bazel.sh
     - name: make
       run: bazel build //cyber
+    - name: test
+      run: bazel test //cyber/message/...
