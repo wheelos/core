@@ -20,6 +20,7 @@
 
 #include "gtest/gtest.h"
 
+#include "cyber/message/flatbuffers_message.h"
 #include "cyber/proto/unit_test.pb.h"
 
 namespace apollo {
@@ -96,6 +97,10 @@ TEST(MessageTraitsTest, type_trait) {
   EXPECT_TRUE(HasSerializer<RawMessage>::value);
   EXPECT_TRUE(HasGetDescriptorString<RawMessage>::value);
 
+  EXPECT_TRUE(HasType<FlatBufferMessage>::value);
+  EXPECT_TRUE(HasSerializer<FlatBufferMessage>::value);
+  EXPECT_TRUE(HasSetType<FlatBufferMessage>::value);
+
   Message msg;
   EXPECT_EQ("type", MessageType<Message>(msg));
 
@@ -127,6 +132,12 @@ TEST(MessageTraitsTest, byte_size) {
   EXPECT_EQ(ByteSize(py_msg), 0);
   py_msg.set_data("123");
   EXPECT_EQ(ByteSize(py_msg), 3);
+
+  FlatBufferMessage fb_msg;
+  EXPECT_EQ(ByteSize(fb_msg), 0);
+  const uint8_t buf[] = {0x01, 0x02, 0x03};
+  fb_msg.ParseFromArray(buf, static_cast<int>(sizeof(buf)));
+  EXPECT_EQ(ByteSize(fb_msg), static_cast<int>(sizeof(buf)));
 }
 
 TEST(MessageTraitsTest, serialize_to_array) {
@@ -162,6 +173,12 @@ TEST(MessageTraitsTest, serialize_to_array) {
     std::string arr_str(array);
     EXPECT_EQ("content", arr_str);
   }
+
+  memset(array, 0, sizeof(array));
+  const uint8_t fb_buf[] = {0xAA, 0xBB, 0xCC};
+  FlatBufferMessage fb_msg("test.type", fb_buf, sizeof(fb_buf));
+  EXPECT_TRUE(SerializeToArray(fb_msg, array, sizeof(array)));
+  EXPECT_EQ(memcmp(array, fb_buf, sizeof(fb_buf)), 0);
 }
 
 TEST(MessageTraitsTest, serialize_to_string) {
@@ -188,6 +205,13 @@ TEST(MessageTraitsTest, serialize_to_string) {
   RawMessage raw("content");
   EXPECT_TRUE(SerializeToString(raw, &str));
   EXPECT_EQ("content", str);
+
+  str = "";
+  const uint8_t fb_buf[] = {0x01, 0x02, 0x03};
+  FlatBufferMessage fb_msg("test.type", fb_buf, sizeof(fb_buf));
+  EXPECT_TRUE(SerializeToString(fb_msg, &str));
+  EXPECT_EQ(str.size(), sizeof(fb_buf));
+  EXPECT_EQ(memcmp(str.data(), fb_buf, sizeof(fb_buf)), 0);
 }
 
 TEST(MessageTraitsTest, parse_from_array) {
@@ -211,6 +235,11 @@ TEST(MessageTraitsTest, parse_from_array) {
   RawMessage raw;
   EXPECT_TRUE(ParseFromArray(array, arr_str_len, &raw));
   EXPECT_EQ(raw.message, arr_str);
+
+  FlatBufferMessage fb_msg;
+  EXPECT_TRUE(ParseFromArray(array, arr_str_len, &fb_msg));
+  EXPECT_EQ(fb_msg.ByteSize(), arr_str_len);
+  EXPECT_EQ(memcmp(fb_msg.data(), array, arr_str_len), 0);
 }
 
 TEST(MessageTraitsTest, parse_from_string) {
@@ -230,6 +259,10 @@ TEST(MessageTraitsTest, parse_from_string) {
   RawMessage raw;
   EXPECT_TRUE(ParseFromString(str, &raw));
   EXPECT_EQ(str, raw.message);
+
+  FlatBufferMessage fb_msg;
+  EXPECT_TRUE(ParseFromString(str, &fb_msg));
+  EXPECT_EQ(fb_msg.ByteSize(), static_cast<int>(str.size()));
 }
 
 TEST(MessageTraitsTest, serialize_parse_hc) {
@@ -275,6 +308,12 @@ TEST(MessageTraitsTest, message_type) {
   proto::UnitTest ut;
   msg_type = MessageType(ut);
   EXPECT_EQ(msg_type, "apollo.cyber.proto.UnitTest");
+
+  FlatBufferMessage fb_msg;
+  msg_type = MessageType<FlatBufferMessage>();
+  EXPECT_EQ(msg_type, "apollo.cyber.message.FlatBufferMessage");
+  msg_type = MessageType(fb_msg);
+  EXPECT_EQ(msg_type, "apollo.cyber.message.FlatBufferMessage");
 }
 
 TEST(MessageTraitsTest, descriptor) {
@@ -303,6 +342,12 @@ TEST(MessageTraitsTest, descriptor) {
   desc = "";
   GetDescriptorString<Message>("apollo", &desc);
   EXPECT_EQ("message", desc);
+
+  // FlatBuffers messages have no Protobuf descriptor string.
+  desc = "non-empty";
+  GetDescriptorString<FlatBufferMessage>("apollo.cyber.message.FlatBufferMessage",
+                                        &desc);
+  EXPECT_EQ("", desc);
 }
 
 }  // namespace message

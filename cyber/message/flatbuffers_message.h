@@ -157,7 +157,23 @@ class FlatBufferMessage {
   // ----- Ancillary fields used by the transport layer -----------------------
 
   const std::string& type_name() const { return type_name_; }
+
+  /**
+   * @brief Lowercase setter following conventional C++ naming style.
+   */
   void set_type_name(const std::string& name) { type_name_ = name; }
+
+  /**
+   * @brief UpperCamelCase setter required by the `HasSetType` trait in
+   * message_traits.h.
+   *
+   * Both `set_type_name()` and `SetTypeName()` exist intentionally:
+   * `set_type_name()` follows standard C++ getter/setter naming, while
+   * `SetTypeName()` is the name detected by `DEFINE_TYPE_TRAIT(HasSetType,
+   * SetTypeName)` so the transport layer (e.g., `ParseFromHC`) can propagate
+   * the message type identifier through a generic template interface.
+   */
+  void SetTypeName(const std::string& name) { type_name_ = name; }
 
   uint64_t timestamp() const { return timestamp_; }
   void set_timestamp(uint64_t ts) { timestamp_ = ts; }

@@ -21,6 +21,7 @@ cc_library(
     name = "message_traits",
     hdrs = ["message_traits.h"],
     deps = [
+        ":flatbuffers_traits",
         ":message_header",
         ":protobuf_traits",
         ":py_message_traits",
@@ -35,8 +36,10 @@ cc_test(
     srcs = ["message_traits_test.cc"],
     deps = [
         "//cyber",
+        "//cyber/message:flatbuffers_message",
         "//cyber/proto:unit_test_cc_proto",
         "@com_google_googletest//:gtest_main",
+        "@flatbuffers//:flatbuffers",
     ],
 )
 
@@ -120,6 +123,14 @@ cc_library(
     hdrs = ["flatbuffers_message.h"],
     deps = [
         "@flatbuffers//:flatbuffers",
+    ],
+)
+
+cc_library(
+    name = "flatbuffers_traits",
+    hdrs = ["flatbuffers_traits.h"],
+    deps = [
+        ":flatbuffers_message",
     ],
 )
 
