@@ -21,6 +21,7 @@ cc_library(
     name = "message_traits",
     hdrs = ["message_traits.h"],
     deps = [
+        ":flatbuffers_message_traits",
         ":message_header",
         ":protobuf_traits",
         ":py_message_traits",
@@ -120,6 +121,14 @@ cc_library(
     hdrs = ["flatbuffers_message.h"],
     deps = [
         "@flatbuffers//:flatbuffers",
+    ],
+)
+
+cc_library(
+    name = "flatbuffers_message_traits",
+    hdrs = ["flatbuffers_message_traits.h"],
+    deps = [
+        ":flatbuffers_message",
     ],
 )
 
