@@ -114,3 +114,23 @@ cc_library(
         ":raw_message",
     ],
 )
+
+cc_library(
+    name = "flatbuffers_message",
+    hdrs = ["flatbuffers_message.h"],
+    deps = [
+        "@flatbuffers//:flatbuffers",
+    ],
+)
+
+cc_test(
+    name = "flatbuffers_message_test",
+    size = "small",
+    srcs = ["flatbuffers_message_test.cc"],
+    deps = [
+        ":flatbuffers_message",
+        "//cyber/examples/proto:examples_fbs",
+        "@com_google_googletest//:gtest_main",
+        "@flatbuffers//:flatbuffers",
+    ],
+)

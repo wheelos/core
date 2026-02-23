@@ -34,3 +34,7 @@ bazel_dep(name = "ncurses", version = "6.4.20221231")
 bazel_dep(name = "libuuid", version = "2.39.3.bcr.1")
 bazel_dep(name = "fastcdr", version = "2.2.2")
 bazel_dep(name = "fastdds", version = "2.14.3")
+
+# FlatBuffers system-installed runtime (header-only, provided via local repo).
+flatbuffers_ext = use_extension("//bazel:flatbuffers.bzl", "flatbuffers_extension")
+use_repo(flatbuffers_ext, "flatbuffers")
