@@ -2,6 +2,7 @@
 load("@com_google_protobuf//bazel:proto_library.bzl", "proto_library")
 load("@com_google_protobuf//bazel:cc_proto_library.bzl", "cc_proto_library")
 load("@com_google_protobuf//bazel:py_proto_library.bzl", "py_proto_library")
+load("@rules_cc//cc:defs.bzl", "cc_library")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -20,4 +21,14 @@ proto_library(
 py_proto_library(
     name = "examples_py_pb2",
     deps = [":examples_proto"],
+)
+
+# FlatBuffers pre-generated header for the Chatter schema.
+# Generated from examples.fbs with: flatc --cpp examples.fbs
+cc_library(
+    name = "examples_fbs",
+    hdrs = ["examples_generated.h"],
+    deps = [
+        "@flatbuffers//:flatbuffers",
+    ],
 )

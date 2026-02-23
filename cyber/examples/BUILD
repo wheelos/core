@@ -46,3 +46,24 @@ cc_binary(
         "//cyber/proto:record_cc_proto",
     ],
 )
+
+# FlatBuffers zero-copy talker/listener pair.
+cc_binary(
+    name = "talker_fb",
+    srcs = ["talker_fb.cc"],
+    deps = [
+        "//cyber",
+        "//cyber/examples/proto:examples_fbs",
+        "//cyber/message:flatbuffers_message",
+    ],
+)
+
+cc_binary(
+    name = "listener_fb",
+    srcs = ["listener_fb.cc"],
+    deps = [
+        "//cyber",
+        "//cyber/examples/proto:examples_fbs",
+        "//cyber/message:flatbuffers_message",
+    ],
+)
