@@ -14,7 +14,7 @@
  * limitations under the License.
  *****************************************************************************/
 
-#include "cyber/tools/cyber_recorder/player/play_task_producer.h"
+#include "cyber/tools/cyber_recorder/play/play_task_producer.h"
 
 #include <iostream>
 #include <limits>
@@ -125,11 +125,7 @@ bool PlayTaskProducer::ReadRecordInfo() {
       }
 
       auto& proto_desc = record_reader->GetProtoDesc(channel_name);
-      if (!proto_desc.empty() &&
-          msg_type != transport::PodMessage::TypeName() &&
-          !transport::IsPodSchemaDescriptor(proto_desc)) {
-        pb_factory->RegisterMessage(proto_desc);
-      }
+      pb_factory->RegisterMessage(proto_desc);
     }
 
     auto& header = record_reader->GetHeader();
@@ -144,12 +140,10 @@ bool PlayTaskProducer::ReadRecordInfo() {
       latest_end_time_ = header.end_time();
     }
 
-    auto begin_time_s = static_cast<double>(header.begin_time()) / 1e9;
-    auto end_time_s = static_cast<double>(header.end_time()) / 1e9;
-    auto begin_time_str =
-        common::UnixSecondsToString(static_cast<int>(begin_time_s));
-    auto end_time_str =
-        common::UnixSecondsToString(static_cast<int>(end_time_s));
+    uint64_t begin_s = header.begin_time() / 1000000000ULL;
+    uint64_t end_s = header.end_time() / 1000000000ULL;
+    auto begin_time_str = common::UnixSecondsToString(begin_s);
+    auto end_time_str = common::UnixSecondsToString(end_s);
 
     std::cout << "file: " << file << ", chunk_number: " << header.chunk_number()
               << ", begin_time: " << header.begin_time() << " ("
@@ -198,6 +192,7 @@ bool PlayTaskProducer::CreateWriters() {
     AERROR << "create node failed.";
     return false;
   }
+
   for (auto& item : msg_types_) {
     auto& channel_name = item.first;
     auto& msg_type = item.second;
@@ -211,34 +206,16 @@ bool PlayTaskProducer::CreateWriters() {
       proto::RoleAttributes attr;
       attr.set_channel_name(channel_name);
       attr.set_message_type(msg_type);
-      if (msg_type == transport::PodMessage::TypeName()) {
-        auto writer = node_->CreateWriter<transport::PodMessage>(attr);
-        if (writer == nullptr) {
-          AERROR << "create pod writer failed. channel name: "
-                 << channel_name;
-          return false;
-        }
-        publishers_[channel_name] = [writer](const std::string& content) {
-          auto msg = std::make_shared<transport::PodMessage>();
-          if (!msg->ParseFromString(content)) {
-            return false;
-          }
-          return writer->Write(msg);
-        };
-      } else {
-        auto writer = node_->CreateWriter<message::RawMessage>(attr);
-        if (writer == nullptr) {
-          AERROR << "create writer failed. channel name: " << channel_name
-                 << ", message type: " << msg_type;
-          return false;
-        }
-        publishers_[channel_name] = [writer](const std::string& content) {
-          auto msg = std::make_shared<message::RawMessage>(content);
-          return writer->Write(msg);
-        };
+      auto writer = node_->CreateWriter<message::RawMessage>(attr);
+      if (writer == nullptr) {
+        AERROR << "create writer failed. channel name: " << channel_name
+               << ", message type: " << msg_type;
+        return false;
       }
+      writers_[channel_name] = writer;
     }
   }
+
   return true;
 }
 
@@ -278,16 +255,14 @@ void PlayTaskProducer::ThreadFunc() {
           break;
         }
 
-        auto search = publishers_.find(itr->channel_name);
-        if (search == publishers_.end()) {
+        auto search = writers_.find(itr->channel_name);
+        if (search == writers_.end()) {
           continue;
         }
 
-        auto publish_fn = search->second;
-        auto content = itr->content;
+        auto raw_msg = std::make_shared<message::RawMessage>(itr->content);
         auto task = std::make_shared<PlayTask>(
-            [publish_fn, content]() { return publish_fn(content); }, itr->time,
-            itr->time + plus_time_ns);
+            raw_msg, search->second, itr->time, itr->time + plus_time_ns);
         task_buffer_->Push(task);
       }
     }

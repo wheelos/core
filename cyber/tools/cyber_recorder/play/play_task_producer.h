@@ -19,7 +19,6 @@
 
 #include <atomic>
 #include <cstdint>
-#include <functional>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -32,10 +31,8 @@
 #include "cyber/node/node.h"
 #include "cyber/node/writer.h"
 #include "cyber/record/record_reader.h"
-#include "cyber/transport/message/pod_message.h"
-#include "cyber/tools/cyber_recorder/player/play_param.h"
-#include "cyber/tools/cyber_recorder/player/play_task.h"
-#include "cyber/tools/cyber_recorder/player/play_task_buffer.h"
+#include "cyber/tools/cyber_recorder/play/play_param.h"
+#include "cyber/tools/cyber_recorder/play/play_task_buffer.h"
 
 namespace apollo {
 namespace cyber {
@@ -47,8 +44,8 @@ class PlayTaskProducer {
   using ThreadPtr = std::unique_ptr<std::thread>;
   using TaskBufferPtr = std::shared_ptr<PlayTaskBuffer>;
   using RecordReaderPtr = std::shared_ptr<RecordReader>;
-  using PublishFn = std::function<bool(const std::string&)>;
-  using PublisherMap = std::unordered_map<std::string, PublishFn>;
+  using WriterPtr = std::shared_ptr<Writer<message::RawMessage>>;
+  using WriterMap = std::unordered_map<std::string, WriterPtr>;
   using MessageTypeMap = std::unordered_map<std::string, std::string>;
 
   PlayTaskProducer(const TaskBufferPtr& task_buffer,
@@ -76,7 +73,7 @@ class PlayTaskProducer {
   std::atomic<bool> is_stopped_;
 
   NodePtr node_;
-  PublisherMap publishers_;
+  WriterMap writers_;
   MessageTypeMap msg_types_;
   std::vector<RecordReaderPtr> record_readers_;
 
