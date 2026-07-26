@@ -3,7 +3,7 @@ new file mode 100644
 index 000000000..e663b43ee
 --- /dev/null
 +++ BUILD.bazel
-@@ -0,0 +1,305 @@
+@@ -0,0 +1,313 @@
 +load("@rules_cc//cc:defs.bzl", "cc_library")
 +
 +package(default_visibility = ["//visibility:public"])
@@ -45,6 +45,17 @@ index 000000000..e663b43ee
 +)
 +
 +cc_library(
++    name = "thirdparty_boost_headers",
++    hdrs = glob([
++        "thirdparty/boost/include/**/*.h",
++        "thirdparty/boost/include/**/*.hpp",
++        "thirdparty/boost/include/**/*.ipp",
++    ]),
++    includes = ["thirdparty/boost/include"],
++    visibility = ["//visibility:private"],
++)
++
++cc_library(
 +    name = "fastdds",
 +    hdrs = glob([
 +        "include/**/*.h",
@@ -53,9 +64,6 @@ index 000000000..e663b43ee
 +        "src/cpp/**/*.h",
 +        "src/cpp/**/*.hpp",
 +        "src/cpp/**/*.ipp",
-+        "thirdparty/boost/include/**/*.h",
-+        "thirdparty/boost/include/**/*.hpp",
-+        "thirdparty/boost/include/**/*.ipp",
 +        "thirdparty/taocpp-pegtl/**/*.hpp",
 +    ]) + [
 +        "thirdparty/filewatch/FileWatch.hpp",
@@ -296,7 +304,6 @@ index 000000000..e663b43ee
 +        "src/cpp/utils",
 +        "thirdparty/filewatch",
 +        "thirdparty/nlohmann-json",
-+        "thirdparty/boost/include",
 +        "thirdparty/taocpp-pegtl",
 +        "thirdparty/taocpp-pegtl/pegtl",
 +        "thirdparty/taocpp-pegtl/pegtl/contrib",
@@ -308,4 +315,5 @@ index 000000000..e663b43ee
 +        "@tinyxml2",
 +        "@asio//:asio",
 +    ],
++    implementation_deps = [":thirdparty_boost_headers"],
 +)
