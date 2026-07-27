@@ -113,6 +113,18 @@ bool MatchesFilter(const fs::directory_entry& entry, FileTypeFilter filter,
   return false;
 }
 
+bool IsAncestorOrSamePath(const fs::path& ancestor, const fs::path& child) {
+  auto ancestor_it = ancestor.begin();
+  auto child_it = child.begin();
+  for (; ancestor_it != ancestor.end() && child_it != child.end();
+       ++ancestor_it, ++child_it) {
+    if (*ancestor_it != *child_it) {
+      return false;
+    }
+  }
+  return ancestor_it == ancestor.end();
+}
+
 }  // namespace
 
 // ===================================================================
@@ -416,9 +428,16 @@ bool RemoveAll(const std::string& path) {
     return false;
   }
 
-  // Check if it is the current working directory
-  if (normalized_path == fs::current_path(ec)) {
-    AWARN << "Attempting to remove current working directory. Aborted.";
+  const fs::path current_path = fs::canonical(fs::current_path(ec), ec);
+  if (ec) {
+    AERROR << "Failed to resolve current working directory: " << ec.message();
+    return false;
+  }
+
+  // Protect current working directory and all of its ancestors.
+  if (IsAncestorOrSamePath(normalized_path, current_path)) {
+    AWARN << "Attempting to remove protected path: " << normalized_path
+          << ". It is the current directory or one of its ancestors. Aborted.";
     return false;
   }
 

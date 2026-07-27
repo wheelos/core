@@ -52,4 +52,4 @@ The following cleanup has been applied in this repository:
 
 1. Re-run `bash scripts/release/check_bzlmod_lockfile.sh --update` and then `--check` in a stable network/mirror environment; commit `MODULE.bazel.lock` changes.
 2. Keep proto BUILD generation logic aligned with official protobuf rule loads.
-3. Resolve remaining cpplint macro path consistency (`//tools:cpplint.bzl`) as a separate lint/tooling cleanup.
+3. Remove any remaining repo-local `cpplint()`/`install()` compatibility shims from BUILD files and scripts.

@@ -1,16 +1,6 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
-load("//tools/install:install.bzl", "install")
-load("//tools:cpplint.bzl", "cpplint")
 
 package(default_visibility = ["//visibility:public"])
-
-install(
-    name = "install",
-    runtime_dest = "cyber/bin",
-    targets = [
-      ":cyber_recorder",
-    ],
-)
 
 cc_binary(
     name = "cyber_recorder",
@@ -125,7 +115,7 @@ cc_library(
         "//cyber",
         "//cyber/common:log",
         "//cyber/proto:record_cc_proto",
-        "@wheelos_fastdds//:fastdds",
+        "@fastdds//:fastdds",
     ],
 )
 
@@ -138,7 +128,7 @@ cc_library(
         ":message_size_filter",
         ":policy_resolver",
         ":subscription_selector",
-        "@com_github_jbeder_yaml_cpp//:yaml-cpp",
+        "@yaml-cpp",
     ],
 )
 
@@ -210,6 +200,16 @@ cc_test(
     ],
 )
 
+cc_test(
+    name = "conflict_warning_emitter_test",
+    size = "small",
+    srcs = ["tests/conflict_warning_emitter_test.cc"],
+    deps = [
+        ":conflict_warning_emitter",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
 cc_library(
     name = "conflict_warning_emitter",
     srcs = ["record/core/conflict_warning_emitter.cc"],
@@ -259,5 +259,3 @@ cc_library(
         "//cyber/record:record_writer",
     ],
 )
-
-cpplint()

@@ -38,6 +38,18 @@ constexpr char kTestPodSource[] = "record_play_tool_test_pod_source.record";
 constexpr char kTestConverted[] = "record_play_tool_test_converted.record";
 constexpr char kTestManifest[] = "record_play_tool_test.manifest";
 
+struct FakeWriter {
+  explicit FakeWriter(bool write_result) : write_result(write_result) {}
+
+  bool Write(const std::shared_ptr<transport::PodMessage>&) {
+    ++calls;
+    return write_result;
+  }
+
+  bool write_result = true;
+  int calls = 0;
+};
+
 void CleanupArtifacts() {
   (void)std::remove(kTestSource);
   (void)std::remove(kTestPodSource);
@@ -200,6 +212,69 @@ TEST(RecordPlayToolTest, ConvertExistingPodRecordPreservesHeaders) {
   EXPECT_EQ(seen, expected_items.size());
 
   CleanupArtifacts();
+}
+
+TEST(RecordPlayToolTest, ExpandScheduleRepeatZeroUsesSinglePass) {
+  RecordPlayItem item_a;
+  item_a.channel_name = kImageFront6mm;
+  item_a.payload = {1, 2, 3};
+  item_a.header.payload_size = static_cast<uint32_t>(item_a.payload.size());
+
+  RecordPlayItem item_b;
+  item_b.channel_name = kPointCloud64;
+  item_b.payload = {4, 5};
+  item_b.header.payload_size = static_cast<uint32_t>(item_b.payload.size());
+
+  const RecordPlayItems items{item_a, item_b};
+  const auto schedule = ExpandRecordPlaySchedule(items, /*repeat=*/0);
+  ASSERT_EQ(schedule.size(), items.size());
+  EXPECT_EQ(schedule[0].channel_name, item_a.channel_name);
+  EXPECT_EQ(schedule[1].channel_name, item_b.channel_name);
+}
+
+TEST(RecordPlayToolTest, PublishScheduleFailsWhenWriterMissing) {
+  RecordPlayItem item;
+  item.channel_name = kImageFront6mm;
+  item.payload = {9};
+  item.header.payload_size = static_cast<uint32_t>(item.payload.size());
+  const RecordPlaySchedule schedule{item};
+
+  std::unordered_map<std::string, std::shared_ptr<FakeWriter>> writers;
+  EXPECT_FALSE(PublishSchedule(schedule, writers));
+}
+
+TEST(RecordPlayToolTest, PublishScheduleStopsOnWriterFailure) {
+  RecordPlayItem item;
+  item.channel_name = kImageFront6mm;
+  item.payload = {9, 8, 7};
+  item.header.payload_size = static_cast<uint32_t>(item.payload.size());
+  const RecordPlaySchedule schedule{item, item};
+
+  auto writer = std::make_shared<FakeWriter>(false);
+  std::unordered_map<std::string, std::shared_ptr<FakeWriter>> writers = {
+      {kImageFront6mm, writer},
+  };
+  EXPECT_FALSE(PublishSchedule(schedule, writers));
+  EXPECT_EQ(writer->calls, 1);
+}
+
+TEST(RecordPlayToolTest, ValidateChunkDetectsHeaderMismatch) {
+  RecordPlayItem item;
+  item.channel_name = kImageFront12mm;
+  item.header = transport::MakeImagePodChunkHeader(1001, 11, 1280, 720, 2560,
+                                                   9, 7, 0x11223344u);
+  item.payload = {'a', 'b', 'c'};
+  item.payload_hash = HashBytes(
+      reinterpret_cast<const uint8_t*>(item.payload.data()), item.payload.size());
+  item.header.payload_size = static_cast<uint32_t>(item.payload.size());
+
+  transport::PodMessage message(item.header, item.payload.data(),
+                                item.payload.size());
+  EXPECT_TRUE(ValidateChunk(message, item));
+
+  RecordPlayItem mismatched = item;
+  mismatched.header.timestamp_ns += 1;
+  EXPECT_FALSE(ValidateChunk(message, mismatched));
 }
 
 }  // namespace record_play

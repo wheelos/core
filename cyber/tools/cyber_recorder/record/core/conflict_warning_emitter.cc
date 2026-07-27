@@ -25,31 +25,33 @@ namespace record {
 ConflictWarningEmitter::ConflictWarningEmitter(const uint32_t config_version)
     : config_version_(config_version) {}
 
-void ConflictWarningEmitter::WarnSubscriptionConflict(
+bool ConflictWarningEmitter::WarnSubscriptionConflict(
     const std::string& topic, const std::vector<std::string>& include_matches,
     const std::vector<std::string>& exclude_matches) {
-  if (!MarkWarningAndCheckNeedEmit(topic)) {
-    return;
+  if (!MarkWarningAndCheckNeedEmit("subscription", topic)) {
+    return false;
   }
   AWARN << "WARN [subscription] topic=" << topic
         << " include=" << Join(include_matches)
         << " exclude=" << Join(exclude_matches);
+  return true;
 }
 
-void ConflictWarningEmitter::WarnPolicyConflict(
+bool ConflictWarningEmitter::WarnPolicyConflict(
     const std::string& topic, const std::string& selected,
     const std::vector<std::string>& shadowed) {
-  if (!MarkWarningAndCheckNeedEmit(topic)) {
-    return;
+  if (!MarkWarningAndCheckNeedEmit("policy", topic)) {
+    return false;
   }
   AWARN << "WARN [policy] topic=" << topic << " selected=" << selected
         << " shadowed=" << Join(shadowed);
+  return true;
 }
 
 bool ConflictWarningEmitter::MarkWarningAndCheckNeedEmit(
-    const std::string& topic) {
+    const std::string& warning_kind, const std::string& topic) {
   std::ostringstream stream;
-  stream << config_version_ << ":" << topic;
+  stream << config_version_ << ":" << warning_kind << ":" << topic;
   const std::string key = stream.str();
   std::lock_guard<std::mutex> lock(mutex_);
   return warned_topics_.insert(key).second;

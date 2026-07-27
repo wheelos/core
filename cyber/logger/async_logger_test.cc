@@ -58,13 +58,15 @@ TEST(AsyncLoggerTest, SetLoggerToGlog) {
   google::SetLogDestination(google::ERROR, "");
   google::SetLogDestination(google::WARNING, "");
   google::SetLogDestination(google::FATAL, "");
-  AsyncLogger logger(google::base::GetLogger(google::INFO));
-  google::base::SetLogger(static_cast<google::LogSeverity>(FLAGS_minloglevel), &logger);
-  logger.Start();
+  auto* logger = new AsyncLogger(google::base::GetLogger(google::INFO));
+  google::base::SetLogger(static_cast<google::LogSeverity>(FLAGS_minloglevel),
+                          logger);
+  logger->Start();
   ALOG_MODULE("AsyncLoggerTest2", INFO) << "test set async logger to glog";
   ALOG_MODULE("AsyncLoggerTest2", WARN) << "test set async logger to glog";
   ALOG_MODULE("AsyncLoggerTest2", ERROR) << "test set async logger to glog";
-  logger.Stop();
+  logger->Stop();
+  logger = nullptr;
   google::ShutdownGoogleLogging();
 }
 

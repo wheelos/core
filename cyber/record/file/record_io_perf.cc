@@ -297,6 +297,6 @@ int main(int argc, char** argv) {
                                              message_count, payload_size_bytes,
                                              chunk_raw_size_bytes)
             << "\n";
-  apollo::cyber::common::DeleteFile(path);
+  apollo::cyber::common::Remove(path);
   return 0;
 }

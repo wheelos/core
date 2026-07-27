@@ -20,6 +20,11 @@
 #include <cstdint>
 #include <string>
 
+
+#ifdef BLOCK_SIZE
+#undef BLOCK_SIZE
+#endif
+
 namespace apollo {
 namespace cyber {
 namespace transport {

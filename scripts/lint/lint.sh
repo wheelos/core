@@ -19,17 +19,13 @@ function run_cpp_lint() {
   pushd "${APOLLO_ROOT_DIR}" >/dev/null
   local cpp_dirs="cyber"
   [[ "${STAGE}" == "dev" ]] && cpp_dirs="${cpp_dirs} modules"
-  for prey in $(find ${cpp_dirs} -name BUILD | xargs grep -l -E 'cc_library|cc_test|cc_binary|gpu_library' | xargs grep -L 'cpplint()'); do
-    warning "unattended BUILD file found: ${prey}. Add cpplint() automatically."
-    sed -i '1i\load("//tools:cpplint.bzl", "cpplint")\n' "${prey}"
-    sed -i -e '$a\\ncpplint()' "${prey}"
+  for prey in $(find ${cpp_dirs} -name BUILD | xargs grep -l -E 'cc_library|cc_test|cc_binary|gpu_library'); do
     [[ -x "$(command -v buildifier)" ]] && buildifier -lint=fix "${prey}"
   done
   popd >/dev/null
 
-  local targets="//cyber/..."
-  bazel test --config=cpplint "${targets}"
-  [[ "${STAGE}" == "dev" ]] && bazel test --config=cpplint "//modules/..."
+  bazel test --config=ci "//cyber/..."
+  [[ "${STAGE}" == "dev" ]] && bazel test --config=ci "//modules/..."
 }
 
 # Run shell lint

@@ -42,12 +42,17 @@ inline const std::string WorkRoot() {
   std::string work_root = GetEnv("CYBER_PATH");
   if (work_root.empty()) {
     const std::filesystem::path cwd = std::filesystem::current_path();
-    for (auto path = cwd; !path.empty(); path = path.parent_path()) {
+    for (auto path = cwd; !path.empty();) {
       const auto candidate = path / "cyber" / "conf" / "cyber.pb.conf";
       if (std::filesystem::exists(candidate)) {
         work_root = (path / "cyber").string();
         break;
       }
+      const auto parent = path.parent_path();
+      if (parent == path) {
+        break;
+      }
+      path = parent;
     }
     if (work_root.empty()) {
       work_root = "/apollo/cyber";

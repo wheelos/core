@@ -28,14 +28,15 @@ class ConflictWarningEmitter {
  public:
   explicit ConflictWarningEmitter(uint32_t config_version = 1);
 
-  void WarnSubscriptionConflict(const std::string& topic,
+  bool WarnSubscriptionConflict(const std::string& topic,
                                 const std::vector<std::string>& include_matches,
                                 const std::vector<std::string>& exclude_matches);
-  void WarnPolicyConflict(const std::string& topic, const std::string& selected,
+  bool WarnPolicyConflict(const std::string& topic, const std::string& selected,
                           const std::vector<std::string>& shadowed);
 
  private:
-  bool MarkWarningAndCheckNeedEmit(const std::string& topic);
+  bool MarkWarningAndCheckNeedEmit(const std::string& warning_kind,
+                                   const std::string& topic);
   static std::string Join(const std::vector<std::string>& values);
 
   uint32_t config_version_ = 1;

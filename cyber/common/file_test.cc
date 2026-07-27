@@ -138,14 +138,19 @@ TEST_F(FileTest, DirectoryModification) {
   EXPECT_TRUE(CreateDirectories(nested_dir.string()));
   EXPECT_TRUE(fs::is_directory(nested_dir));
 
-   const auto conflicting_file = GetTestPath("conflicting_file");
-   { std::ofstream ofs(conflicting_file); }
-   EXPECT_FALSE(CreateDirectory(conflicting_file.string()));
-   EXPECT_FALSE(CreateDirectories(conflicting_file.string()));
+  const auto conflicting_file = GetTestPath("conflicting_file");
+  {
+    std::ofstream ofs(conflicting_file);
+  }
+  EXPECT_FALSE(CreateDirectory(conflicting_file.string()));
+  EXPECT_FALSE(CreateDirectories(conflicting_file.string()));
 
   // Testing Remove
   EXPECT_FALSE(Remove(GetTestPath("a").string()));
   EXPECT_TRUE(fs::exists(GetTestPath("a")));
+
+  EXPECT_TRUE(Remove(conflicting_file.string()));
+  EXPECT_FALSE(fs::exists(conflicting_file));
 }
 
 TEST_F(FileTest, RemoveAll_Functionality) {
@@ -201,6 +206,12 @@ TEST_F(FileTest, RemoveAll_SafetyChecks) {
   // Verify protection against the parent directory
   EXPECT_FALSE(RemoveAll(".."));
   EXPECT_TRUE(fs::exists(".."));  // Verify the directory was not deleted
+
+  // Verify protection against an absolute ancestor path.
+  const auto parent_abs = fs::canonical("..");
+  EXPECT_FALSE(RemoveAll(parent_abs.string()));
+  EXPECT_TRUE(fs::exists(parent_abs));
+  EXPECT_TRUE(fs::exists(test_root_));
 
   // Switch back to the original directory
   fs::current_path(original_cwd);

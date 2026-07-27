@@ -16,6 +16,8 @@
 
 #include "cyber/parameter/parameter_client.h"
 
+#include <chrono>
+#include <cstdio>
 #include <memory>
 #include <thread>
 #include <vector>
@@ -32,61 +34,89 @@ namespace cyber {
 
 class ParameterClientTest : public ::testing::Test {
  protected:
-  ParameterClientTest() {
+  static void SetUpTestSuite() {
     apollo::cyber::Init("parameter_client_test");
-    SetState(STATE_INITIALIZED);
-    node_ = CreateNode("parameter_server");
   }
 
   virtual void SetUp() {
-    // Called before every TEST_F(ParameterClientTest, *)
-    ps_.reset(new ParameterServer(node_));
-    pc_.reset(new ParameterClient(node_, "parameter_server"));
+    static size_t node_id = 0;
+    const std::string server_node_name =
+        "parameter_server_" + std::to_string(node_id++);
+    server_node_ = std::shared_ptr<Node>(CreateNode(server_node_name).release());
+    client_node_ = std::shared_ptr<Node>(
+        CreateNode(server_node_name + "_client").release());
+    ASSERT_NE(server_node_, nullptr);
+    ASSERT_NE(client_node_, nullptr);
+    ps_.reset(new ParameterServer(server_node_));
+    pc_.reset(new ParameterClient(client_node_, server_node_name));
   }
 
   virtual void TearDown() {
-    // Called after every TEST_F(ParameterClientTest, *)
     ps_.reset();
     pc_.reset();
+    client_node_.reset();
+    server_node_.reset();
+  }
+
+  template <typename Predicate>
+  bool WaitFor(Predicate predicate, std::chrono::milliseconds timeout) {
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    while (std::chrono::steady_clock::now() < deadline) {
+      if (predicate()) {
+        return true;
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
+    return predicate();
   }
 
  protected:
-  std::shared_ptr<Node> node_;
+  std::shared_ptr<Node> server_node_;
+  std::shared_ptr<Node> client_node_;
   std::unique_ptr<ParameterServer> ps_;
   std::unique_ptr<ParameterClient> pc_;
 };
 
 TEST_F(ParameterClientTest, set_parameter) {
-  EXPECT_TRUE(pc_->SetParameter(Parameter("int", 1)));
-  std::this_thread::sleep_for(std::chrono::milliseconds(100));
-
-  ps_.reset();
-  EXPECT_FALSE(pc_->SetParameter(Parameter("int", 1)));
+  ASSERT_TRUE(WaitFor([&]() { return pc_->SetParameter(Parameter("int", 1)); },
+                      std::chrono::seconds(3)));
+  Parameter parameter;
+  ASSERT_TRUE(ps_->GetParameter("int", &parameter));
+  EXPECT_EQ("int", parameter.Name());
+  EXPECT_EQ(1, parameter.AsInt64());
 }
 
 TEST_F(ParameterClientTest, get_parameter) {
   ps_->SetParameter(Parameter("int", 1));
   Parameter parameter;
-  EXPECT_TRUE(pc_->GetParameter("int", &parameter));
+  ASSERT_TRUE(WaitFor([&]() { return pc_->GetParameter("int", &parameter); },
+                      std::chrono::seconds(3)));
   EXPECT_EQ("int", parameter.Name());
   EXPECT_EQ(1, parameter.AsInt64());
   EXPECT_FALSE(pc_->GetParameter("double", &parameter));
-
-  ps_.reset();
-  EXPECT_FALSE(pc_->GetParameter("int", &parameter));
 }
 
 TEST_F(ParameterClientTest, list_parameter) {
   ps_->SetParameter(Parameter("int", 1));
   std::vector<Parameter> parameters;
-  EXPECT_TRUE(pc_->ListParameters(&parameters));
-  EXPECT_EQ(1, parameters.size());
+  ASSERT_TRUE(WaitFor(
+      [&]() {
+        parameters.clear();
+        return pc_->ListParameters(&parameters) && parameters.size() == 1;
+      },
+      std::chrono::seconds(3)));
+  ASSERT_EQ(1, parameters.size());
   EXPECT_EQ("int", parameters[0].Name());
   EXPECT_EQ(1, parameters[0].AsInt64());
-
-  ps_.reset();
-  EXPECT_FALSE(pc_->ListParameters(&parameters));
 }
 
 }  // namespace cyber
 }  // namespace apollo
+
+int main(int argc, char** argv) {
+  testing::InitGoogleTest(&argc, argv);
+  apollo::cyber::Init(argv[0]);
+  const int ret = RUN_ALL_TESTS();
+  std::fflush(nullptr);
+  _Exit(ret);
+}

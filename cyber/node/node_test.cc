@@ -25,6 +25,8 @@
 #include "cyber/node/reader.h"
 #include "cyber/node/writer.h"
 
+#include <cstdio>
+
 namespace apollo {
 namespace cyber {
 
@@ -32,6 +34,7 @@ using apollo::cyber::proto::Chatter;
 
 TEST(NodeTest, cases) {
   auto node = CreateNode("node_test");
+  ASSERT_NE(node, nullptr);
   EXPECT_EQ(node->Name(), "node_test");
 
   proto::RoleAttributes attr;
@@ -41,9 +44,11 @@ TEST(NodeTest, cases) {
   attr.mutable_qos_profile()->set_depth(10);
 
   auto reader = node->CreateReader<Chatter>(attr);
+  ASSERT_NE(reader, nullptr);
   EXPECT_TRUE(node->GetReader<Chatter>(attr.channel_name()));
 
   auto writer = node->CreateWriter<Chatter>(attr);
+  ASSERT_NE(writer, nullptr);
   auto server = node->CreateService<Chatter, Chatter>(
       "node_test_server", [](const std::shared_ptr<Chatter>& request,
                              std::shared_ptr<Chatter>& response) {
@@ -53,11 +58,14 @@ TEST(NodeTest, cases) {
         response->set_seq(id);
         response->set_timestamp(0);
       });
+  ASSERT_NE(server, nullptr);
   auto client = node->CreateClient<Chatter, Chatter>("node_test_server");
+  ASSERT_NE(client, nullptr);
   auto chatter_msg = std::make_shared<Chatter>();
   chatter_msg->set_seq(0);
   chatter_msg->set_timestamp(0);
   auto res = client->SendRequest(chatter_msg);
+  ASSERT_NE(res, nullptr);
   EXPECT_EQ(res->seq(), 1);
 
   node->Observe();
@@ -70,5 +78,7 @@ TEST(NodeTest, cases) {
 int main(int argc, char** argv) {
   testing::InitGoogleTest(&argc, argv);
   apollo::cyber::Init(argv[0]);
-  return RUN_ALL_TESTS();
+  const int ret = RUN_ALL_TESTS();
+  std::fflush(nullptr);
+  _Exit(ret);
 }

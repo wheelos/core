@@ -102,7 +102,7 @@
 - `config_file_path` and `flag_file_path` inside component configs are resolved relative to `common::WorkRoot()` when they are not absolute paths. Keep new config references compatible with that resolution behavior.
 - Node/topology names are expected to be unique. `Node` warns and rejects duplicate readers on the same channel within a node, and the API comments explicitly call out duplicate topo names as invalid.
 - Keep tests and libraries in the nearest Bazel package. The repository convention is to colocate `cc_library` / `cc_binary` / `cc_test` targets with the code in the local `BUILD` file rather than centralizing tests elsewhere.
-- BUILD files that define `cc_library`, `cc_binary`, `cc_test`, or `gpu_library` targets are expected to include `cpplint()`. `scripts/lint/lint.sh` will auto-insert that macro into unattended BUILD files before running the Bazel cpplint configuration.
+- BUILD files should use the standard Bazel rule sets directly; there is no repo-local `cpplint()` macro anymore.
 - The example DAGs still use Apollo-style absolute library paths under `/apollo/bazel-bin/...`. If you update or add DAG examples in this fork, verify the shared-library path matches the actual Bazel output layout for this repository instead of assuming those upstream paths are correct.
 
 ## Middleware roadmap

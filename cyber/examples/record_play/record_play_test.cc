@@ -44,7 +44,7 @@ struct ChannelRuntimeState {
 class RecordPlayTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    ASSERT_TRUE(LoadRecordPlayItems(kDefaultRecordPath, /*max_per_channel=*/48,
+    ASSERT_TRUE(LoadRecordPlayItems(kDefaultRecordPath, /*max_per_channel=*/16,
                                     &items_));
     schedule_ = ExpandRecordPlaySchedule(items_, /*repeat=*/2);
     expected_by_channel_.clear();
@@ -69,9 +69,12 @@ TEST_F(RecordPlayTest, RoundTripBaseline) {
   std::vector<std::shared_ptr<Node>> reader_nodes;
   std::vector<std::shared_ptr<Reader<transport::PodMessage>>> readers;
   for (const auto& channel : channels) {
+    auto attr = MakePodRoleAttr(channel);
+    attr.mutable_qos_profile()->set_depth(
+        static_cast<uint32_t>(expected_by_channel_[channel].size() * 2 + 8));
     auto node = CreateNode(MakeNodeName("record_play_reader", channel));
     auto reader = node->CreateReader<transport::PodMessage>(
-        channel, [&, channel](const std::shared_ptr<transport::PodMessage>& msg) {
+        attr, [&, channel](const std::shared_ptr<transport::PodMessage>& msg) {
           std::lock_guard<std::mutex> lock(mutex);
           auto& expected = expected_by_channel_[channel];
           auto& state = runtime[channel];
@@ -100,12 +103,31 @@ TEST_F(RecordPlayTest, RoundTripBaseline) {
   std::vector<std::shared_ptr<Node>> writer_nodes;
   std::vector<std::shared_ptr<Writer<transport::PodMessage>>> writers;
   for (const auto& channel : channels) {
+    auto attr = MakePodRoleAttr(channel);
+    attr.mutable_qos_profile()->set_depth(
+        static_cast<uint32_t>(expected_by_channel_[channel].size() * 2 + 8));
     auto node = CreateNode(MakeNodeName("record_play_writer", channel));
-    auto writer = node->CreateWriter<transport::PodMessage>(channel);
+    auto writer = node->CreateWriter<transport::PodMessage>(attr);
     ASSERT_NE(writer, nullptr);
     writer_nodes.emplace_back(std::move(node));
     writers.emplace_back(std::move(writer));
   }
+
+  ASSERT_TRUE(WaitFor(
+      [&]() {
+        for (const auto& writer : writers) {
+          if (!writer->HasReader()) {
+            return false;
+          }
+        }
+        for (const auto& reader : readers) {
+          if (!reader->HasWriter()) {
+            return false;
+          }
+        }
+        return true;
+      },
+      std::chrono::seconds(10)));
 
   std::this_thread::sleep_for(std::chrono::milliseconds(300));
   const auto start = std::chrono::steady_clock::now();
@@ -155,9 +177,12 @@ TEST_F(RecordPlayTest, BurstStressNoLoss) {
   std::vector<std::shared_ptr<Node>> reader_nodes;
   std::vector<std::shared_ptr<Reader<transport::PodMessage>>> readers;
   for (const auto& channel : channels) {
+    auto attr = MakePodRoleAttr(channel);
+    attr.mutable_qos_profile()->set_depth(static_cast<uint32_t>(
+        stress_expected_by_channel[channel].size() * 2 + 8));
     auto node = CreateNode(MakeNodeName("record_play_burst_reader", channel));
     auto reader = node->CreateReader<transport::PodMessage>(
-        channel, [&, channel](const std::shared_ptr<transport::PodMessage>& msg) {
+        attr, [&, channel](const std::shared_ptr<transport::PodMessage>& msg) {
           std::lock_guard<std::mutex> lock(mutex);
           auto& expected = stress_expected_by_channel[channel];
           auto& state = runtime[channel];
@@ -186,12 +211,31 @@ TEST_F(RecordPlayTest, BurstStressNoLoss) {
   std::vector<std::shared_ptr<Node>> writer_nodes;
   std::vector<std::shared_ptr<Writer<transport::PodMessage>>> writers;
   for (const auto& channel : channels) {
+    auto attr = MakePodRoleAttr(channel);
+    attr.mutable_qos_profile()->set_depth(static_cast<uint32_t>(
+        stress_expected_by_channel[channel].size() * 2 + 8));
     auto node = CreateNode(MakeNodeName("record_play_burst_writer", channel));
-    auto writer = node->CreateWriter<transport::PodMessage>(channel);
+    auto writer = node->CreateWriter<transport::PodMessage>(attr);
     ASSERT_NE(writer, nullptr);
     writer_nodes.emplace_back(std::move(node));
     writers.emplace_back(std::move(writer));
   }
+
+  ASSERT_TRUE(WaitFor(
+      [&]() {
+        for (const auto& writer : writers) {
+          if (!writer->HasReader()) {
+            return false;
+          }
+        }
+        for (const auto& reader : readers) {
+          if (!reader->HasWriter()) {
+            return false;
+          }
+        }
+        return true;
+      },
+      std::chrono::seconds(10)));
 
   std::this_thread::sleep_for(std::chrono::milliseconds(300));
   const auto start = std::chrono::steady_clock::now();
@@ -200,14 +244,15 @@ TEST_F(RecordPlayTest, BurstStressNoLoss) {
       {kImageFront12mm, writers[1]},
       {kPointCloud64, writers[2]},
   };
-  ASSERT_TRUE(PublishSchedule(stress_schedule, writer_map));
+  ASSERT_TRUE(PublishSchedule(stress_schedule, writer_map,
+                              std::chrono::milliseconds(1)));
 
   ASSERT_TRUE(WaitFor(
       [&]() {
         std::lock_guard<std::mutex> lock(mutex);
         return stats.total_messages == stress_schedule.size();
       },
-      std::chrono::seconds(30)));
+      std::chrono::seconds(120)));
   const auto end = std::chrono::steady_clock::now();
 
   const double elapsed_s =

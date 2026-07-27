@@ -1,4 +1,4 @@
-load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -25,5 +25,27 @@ cc_library(
     deps = [
         ":base",
         "//cyber/class_loader:class_loader_manager",
+    ],
+)
+
+cc_binary(
+    name = "plugin1_loader.so",
+    testonly = True,
+    linkshared = True,
+    linkstatic = False,
+    visibility = ["//visibility:public"],
+    deps = [
+        ":plugin1",
+    ],
+)
+
+cc_binary(
+    name = "plugin2_loader.so",
+    testonly = True,
+    linkshared = True,
+    linkstatic = False,
+    visibility = ["//visibility:public"],
+    deps = [
+        ":plugin2",
     ],
 )

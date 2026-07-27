@@ -15,6 +15,8 @@
  *****************************************************************************/
 #include "cyber/class_loader/class_loader.h"
 
+#include <cstdlib>
+#include <filesystem>
 #include <iostream>
 #include <string>
 #include <thread>
@@ -26,10 +28,25 @@
 #include "cyber/class_loader/test/base.h"
 #include "cyber/cyber.h"
 
-const char LIBRARY_1[] =
-    "/apollo/bazel-bin/cyber/class_loader/test/libplugin1.so";
-const char LIBRARY_2[] =
-    "/apollo/bazel-bin/cyber/class_loader/test/libplugin2.so";
+std::string ResolveTestDataPath(const std::string& relative_path) {
+  const auto* test_srcdir = std::getenv("TEST_SRCDIR");
+  const auto* test_workspace = std::getenv("TEST_WORKSPACE");
+  if (test_srcdir != nullptr) {
+    std::filesystem::path resolved(test_srcdir);
+    resolved /= (test_workspace != nullptr) ? test_workspace : "_main";
+    resolved /= relative_path;
+    if (std::filesystem::exists(resolved)) {
+      return resolved.string();
+    }
+  }
+  const auto fallback = std::filesystem::current_path() / relative_path;
+  return fallback.string();
+}
+
+const std::string LIBRARY_1 =
+    ResolveTestDataPath("cyber/class_loader/test/plugin1_loader.so");
+const std::string LIBRARY_2 =
+    ResolveTestDataPath("cyber/class_loader/test/plugin2_loader.so");
 using apollo::cyber::class_loader::ClassLoader;
 using apollo::cyber::class_loader::ClassLoaderManager;
 using apollo::cyber::class_loader::utility::IsLibraryLoadedByAnybody;
@@ -38,7 +55,7 @@ TEST(ClassLoaderTest, createClassObj) {
   ClassLoader loader1(LIBRARY_1);
   EXPECT_EQ(LIBRARY_1, loader1.GetLibraryPath());
   auto rect_obj = loader1.CreateClassObj<Base>("Rect");
-  EXPECT_NE(nullptr, rect_obj);
+  ASSERT_NE(nullptr, rect_obj);
   rect_obj->DoSomething();
   EXPECT_EQ(nullptr, loader1.CreateClassObj<Base>("Xeee"));
 
@@ -89,13 +106,19 @@ TEST(ClassLoaderManagerTest, testClassLoaderManager) {
   ASSERT_TRUE(loader_mgr.LoadLibrary(LIBRARY_1));
   ASSERT_TRUE(loader_mgr.LoadLibrary(LIBRARY_2));
   for (int i = 0; i < 2; ++i) {
-    loader_mgr.CreateClassObj<Base>("Rect")->DoSomething();
-    loader_mgr.CreateClassObj<Base>("Circle")->DoSomething();
-    loader_mgr.CreateClassObj<Base>("Apple")->DoSomething();
+    auto rect = loader_mgr.CreateClassObj<Base>("Rect");
+    auto circle = loader_mgr.CreateClassObj<Base>("Circle");
+    auto apple = loader_mgr.CreateClassObj<Base>("Apple");
+    ASSERT_NE(rect, nullptr);
+    ASSERT_NE(circle, nullptr);
+    ASSERT_NE(apple, nullptr);
+    rect->DoSomething();
+    circle->DoSomething();
+    apple->DoSomething();
   }
 
   auto pear_obj = loader_mgr.CreateClassObj<Base>("Pear", LIBRARY_2);
-  EXPECT_NE(nullptr, pear_obj);
+  ASSERT_NE(nullptr, pear_obj);
   pear_obj->DoSomething();
 
   auto null_obj = loader_mgr.CreateClassObj<Base>("Pear", LIBRARY_1);
@@ -121,7 +144,10 @@ TEST(ClassLoaderManagerTest, testClassLoaderManager) {
 void CreateObj(ClassLoaderManager* loader) {
   std::vector<std::string> classes = loader->GetValidClassNames<Base>();
   for (unsigned int i = 0; i < classes.size(); i++) {
-    loader->CreateClassObj<Base>(classes[i])->DoSomething();
+    auto obj = loader->CreateClassObj<Base>(classes[i]);
+    if (obj != nullptr) {
+      obj->DoSomething();
+    }
   }
 }
 

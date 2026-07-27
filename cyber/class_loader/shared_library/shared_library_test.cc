@@ -16,14 +16,30 @@
 
 #include "cyber/class_loader/shared_library/shared_library.h"
 
+#include <cstdlib>
 #include <cmath>
+#include <filesystem>
 
 #include "gtest/gtest.h"
 
 namespace {
 
-const std::string& SAMPLE_LIB =
-    "/apollo/bazel-bin/cyber/class_loader/shared_library/libsample.so";
+std::string ResolveTestDataPath(const std::string& relative_path) {
+  const auto* test_srcdir = std::getenv("TEST_SRCDIR");
+  const auto* test_workspace = std::getenv("TEST_WORKSPACE");
+  if (test_srcdir != nullptr) {
+    std::filesystem::path resolved(test_srcdir);
+    resolved /= (test_workspace != nullptr) ? test_workspace : "_main";
+    resolved /= relative_path;
+    if (std::filesystem::exists(resolved)) {
+      return resolved.string();
+    }
+  }
+  return (std::filesystem::current_path() / relative_path).string();
+}
+
+const std::string SAMPLE_LIB =
+    ResolveTestDataPath("cyber/class_loader/shared_library/libsample.so");
 constexpr double epsilon = 1.0e-8;
 
 }  // namespace
@@ -37,14 +53,14 @@ TEST(SharedLibraryTest, symbol_test_1) {
   EXPECT_TRUE(shared_lib->GetPath().empty());
   EXPECT_FALSE(shared_lib->IsLoaded());
 
-  EXPECT_NO_THROW(shared_lib->Load(SAMPLE_LIB));
-  EXPECT_TRUE(shared_lib->IsLoaded());
+  ASSERT_NO_THROW(shared_lib->Load(SAMPLE_LIB));
+  ASSERT_TRUE(shared_lib->IsLoaded());
 
   EXPECT_THROW(shared_lib->Load(SAMPLE_LIB), LibraryAlreadyLoadedException);
 
-  EXPECT_TRUE(shared_lib->HasSymbol("sample_add"));
+  ASSERT_TRUE(shared_lib->HasSymbol("sample_add"));
   auto symbol = shared_lib->GetSymbol("sample_add");
-  EXPECT_TRUE(symbol != nullptr);
+  ASSERT_NE(symbol, nullptr);
 
   typedef int (*BinaryFunc)(int, int);
   auto pf = reinterpret_cast<BinaryFunc>(symbol);
@@ -54,11 +70,11 @@ TEST(SharedLibraryTest, symbol_test_1) {
 
 TEST(SharedLibraryTest, symbol_test_2) {
   auto shared_lib = std::make_shared<SharedLibrary>(SAMPLE_LIB);
-  EXPECT_TRUE(shared_lib->IsLoaded());
+  ASSERT_TRUE(shared_lib->IsLoaded());
 
   typedef double (*UnaryFunc)(double);
   auto symbol = shared_lib->GetSymbol("sample_sin");
-  EXPECT_TRUE(symbol != nullptr);
+  ASSERT_NE(symbol, nullptr);
 
   auto sample_sin = reinterpret_cast<UnaryFunc>(symbol);
   EXPECT_NEAR(sample_sin(M_PI / 2), 1.0, epsilon);
