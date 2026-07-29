@@ -6,7 +6,6 @@ build --keep_going
 
 build --registry=https://bcr.wheelos.cn/
 build --registry=https://bcr.bazel.build
-build --registry=https://raw.githubusercontent.com/wheelos/bazel-central-registry/fastdds-2.14.x
 
 # Enable Bzlmod for every Bazel command
 common --enable_bzlmod
@@ -21,3 +20,5 @@ build:release --compilation_mode=opt --strip=always --copt=-O3
 build:debug --compilation_mode=dbg --copt=-g --copt=-O0
 build:ci --config=release
 test:ci --test_output=errors
+
+try-import %workspace%/.bazelrc.user
