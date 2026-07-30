@@ -8,4 +8,8 @@ package(
 py_binary(
     name = "cyber_launch",
     srcs = ["cyber_launch.py"],
+    data = [
+        "//cyber:runtime_resources",
+        "//cyber/mainboard:mainboard",
+    ],
 )

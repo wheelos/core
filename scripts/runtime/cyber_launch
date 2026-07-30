@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+WHEELOS_CORE_HOME="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+
+export PATH="${WHEELOS_CORE_HOME}/bin${PATH:+:${PATH}}"
+export LD_LIBRARY_PATH="${WHEELOS_CORE_HOME}/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+export CYBER_PATH="${CYBER_PATH:-${WHEELOS_CORE_HOME}/resources/cyber}"
+
+exec python3 "${WHEELOS_CORE_HOME}/libexec/cyber_launch.py" "$@"

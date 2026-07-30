@@ -20,6 +20,7 @@ import atexit
 import logging
 import os
 import os.path
+import shutil
 import signal
 import subprocess
 import sys
@@ -30,13 +31,33 @@ import traceback
 import xml.etree.ElementTree as ET
 
 
-g_binary_name = 'mainboard'
 g_pwd = os.getcwd()
 g_script_name = os.path.basename(sys.argv[0]).split(".")[0]
 g_process_pid = os.getpid()
 g_process_name = g_script_name + "_" + str(g_process_pid)
 
 cyber_path = os.getenv('CYBER_PATH')
+
+
+def resolve_mainboard_binary():
+    """Resolve mainboard from an installed runtime or this target's runfiles."""
+    installed_mainboard = shutil.which('mainboard')
+    if installed_mainboard:
+        return installed_mainboard
+
+    runfiles_dir = os.getenv('RUNFILES_DIR', sys.argv[0] + '.runfiles')
+    if not os.path.isdir(runfiles_dir):
+        return 'mainboard'
+
+    for workspace in os.listdir(runfiles_dir):
+        candidate = os.path.join(
+            runfiles_dir, workspace, 'cyber', 'mainboard', 'mainboard')
+        if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+            return candidate
+    return 'mainboard'
+
+
+g_binary_name = resolve_mainboard_binary()
 
 """
 colorful logging
@@ -313,11 +334,16 @@ def start(launch_file=''):
     """
     Start all modules in xml config
     """
+    launch_file = launch_file or 'cyber.launch'
     pmon = ProcessMonitor()
     # Find launch file
-    if launch_file[0] == '/':
+    if os.path.isabs(launch_file):
         launch_file = launch_file
     elif launch_file == os.path.basename(launch_file):
+        if not cyber_path:
+            logger.error(
+                'CYBER_PATH is required when a launch file is not explicitly specified.')
+            sys.exit(1)
         launch_file = os.path.join(cyber_path, 'launch', launch_file)
     else:
         if os.path.exists(os.path.join(g_pwd, launch_file)):
@@ -498,11 +524,6 @@ def main():
     """
     Main function
     """
-    if cyber_path is None:
-        logger.error(
-            'Error: environment variable CYBER_PATH not found, set environment first.')
-        sys.exit(1)
-    os.chdir(cyber_path)
     parser = argparse.ArgumentParser(description='cyber launcher')
     subparsers = parser.add_subparsers(help='sub-command help')
 
@@ -521,6 +542,10 @@ def main():
     #                            default is cyber.launch')
 
     params = parser.parse_args(sys.argv[1:])
+
+    if len(sys.argv) == 1:
+        parser.print_help()
+        return
 
     command = sys.argv[1]
     if command == 'start':

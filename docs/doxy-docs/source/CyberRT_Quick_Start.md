@@ -1,5 +1,10 @@
 # How to Create and Run a new Component in Cyber RT
 
+> **External wheelos_core users:** This page contains legacy in-tree Apollo
+> examples and checkout-relative paths. For supported installation and
+> consumption through Bzlmod, the runtime bundle, or the Python wheel, start
+> with [Installing and using wheelos_core](Wheelos_Core_Installation_and_Usage.md).
+
 Apollo Cyber RT framework is built upon the concept of components. As the
 building block of Cyber RT, each component is a specific algorithm module which
 processes a set of inputs and generates its set of outputs.

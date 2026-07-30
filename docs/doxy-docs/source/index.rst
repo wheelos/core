@@ -37,6 +37,7 @@ Key benefits of using Apollo Cyber RT:
    :maxdepth: 1
 
    CyberRT_Quick_Start.md
+   Wheelos_Core_Installation_and_Usage.md
    CyberRT_Terms
    CyberRT_FAQs
 
@@ -61,4 +62,3 @@ Key benefits of using Apollo Cyber RT:
 
    api/cppapi_index
    api/pythonapi_index
-

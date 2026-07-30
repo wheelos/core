@@ -77,16 +77,23 @@ echo "Using Python interpreter: $PYTHON_BIN"
 echo "Fetching tags from origin..."
 git fetch --tags --prune origin || true
 
-# Determine version from env or tag
+# Keep Python artifacts on the same release line as the Bzlmod module and
+# native runtime. Untagged commits are deliberately marked as prereleases.
+CORE_VERSION="$(sed -nE 's/^[[:space:]]*version = "([^"]+)".*/\1/p' MODULE.bazel | head -n 1)"
+if [ -z "$CORE_VERSION" ]; then
+  echo "Unable to determine wheelos_core version from MODULE.bazel" >&2
+  exit 1
+fi
+
 if [ -n "${PYCYBER_VERSION:-}" ]; then
   VERSION="$PYCYBER_VERSION"
+  TAG="PYCYBER_VERSION"
+elif git describe --exact-match --tags --match "wheelos_core-v${CORE_VERSION}" >/dev/null 2>&1; then
+  VERSION="$CORE_VERSION"
+  TAG="wheelos_core-v${CORE_VERSION}"
 else
-  TAG=$(git describe --tags --match 'pycyber-v*' --abbrev=0 2>/dev/null || true)
-  if [ -z "$TAG" ]; then
-    VERSION="0.1.0.dev$(git rev-list --count HEAD)+g$(git rev-parse --short HEAD)"
-  else
-    VERSION=${TAG#pycyber-v}
-  fi
+  TAG="N/A"
+  VERSION="${CORE_VERSION}.dev$(git rev-list --count HEAD)+g$(git rev-parse --short HEAD)"
 fi
 echo "Detected version: $VERSION (tag: ${TAG:-N/A})"
 export SETUPTOOLS_SCM_PRETEND_VERSION="$VERSION"
@@ -108,8 +115,12 @@ BUILD_DIR=packaging/pycyber/build
 DIST_DIR=packaging/pycyber/dist
 WHEELHOUSE_DIR="$OUTDIR"
 
-# Clean previous outputs
-rm -rf "$STAGING_DIR" "$BUILD_DIR" "$DIST_DIR" "$WHEELHOUSE_DIR"
+# Clean previous outputs. --skip-build intentionally reuses an existing staged
+# package, so it must not remove STAGING_DIR.
+if [ "$SKIP_BUILD" = false ]; then
+  rm -rf "$STAGING_DIR"
+fi
+rm -rf "$BUILD_DIR" "$DIST_DIR" "$WHEELHOUSE_DIR"
 mkdir -p "$DIST_DIR" "$WHEELHOUSE_DIR"
 
 # Stage package (generates staging/src/pycyber)

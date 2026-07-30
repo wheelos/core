@@ -33,6 +33,6 @@ where = ["staging/src"]
 "pycyber.proto" = ["*.proto"]
 
 [tool.setuptools_scm]
-tag_regex = "^pycyber-v(?P<version>.+)$"
+tag_regex = "^wheelos_core-v(?P<version>.+)$"
 write_to = "staging/src/pycyber/_version.py"
-fallback_version = "0.1.0.dev0"
+fallback_version = "1.0.0.dev0"

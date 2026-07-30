@@ -95,6 +95,39 @@ cc_library(
 )
 
 filegroup(
+    name = "runtime_tools",
+    srcs = [
+        "//cyber/mainboard:mainboard",
+        "//cyber/tools/cyber_channel:cyber_channel",
+        "//cyber/tools/cyber_launch:cyber_launch",
+        "//cyber/tools/cyber_monitor:cyber_monitor",
+        "//cyber/tools/cyber_node:cyber_node",
+        "//cyber/tools/cyber_recorder:cyber_recorder",
+        "//cyber/tools/cyber_service:cyber_service",
+    ],
+)
+
+filegroup(
+    name = "runtime_native_tools",
+    srcs = [
+        "//cyber/mainboard:mainboard",
+        "//cyber/tools/cyber_monitor:cyber_monitor",
+        "//cyber/tools/cyber_recorder:cyber_recorder",
+    ],
+)
+
+filegroup(
+    name = "runtime_resources",
+    srcs = glob(
+        [
+            "conf/**",
+            "tools/cyber_tools_auto_complete.bash",
+        ],
+        allow_empty = True,
+    ),
+)
+
+filegroup(
     name = "cyber_conf",
     srcs = glob([
         "conf/*.conf",
@@ -108,5 +141,5 @@ filegroup(
         "cyber.h",
         "init.h",
         "state.h",
-    ]
+    ],
 )

@@ -3,6 +3,10 @@ Cyber RT API tutorial
 
 This document provides an extensive technical deep dive into how to create, manipulate and use Cyber RT's API.
 
+> **External wheelos_core users:** This is an in-tree API tutorial. Use
+> [Installing and using wheelos_core](Wheelos_Core_Installation_and_Usage.md)
+> for the supported external Bzlmod dependency and runtime deployment model.
+
 ## Table of Contents
 
 - [Talker-Listener](#Talker-Listener)

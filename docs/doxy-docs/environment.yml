@@ -6,3 +6,5 @@ channels:
 dependencies:
   - breathe
   - recommonmark
+  - sphinx
+  - sphinx_rtd_theme

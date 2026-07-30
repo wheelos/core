@@ -38,5 +38,8 @@ bash scripts/release/build_and_package_pycyber.sh
 
 Notes:
 
-- If `PYCYBER_VERSION` is unset and no `pycyber-v*` tag is present, the script falls back to a deterministic dev version derived from Git history.
+- A release tag must be `wheelos_core-v<module-version>` (for example,
+  `wheelos_core-v1.0.0`). If `PYCYBER_VERSION` is unset and that tag is not
+  checked out, the script builds a deterministic prerelease derived from the
+  `MODULE.bazel` version and Git history.
 - The wheel stage includes `pycyber.proto.record_pb2`, so record introspection examples remain usable after installation.

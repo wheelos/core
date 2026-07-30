@@ -52,6 +52,50 @@ bazel test --color=no --curses=no \
 
 3. Check the log in `data/log`
 
+## Consuming wheelos_core from Bazel
+
+Use the published module name in reusable BUILD files:
+
+```starlark
+bazel_dep(name = "wheelos_core", version = "1.0.0")
+```
+
+```starlark
+cc_binary(
+    name = "consumer",
+    srcs = ["consumer.cc"],
+    deps = ["@wheelos_core//cyber:cyber"],
+)
+```
+
+wheelos_core requires C++17. Downstream workspaces must configure a C++17
+toolchain (for example, `build --cxxopt=-std=c++17` and
+`build --host_cxxopt=-std=c++17` in `.bazelrc`).
+
+Use `@wheelos_core//cyber:runtime_tools` to build the supported runtime
+executables, or `bazel run @wheelos_core//cyber/tools/cyber_launch:cyber_launch`
+to run a tool through Bazel runfiles. See
+`data/context/wheelos-core-sdk-contract.md` for the complete API and release
+contract.
+
+The Debian artifact is a runtime bundle, not an installed C++ SDK; use the
+Bazel source-SDK interface above for C++ development.
+
+## Runtime bundle
+
+`//:wheelos_core` produces a self-contained native runtime bundle. After
+installing its Debian artifact, initialize an interactive shell with:
+
+```bash
+source /opt/wheelos_core/setup.bash
+cyber_launch --help
+```
+
+The bundle contains `mainboard`, `cyber_recorder`, `cyber_monitor`,
+`cyber_launch`, runtime libraries, and Cyber configuration resources. Python
+applications and Python command-line tools are distributed through the matching
+`pycyber` wheel, not through `PYTHONPATH` pointing at Bazel output directories.
+
 ## Build the pycyber wheel
 
 Recommended: use the included one-step packaging script which stages, builds, repairs and validates the wheel. Always run packaging inside an isolated Python environment (venv) or a clean container to avoid dependency conflicts.
@@ -75,7 +119,9 @@ pip install build auditwheel twine setuptools_scm
 sudo apt-get update && sudo apt-get install -y patchelf
 ```
 
-2. Run the one-step packaging script. The script will use PYCYBER_VERSION if set, otherwise it reads the most recent tag matching `pycyber-v*`:
+2. Run the one-step packaging script. The script uses `PYCYBER_VERSION` if
+   set; otherwise an exact `wheelos_core-v<module-version>` tag produces the
+   release version and other commits produce a deterministic prerelease:
 
 ```bash
 # Preferred: use tag-derived version (make and push a tag first)
@@ -149,11 +195,11 @@ TWINE_USERNAME=__token__ TWINE_PASSWORD=$PYPI_TOKEN \
 
 Versioning
 
-- `pyproject.toml` is configured to use `setuptools_scm` with the tag pattern `^pycyber-v(?P<version>.+)$`.
+- `pyproject.toml` is configured to use `setuptools_scm` with the tag pattern `^wheelos_core-v(?P<version>.+)$`.
 - Preferred release flow: create an annotated tag on the release commit and push it:
 
 ```bash
-git tag -a pycyber-v1.2.3 -m "Release 1.2.3"
+git tag -a wheelos_core-v1.0.0 -m "Release 1.0.0"
 git push origin --tags
 ```
 
@@ -175,4 +221,4 @@ Security and best practices
 CI
 
 - `.github/workflows/c-cpp.yml` runs the Ubuntu 22.04 Bzlmod baseline entrypoint.
-- `.github/workflows/release-pycyber.yml` is triggered by tags `pycyber-v*`. It checks out the full history (`fetch-depth: 0`) so `setuptools_scm` can compute versions correctly, builds release artifacts on `x86_64` and `aarch64`, then verifies wheel install/import on CPython 3.11 before publish.
+- `.github/workflows/release-pycyber.yml` is triggered by tags `wheelos_core-v*`. It checks out the full history (`fetch-depth: 0`) so `setuptools_scm` can compute versions correctly, builds release artifacts on `x86_64` and `aarch64`, then verifies wheel install/import on CPython 3.11 before publish.

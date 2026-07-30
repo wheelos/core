@@ -23,6 +23,7 @@ cd "$REPO_ROOT"
 
 LOCKFILE_TARGETS=(
   //cyber
+  //cyber:runtime_tools
   //:wheelos_core
   //cyber/message/...
   //cyber/python/internal:_cyber_wrapper.so

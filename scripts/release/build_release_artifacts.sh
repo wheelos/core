@@ -39,6 +39,7 @@ mkdir -p "$OUTDIR/core" "$OUTDIR/pycyber"
 
 if [ "$SKIP_CORE_PACKAGE" = false ]; then
   bazel build --config=ci --distdir="$DISTDIR" //:wheelos_core
+  bash scripts/release/validate_runtime_bundle.sh
   mapfile -t CORE_OUTPUTS < <(
     bazel cquery //:wheelos_core \
       --output=starlark \
