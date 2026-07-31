@@ -19,10 +19,12 @@
 #include <memory>
 #include <chrono>
 #include <mutex>
+#include <sys/wait.h>
 #include <typeinfo>
 #include <filesystem>
 #include <cstdlib>
 #include <thread>
+#include <unistd.h>
 #include <vector>
 
 #include "gtest/gtest.h"
@@ -184,6 +186,104 @@ TEST(TransportTest, iceoryx_pod_end_to_end) {
 
   transmitter->Disable(receiver->attributes());
   receiver->Disable();
+}
+
+TEST(TransportTest, hybrid_pod_interprocess_end_to_end) {
+  const std::string channel_name = "hybrid_pod_interprocess_end_to_end";
+  const int parent_pid = getpid();
+
+  RoleAttributes receiver_attr;
+  receiver_attr.set_host_ip(common::GlobalData::Instance()->HostIp());
+  receiver_attr.set_process_id(parent_pid);
+  receiver_attr.set_channel_name(channel_name);
+  receiver_attr.set_channel_id(common::Hash(channel_name));
+  receiver_attr.mutable_qos_profile()->set_depth(2);
+
+  std::mutex mutex;
+  std::vector<PodMessage> messages;
+  auto receiver = Transport::Instance()->CreateReceiver<PodMessage>(
+      receiver_attr,
+      [&](const std::shared_ptr<PodMessage>& msg, const MessageInfo&,
+          const RoleAttributes&) {
+        std::lock_guard<std::mutex> lock(mutex);
+        messages.push_back(*msg);
+      },
+      OptionalMode::HYBRID);
+  ASSERT_NE(receiver, nullptr);
+  receiver->Enable();
+
+  const pid_t child_pid = fork();
+  ASSERT_GE(child_pid, 0);
+  if (child_pid == 0) {
+    const std::string parent_pid_text = std::to_string(parent_pid);
+    setenv("CYBER_TEST_PARENT_PID", parent_pid_text.c_str(), 1);
+    execl("/proc/self/exe", "transport_test",
+          "--gtest_filter=TransportTest.hybrid_pod_interprocess_transmitter",
+          nullptr);
+    _exit(127);
+  }
+
+  for (int i = 0; i < 40; ++i) {
+    {
+      std::lock_guard<std::mutex> lock(mutex);
+      if (!messages.empty()) {
+        break;
+      }
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  }
+
+  int child_status = 0;
+  ASSERT_EQ(waitpid(child_pid, &child_status, 0), child_pid);
+  ASSERT_TRUE(WIFEXITED(child_status));
+  ASSERT_EQ(WEXITSTATUS(child_status), 0);
+  {
+    std::lock_guard<std::mutex> lock(mutex);
+    ASSERT_EQ(messages.size(), 1u);
+    const auto view = messages.front().View();
+    ASSERT_NE(view.payload, nullptr);
+    EXPECT_EQ(view.header.timestamp_ns, 135792468ull);
+    EXPECT_EQ(view.header.frame_id, 11ull);
+    const char payload[] = "hybrid_interprocess_pod";
+    EXPECT_EQ(view.payload_size, sizeof(payload));
+    EXPECT_EQ(std::memcmp(view.payload, payload, sizeof(payload)), 0);
+  }
+
+  receiver->Disable();
+}
+
+TEST(TransportTest, hybrid_pod_interprocess_transmitter) {
+  const char* parent_pid_env = std::getenv("CYBER_TEST_PARENT_PID");
+  if (parent_pid_env == nullptr) {
+    GTEST_SKIP() << "worker test is launched by the parent process";
+  }
+
+  const std::string channel_name = "hybrid_pod_interprocess_end_to_end";
+  RoleAttributes transmitter_attr;
+  transmitter_attr.set_host_ip(common::GlobalData::Instance()->HostIp());
+  transmitter_attr.set_process_id(common::GlobalData::Instance()->ProcessId());
+  transmitter_attr.set_channel_name(channel_name);
+  transmitter_attr.set_channel_id(common::Hash(channel_name));
+  transmitter_attr.mutable_qos_profile()->set_depth(2);
+
+  RoleAttributes receiver_attr;
+  receiver_attr.set_host_ip(common::GlobalData::Instance()->HostIp());
+  receiver_attr.set_process_id(std::strtol(parent_pid_env, nullptr, 10));
+  receiver_attr.set_channel_name(channel_name);
+  receiver_attr.set_channel_id(common::Hash(channel_name));
+  receiver_attr.mutable_qos_profile()->set_depth(2);
+
+  auto transmitter = Transport::Instance()->CreateTransmitter<PodMessage>(
+      transmitter_attr, OptionalMode::HYBRID);
+  ASSERT_NE(transmitter, nullptr);
+  transmitter->Enable(receiver_attr);
+
+  const char payload[] = "hybrid_interprocess_pod";
+  const PodChunkHeader header = MakeImagePodChunkHeader(
+      135792468ull, 11ull, 2u, 2u, 4u, 1u, sizeof(payload));
+  const auto msg = std::make_shared<PodMessage>(header, payload, sizeof(payload));
+  EXPECT_TRUE(transmitter->Transmit(msg));
+  transmitter->Disable(receiver_attr);
 }
 
 TEST(TransportTest, iceoryx_pod_loan_publish_end_to_end) {
