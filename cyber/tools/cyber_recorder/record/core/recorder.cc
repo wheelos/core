@@ -19,6 +19,7 @@
 #include <stdexcept>
 
 #include "cyber/record/header_builder.h"
+#include "cyber/task/task.h"
 
 namespace apollo {
 namespace cyber {
@@ -151,7 +152,15 @@ void Recorder::TopologyCallback(const ChangeMsg& change_message) {
     ADEBUG << "Change message role type is not ROLE_WRITER.";
     return;
   }
-  FindNewChannel(change_message.role_attr());
+  const RoleAttributes role_attr = change_message.role_attr();
+  std::weak_ptr<Recorder> weak_this = shared_from_this();
+  cyber::Async([weak_this, role_attr]() {
+    auto self = weak_this.lock();
+    if (!self) {
+      return;
+    }
+    self->FindNewChannel(role_attr);
+  });
 }
 
 void Recorder::FindNewChannel(const RoleAttributes& role_attr) {

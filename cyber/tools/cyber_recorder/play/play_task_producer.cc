@@ -125,6 +125,7 @@ bool PlayTaskProducer::ReadRecordInfo() {
       }
 
       auto& proto_desc = record_reader->GetProtoDesc(channel_name);
+      msg_proto_descs_[channel_name] = proto_desc;
       pb_factory->RegisterMessage(proto_desc);
     }
 
@@ -206,6 +207,10 @@ bool PlayTaskProducer::CreateWriters() {
       proto::RoleAttributes attr;
       attr.set_channel_name(channel_name);
       attr.set_message_type(msg_type);
+      const auto proto_desc_search = msg_proto_descs_.find(channel_name);
+      if (proto_desc_search != msg_proto_descs_.end()) {
+        attr.set_proto_desc(proto_desc_search->second);
+      }
       auto writer = node_->CreateWriter<message::RawMessage>(attr);
       if (writer == nullptr) {
         AERROR << "create writer failed. channel name: " << channel_name

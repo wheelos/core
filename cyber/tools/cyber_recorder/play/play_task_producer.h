@@ -47,6 +47,7 @@ class PlayTaskProducer {
   using WriterPtr = std::shared_ptr<Writer<message::RawMessage>>;
   using WriterMap = std::unordered_map<std::string, WriterPtr>;
   using MessageTypeMap = std::unordered_map<std::string, std::string>;
+  using MessageProtoDescMap = std::unordered_map<std::string, std::string>;
 
   PlayTaskProducer(const TaskBufferPtr& task_buffer,
                    const PlayParam& play_param);
@@ -75,6 +76,7 @@ class PlayTaskProducer {
   NodePtr node_;
   WriterMap writers_;
   MessageTypeMap msg_types_;
+  MessageProtoDescMap msg_proto_descs_;
   std::vector<RecordReaderPtr> record_readers_;
 
   uint64_t earliest_begin_time_;
