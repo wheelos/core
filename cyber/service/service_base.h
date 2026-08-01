@@ -17,7 +17,10 @@
 #ifndef CYBER_SERVICE_SERVICE_BASE_H_
 #define CYBER_SERVICE_SERVICE_BASE_H_
 
+#include <functional>
+#include <mutex>
 #include <string>
+#include <utility>
 
 namespace apollo {
 namespace cyber {
@@ -46,8 +49,28 @@ class ServiceBase {
    */
   const std::string& service_name() const { return service_name_; }
 
+  void SetOnShutdown(std::function<void()>&& on_shutdown) {
+    std::lock_guard<std::mutex> lock(shutdown_mutex_);
+    on_shutdown_ = std::move(on_shutdown);
+  }
+
  protected:
   std::string service_name_;
+
+  void ShutdownDiscovery() {
+    std::function<void()> on_shutdown;
+    {
+      std::lock_guard<std::mutex> lock(shutdown_mutex_);
+      on_shutdown = std::move(on_shutdown_);
+    }
+    if (on_shutdown) {
+      on_shutdown();
+    }
+  }
+
+ private:
+  std::mutex shutdown_mutex_;
+  std::function<void()> on_shutdown_;
 };
 
 }  // namespace cyber

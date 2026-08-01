@@ -11,3 +11,4 @@
 ## Middleware roadmap
 
 - `roadmaps/middleware-evolution.md` — Fast DDS 2.14.x stabilization plan, zero-copy evolution stages, and recommended next milestones.
+- `design/service-action-architecture.md` — autonomous-driving communication boundaries, the Service V2 and Action architecture, and the staged implementation plan.

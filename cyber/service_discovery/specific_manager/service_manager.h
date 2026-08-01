@@ -41,7 +41,7 @@ class ServiceManager : public Manager {
 
  public:
   using RoleAttrVec = std::vector<RoleAttributes>;
-  using ServerWarehouse = SingleValueWarehouse;
+  using ServerWarehouse = MultiValueWarehouse;
   using ClientWarehouse = MultiValueWarehouse;
 
   /**
@@ -62,6 +62,9 @@ class ServiceManager : public Manager {
    * @return false if service not exists
    */
   bool HasService(const std::string& service_name);
+
+  bool GetServer(const std::string& service_name, RoleAttributes* server);
+  void GetServers(const std::string& service_name, RoleAttrVec* servers);
 
   /**
    * @brief Get the All Server in the topology

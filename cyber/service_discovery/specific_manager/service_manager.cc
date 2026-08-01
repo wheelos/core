@@ -38,6 +38,18 @@ bool ServiceManager::HasService(const std::string& service_name) {
   return servers_.Search(key);
 }
 
+bool ServiceManager::GetServer(const std::string& service_name,
+                               RoleAttributes* server) {
+  RETURN_VAL_IF_NULL(server, false);
+  return servers_.Search(common::Hash(service_name), server);
+}
+
+void ServiceManager::GetServers(const std::string& service_name,
+                                RoleAttrVec* servers) {
+  RETURN_IF_NULL(servers);
+  servers_.Search(common::Hash(service_name), servers);
+}
+
 void ServiceManager::GetServers(RoleAttrVec* servers) {
   RETURN_IF_NULL(servers);
   servers_.GetAllRoles(servers);
@@ -76,7 +88,7 @@ void ServiceManager::OnTopoModuleLeave(const std::string& host_name,
   std::vector<RolePtr> servers_to_remove;
   servers_.Search(attr, &servers_to_remove);
   for (auto& server : servers_to_remove) {
-    servers_.Remove(server->attributes().service_id());
+    servers_.Remove(server->attributes().service_id(), server);
   }
 
   std::vector<RolePtr> clients_to_remove;
@@ -102,6 +114,7 @@ void ServiceManager::OnTopoModuleLeave(const std::string& host_name,
 void ServiceManager::DisposeJoin(const ChangeMsg& msg) {
   if (msg.role_type() == RoleType::ROLE_SERVER) {
     auto role = std::make_shared<RoleServer>(msg.role_attr());
+    servers_.Remove(role->attributes().service_id(), role);
     servers_.Add(role->attributes().service_id(), role);
   } else {
     auto role = std::make_shared<RoleClient>(msg.role_attr());
@@ -112,7 +125,7 @@ void ServiceManager::DisposeJoin(const ChangeMsg& msg) {
 void ServiceManager::DisposeLeave(const ChangeMsg& msg) {
   if (msg.role_type() == RoleType::ROLE_SERVER) {
     auto role = std::make_shared<RoleServer>(msg.role_attr());
-    servers_.Remove(role->attributes().service_id());
+    servers_.Remove(role->attributes().service_id(), role);
   } else {
     auto role = std::make_shared<RoleClient>(msg.role_attr());
     clients_.Remove(role->attributes().service_id(), role);

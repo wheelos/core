@@ -6,6 +6,43 @@ load("@com_google_protobuf//bazel:py_proto_library.bzl", "py_proto_library")
 package(default_visibility = ["//visibility:public"])
 
 cc_proto_library(
+    name = "action_cc_proto",
+    deps = [
+        ":action_proto",
+    ],
+)
+
+proto_library(
+    name = "action_proto",
+    srcs = ["action.proto"],
+    deps = [
+        ":rpc_proto",
+    ],
+)
+
+py_proto_library(
+    name = "action_py_pb2",
+    deps = [":action_proto"],
+)
+
+cc_proto_library(
+    name = "rpc_cc_proto",
+    deps = [
+        ":rpc_proto",
+    ],
+)
+
+proto_library(
+    name = "rpc_proto",
+    srcs = ["rpc.proto"],
+)
+
+py_proto_library(
+    name = "rpc_py_pb2",
+    deps = [":rpc_proto"],
+)
+
+cc_proto_library(
     name = "choreography_conf_cc_proto",
     deps = [
         ":choreography_conf_proto",

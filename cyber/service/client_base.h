@@ -17,10 +17,17 @@
 #ifndef CYBER_SERVICE_CLIENT_BASE_H_
 #define CYBER_SERVICE_CLIENT_BASE_H_
 
+#include <algorithm>
 #include <chrono>
+#include <functional>
+#include <mutex>
 #include <string>
+#include <thread>
+#include <utility>
 
 #include "cyber/common/macros.h"
+#include "cyber/service_discovery/topology_manager.h"
+#include "cyber/state.h"
 
 namespace apollo {
 namespace cyber {
@@ -56,25 +63,62 @@ class ClientBase {
    */
   virtual bool ServiceIsReady() const = 0;
 
+  void SetOnShutdown(std::function<void()>&& on_shutdown) {
+    std::lock_guard<std::mutex> lock(shutdown_mutex_);
+    on_shutdown_ = std::move(on_shutdown);
+  }
+
  protected:
   std::string service_name_;
 
-  bool WaitForServiceNanoseconds(std::chrono::nanoseconds time_out) {
-    bool has_service = false;
-    auto step_duration = std::chrono::nanoseconds(5 * 1000 * 1000);
-    while (time_out.count() > 0) {
-      has_service = service_discovery::TopologyManager::Instance()
-                        ->service_manager()
-                        ->HasService(service_name_);
-      if (!has_service) {
-        std::this_thread::sleep_for(step_duration);
-        time_out -= step_duration;
-      } else {
-        break;
+  bool WaitForServiceNanoseconds(
+      std::chrono::nanoseconds time_out,
+      const std::function<bool()>& is_ready = std::function<bool()>()) {
+    constexpr auto kPollInterval = std::chrono::milliseconds(5);
+    const bool wait_forever = time_out.count() < 0;
+    const auto deadline = std::chrono::steady_clock::now() + time_out;
+    while (!cyber::IsShutdown()) {
+      const bool ready =
+          is_ready
+              ? is_ready()
+              : service_discovery::TopologyManager::Instance()
+                    ->service_manager()
+                    ->HasService(service_name_);
+      if (ready) {
+        return true;
       }
+      if (!wait_forever && std::chrono::steady_clock::now() >= deadline) {
+        return false;
+      }
+      auto sleep_duration = kPollInterval;
+      if (!wait_forever) {
+        sleep_duration =
+            std::min(kPollInterval,
+                     std::chrono::duration_cast<std::chrono::milliseconds>(
+                         deadline - std::chrono::steady_clock::now()));
+        if (sleep_duration.count() <= 0) {
+          return false;
+        }
+      }
+      std::this_thread::sleep_for(sleep_duration);
     }
-    return has_service;
+    return false;
   }
+
+  void ShutdownDiscovery() {
+    std::function<void()> on_shutdown;
+    {
+      std::lock_guard<std::mutex> lock(shutdown_mutex_);
+      on_shutdown = std::move(on_shutdown_);
+    }
+    if (on_shutdown) {
+      on_shutdown();
+    }
+  }
+
+ private:
+  std::mutex shutdown_mutex_;
+  std::function<void()> on_shutdown_;
 };
 
 }  // namespace cyber

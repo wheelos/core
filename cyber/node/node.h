@@ -138,6 +138,18 @@ class Node {
                          service_callback)
       -> std::shared_ptr<Service<Request, Response>>;
 
+  template <typename Request, typename Response>
+  auto CreateService(
+      const std::string& service_name, const ServiceOptions& options,
+      const typename Service<Request, Response>::ServiceCallback&
+          service_callback) -> std::shared_ptr<Service<Request, Response>>;
+
+  template <typename Request, typename Response>
+  auto CreateService(
+      const std::string& service_name, const ServiceOptions& options,
+      const typename Service<Request, Response>::ContextServiceCallback&
+          service_callback) -> std::shared_ptr<Service<Request, Response>>;
+
   /**
    * @brief Create a Client object to request Service with `service_name`
    *
@@ -261,6 +273,24 @@ auto Node::CreateService(
         service_callback) -> std::shared_ptr<Service<Request, Response>> {
   return node_service_impl_->template CreateService<Request, Response>(
       service_name, service_callback);
+}
+
+template <typename Request, typename Response>
+auto Node::CreateService(
+    const std::string& service_name, const ServiceOptions& options,
+    const typename Service<Request, Response>::ServiceCallback&
+        service_callback) -> std::shared_ptr<Service<Request, Response>> {
+  return node_service_impl_->template CreateService<Request, Response>(
+      service_name, options, service_callback);
+}
+
+template <typename Request, typename Response>
+auto Node::CreateService(
+    const std::string& service_name, const ServiceOptions& options,
+    const typename Service<Request, Response>::ContextServiceCallback&
+        service_callback) -> std::shared_ptr<Service<Request, Response>> {
+  return node_service_impl_->template CreateService<Request, Response>(
+      service_name, options, service_callback);
 }
 
 template <typename Request, typename Response>

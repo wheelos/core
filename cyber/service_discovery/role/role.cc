@@ -76,6 +76,11 @@ bool RoleServer::Match(const RoleAttributes& target_attr) const {
       target_attr.service_id() != attributes_.service_id()) {
     return false;
   }
+  if (target_attr.has_service_instance_id() &&
+      target_attr.service_instance_id() !=
+          attributes_.service_instance_id()) {
+    return false;
+  }
 
   return RoleBase::Match(target_attr);
 }

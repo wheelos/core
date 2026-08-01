@@ -54,6 +54,55 @@ cc_test(
     name = "node_test",
     size = "small",
     srcs = ["node_test.cc"],
+    args = ["--gtest_filter=NodeTest.cases"],
+    deps = [
+        "//cyber",
+        "//cyber/proto:unit_test_cc_proto",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "service_lifecycle_test",
+    size = "small",
+    srcs = ["node_test.cc"],
+    args = ["--gtest_filter=NodeTest.ServiceReadinessAndLifecycle"],
+    deps = [
+        "//cyber",
+        "//cyber/proto:unit_test_cc_proto",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "service_callback_test",
+    size = "small",
+    srcs = ["node_test.cc"],
+    args = ["--gtest_filter=NodeTest.ServiceCallbackCanSendAnotherRequest"],
+    deps = [
+        "//cyber",
+        "//cyber/proto:unit_test_cc_proto",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "service_v2_test",
+    size = "small",
+    srcs = ["node_test.cc"],
+    args = ["--gtest_filter=NodeTest.ServiceV2CallOptionsAndConcurrency"],
+    deps = [
+        "//cyber",
+        "//cyber/proto:unit_test_cc_proto",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "service_replicated_test",
+    size = "small",
+    srcs = ["node_test.cc"],
+    args = ["--gtest_filter=NodeTest.ReplicatedServiceRoutingAndFailover"],
     deps = [
         "//cyber",
         "//cyber/proto:unit_test_cc_proto",

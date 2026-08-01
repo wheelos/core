@@ -1,0 +1,35 @@
+syntax = "proto2";
+
+package apollo.cyber.proto;
+
+enum RpcWireStatus {
+  RPC_OK = 0;
+  RPC_INVALID_ARGUMENT = 1;
+  RPC_NOT_FOUND = 2;
+  RPC_ALREADY_EXISTS = 3;
+  RPC_UNAVAILABLE = 4;
+  RPC_DEADLINE_EXCEEDED = 5;
+  RPC_CANCELLED = 6;
+  RPC_RESOURCE_EXHAUSTED = 7;
+  RPC_FAILED_PRECONDITION = 8;
+  RPC_PERMISSION_DENIED = 9;
+  RPC_INCOMPATIBLE_TYPE = 10;
+  RPC_INTERNAL = 11;
+}
+
+message RpcRequest {
+  optional uint64 call_id = 1;
+  optional uint64 timeout_ns = 2;
+  optional uint32 priority = 3;
+  optional string trace_id = 4;
+  optional string idempotency_key = 5;
+  optional bytes payload = 6;
+  optional bool cancel = 7 [default = false];
+}
+
+message RpcResponse {
+  optional uint64 call_id = 1;
+  optional RpcWireStatus status = 2 [default = RPC_INTERNAL];
+  optional string error_message = 3;
+  optional bytes payload = 4;
+}

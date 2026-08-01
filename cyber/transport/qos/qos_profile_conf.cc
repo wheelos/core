@@ -60,7 +60,7 @@ const QosProfile QosProfileConf::QOS_PROFILE_SERVICES_DEFAULT =
     CreateQosProfile(QosHistoryPolicy::HISTORY_KEEP_LAST, 10,
                      QOS_MPS_SYSTEM_DEFAULT,
                      QosReliabilityPolicy::RELIABILITY_RELIABLE,
-                     QosDurabilityPolicy::DURABILITY_TRANSIENT_LOCAL);
+                     QosDurabilityPolicy::DURABILITY_VOLATILE);
 
 const QosProfile QosProfileConf::QOS_PROFILE_PARAM_EVENT = CreateQosProfile(
     QosHistoryPolicy::HISTORY_KEEP_LAST, 1000, QOS_MPS_SYSTEM_DEFAULT,
