@@ -129,8 +129,7 @@ def _channel_cmd_bw(argv):
 
     try:
         if options.window_size != -1:
-            import string
-            window_size = string.atoi(options.window_size)
+            window_size = int(options.window_size)
         else:
             window_size = options.window_size
     except:
@@ -237,8 +236,7 @@ def _channel_cmd_hz(argv):
     # check string
     try:
         if options.window_size != -1:
-            import string
-            window_size = string.atoi(options.window_size)
+            window_size = int(options.window_size)
         else:
             window_size = options.window_size
     except:
@@ -339,13 +337,8 @@ class CyberChannelecho(object):
         """
         Channel echo callback.
         """
-        # pass
-        # print "py:reader callback raw_data->:"
-        # print type(raw_data) # str
-        # print raw_data # str
-
-        msgtype = cyber.ChannelUtils.get_msgtype(self.channel_name, 0).decode('utf-8')
-        print(cyber.ChannelUtils.get_debugstring_rawmsgdata(msgtype, raw_data).decode('utf-8'))
+        msgtype = cyber.ChannelUtils.get_msgtype(self.channel_name, 0)
+        print(cyber.ChannelUtils.get_debugstring_rawmsgdata(msgtype, raw_data))
 
 
 def channel_echo(channel_name):

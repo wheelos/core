@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <condition_variable>
 #include <chrono>
+#include <condition_variable>
+#include <cstdlib>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -277,6 +278,14 @@ TEST_F(RecordPlayTest, BurstStressNoLoss) {
 }  // namespace apollo
 
 int main(int argc, char** argv) {
+  const char* test_srcdir = std::getenv("TEST_SRCDIR");
+  const char* test_workspace = std::getenv("TEST_WORKSPACE");
+  if (test_srcdir != nullptr && test_workspace != nullptr) {
+    const std::string config_root =
+        std::string(test_srcdir) + "/" + test_workspace +
+        "/cyber/examples/record_play/testdata/cyber";
+    setenv("CYBER_PATH", config_root.c_str(), 1);
+  }
   testing::InitGoogleTest(&argc, argv);
   apollo::cyber::Init(argv[0]);
   const int ret = RUN_ALL_TESTS();

@@ -32,6 +32,7 @@
 #include "cyber/common/util.h"
 #include "cyber/cyber.h"
 #include "cyber/init.h"
+#include "cyber/proto/unit_test.pb.h"
 
 namespace apollo {
 namespace cyber {
@@ -145,6 +146,59 @@ TEST(TimerTest, concurrent_stop_and_restart) {
 
   timer.Stop();
   EXPECT_GT(callback_count.load(std::memory_order_acquire), restarted_count);
+}
+
+TEST(TimerTest, callback_creates_message_subscription) {
+  using proto::Chatter;
+
+  const std::string suffix = std::to_string(Time::MonoTime().ToNanosecond());
+  const std::string channel_name = "/timer/subscription_" + suffix;
+  auto reader_node = CreateNode("timer_reader_" + suffix);
+  auto writer_node = CreateNode("timer_writer_" + suffix);
+  ASSERT_NE(nullptr, reader_node);
+  ASSERT_NE(nullptr, writer_node);
+
+  std::mutex reader_mutex;
+  std::shared_ptr<Reader<Chatter>> reader;
+  std::atomic<bool> reader_created{false};
+  std::atomic<bool> message_received{false};
+  Timer timer(
+      10,
+      [&]() {
+        std::lock_guard<std::mutex> lock(reader_mutex);
+        reader = reader_node->CreateReader<Chatter>(
+            channel_name, [&](const std::shared_ptr<Chatter>& message) {
+              if (message->content() == "timer callback subscription") {
+                message_received.store(true, std::memory_order_release);
+              }
+            });
+        reader_created.store(reader != nullptr, std::memory_order_release);
+      },
+      true);
+  timer.Start();
+
+  const auto reader_deadline =
+      std::chrono::steady_clock::now() + std::chrono::seconds(5);
+  while (!reader_created.load(std::memory_order_acquire) &&
+         std::chrono::steady_clock::now() < reader_deadline) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  ASSERT_TRUE(reader_created.load(std::memory_order_acquire));
+
+  auto writer = writer_node->CreateWriter<Chatter>(channel_name);
+  ASSERT_NE(nullptr, writer);
+  auto message = std::make_shared<Chatter>();
+  message->set_content("timer callback subscription");
+  const auto message_deadline =
+      std::chrono::steady_clock::now() + std::chrono::seconds(5);
+  while (!message_received.load(std::memory_order_acquire) &&
+         std::chrono::steady_clock::now() < message_deadline) {
+    ASSERT_TRUE(writer->Write(message));
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+  }
+
+  timer.Stop();
+  EXPECT_TRUE(message_received.load(std::memory_order_acquire));
 }
 
 TEST(TimerTest, sim_mode) {

@@ -17,6 +17,7 @@
 
 import argparse
 import atexit
+import hashlib
 import logging
 import os
 import os.path
@@ -24,6 +25,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 import threading
 import traceback
@@ -37,6 +39,52 @@ g_process_pid = os.getpid()
 g_process_name = g_script_name + "_" + str(g_process_pid)
 
 cyber_path = os.getenv('CYBER_PATH')
+
+
+def launch_pid_file(launch_file):
+    identifier = hashlib.sha256(
+        os.path.abspath(launch_file).encode('utf-8')
+    ).hexdigest()
+    return os.path.join(tempfile.gettempdir(), 'cyber_launch_' + identifier + '.pid')
+
+
+def _process_start_time(pid):
+    try:
+        with open('/proc/{}/stat'.format(pid)) as stat_file:
+            _, _, fields = stat_file.read().rpartition(')')
+        return fields.split()[19]
+    except (IndexError, OSError):
+        return None
+
+
+def _write_launch_pid_file(pid_file):
+    pid = os.getpid()
+    start_time = _process_start_time(pid)
+    if start_time is None:
+        raise RuntimeError('Cannot determine launch process start time.')
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW
+    fd = os.open(pid_file, flags, 0o600)
+    with os.fdopen(fd, 'w') as pid_output:
+        pid_output.write('{} {}\n'.format(pid, start_time))
+    return pid, start_time
+
+
+def _read_launch_pid_file(pid_file):
+    try:
+        with open(pid_file) as pid_input:
+            pid, start_time = pid_input.read().split()
+        return int(pid), start_time
+    except (OSError, ValueError):
+        return None, None
+
+
+def _remove_launch_pid_file(pid_file, pid, start_time):
+    current_pid, current_start_time = _read_launch_pid_file(pid_file)
+    if current_pid == pid and current_start_time == start_time:
+        try:
+            os.remove(pid_file)
+        except FileNotFoundError:
+            pass
 
 
 def resolve_mainboard_binary():
@@ -128,6 +176,8 @@ def module_monitor(mod):
         if line:
             logger.debug('%s# %s' % (mod.name, line.decode('utf8').strip('\n')))
             continue
+        if mod.popen.poll() is not None:
+            break
         time.sleep(0.01)
 
 
@@ -363,6 +413,13 @@ def start(launch_file=''):
     except Exception:
         logger.error('Parse xml failed. illegal xml!')
         sys.exit(1)
+    pid_file = launch_pid_file(launch_file)
+    try:
+        pid, start_time = _write_launch_pid_file(pid_file)
+    except (OSError, RuntimeError) as error:
+        logger.error('Cannot create launch pid file %s: %s', pid_file, error)
+        sys.exit(1)
+    atexit.register(_remove_launch_pid_file, pid_file, pid, start_time)
     total_dag_num = 0
     dictionary = {}
     dag_dict = {}
@@ -406,7 +463,7 @@ def start(launch_file=''):
     process_list = []
     root = tree.getroot()
     for env in root.findall('environment'):
-        for var in env.getchildren():
+        for var in env:
             os.environ[var.tag] = str(var.text)
     for module in root.findall('module'):
         module_name = module.find('name').text
@@ -484,6 +541,7 @@ def start(launch_file=''):
     if not all_died:
         logger.info("Stop all processes...")
         stop()
+    _remove_launch_pid_file(pid_file, pid, start_time)
     logger.info("Cyber exit.")
 
 
@@ -505,12 +563,34 @@ def stop_launch(launch_file):
     Stop the launch file
     """
     if not launch_file:
-        cmd = 'pkill -INT cyber_launch'
-    else:
-        cmd = 'pkill -INT -f ' + launch_file
+        logger.error('Launch file is required for stop.')
+        sys.exit(1)
 
-    os.system(cmd)
-    time.sleep(3)
+    pid_file = launch_pid_file(launch_file)
+    pid, expected_start_time = _read_launch_pid_file(pid_file)
+    if pid is None:
+        logger.error('No active launch instance found for %s.' % launch_file)
+        sys.exit(1)
+
+    if _process_start_time(pid) != expected_start_time:
+        logger.error('Launch pid file for %s is stale.' % launch_file)
+        try:
+            os.remove(pid_file)
+        except FileNotFoundError:
+            pass
+        sys.exit(1)
+
+    try:
+        os.kill(pid, signal.SIGINT)
+    except ProcessLookupError:
+        logger.error('Launch process %d is no longer running.' % pid)
+        _remove_launch_pid_file(pid_file, pid, expected_start_time)
+        sys.exit(1)
+    for _ in range(30):
+        if _process_start_time(pid) != expected_start_time:
+            break
+        time.sleep(0.1)
+    _remove_launch_pid_file(pid_file, pid, expected_start_time)
     logger.info('Stop cyber launch finished.')
     sys.exit(0)
 

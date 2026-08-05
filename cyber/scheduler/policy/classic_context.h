@@ -19,10 +19,10 @@
 
 #include <array>
 #include <functional>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 #include "cyber/base/atomic_rw_lock.h"
@@ -41,13 +41,13 @@ static constexpr uint32_t MAX_PRIO = 20;
 
 using CROUTINE_QUEUE = std::vector<std::shared_ptr<CRoutine>>;
 using MULTI_PRIO_QUEUE = std::array<CROUTINE_QUEUE, MAX_PRIO>;
-using CR_GROUP = std::unordered_map<std::string, MULTI_PRIO_QUEUE>;
+using CR_GROUP = std::map<std::string, MULTI_PRIO_QUEUE>;
 using LOCK_QUEUE = std::array<base::AtomicRWLock, MAX_PRIO>;
-using RQ_LOCK_GROUP = std::unordered_map<std::string, LOCK_QUEUE>;
+using RQ_LOCK_GROUP = std::map<std::string, LOCK_QUEUE>;
 
-using GRP_WQ_MUTEX = std::unordered_map<std::string, MutexWrapper>;
-using GRP_WQ_CV = std::unordered_map<std::string, CvWrapper>;
-using NOTIFY_GRP = std::unordered_map<std::string, int>;
+using GRP_WQ_MUTEX = std::map<std::string, MutexWrapper>;
+using GRP_WQ_CV = std::map<std::string, CvWrapper>;
+using NOTIFY_GRP = std::map<std::string, int>;
 
 class ClassicContext : public ProcessorContext {
  public:
@@ -73,10 +73,10 @@ class ClassicContext : public ProcessorContext {
   std::chrono::steady_clock::time_point wake_time_;
   bool need_sleep_ = false;
 
-  MULTI_PRIO_QUEUE *multi_pri_rq_ = nullptr;
-  LOCK_QUEUE *lq_ = nullptr;
-  MutexWrapper *mtx_wrapper_ = nullptr;
-  CvWrapper *cw_ = nullptr;
+  MULTI_PRIO_QUEUE* multi_pri_rq_ = nullptr;
+  LOCK_QUEUE* lq_ = nullptr;
+  MutexWrapper* mtx_wrapper_ = nullptr;
+  CvWrapper* cw_ = nullptr;
 
   std::string current_grp;
 };

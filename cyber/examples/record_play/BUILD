@@ -66,6 +66,7 @@ cc_test(
     name = "record_play_test",
     size = "medium",
     srcs = ["record_play_test.cc"],
+    data = ["testdata/cyber/conf/cyber.pb.conf"],
     tags = ["local"],
     deps = [
         ":record_play",

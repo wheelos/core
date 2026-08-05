@@ -16,6 +16,12 @@
 
 #include "cyber/scheduler/policy/scheduler_classic.h"
 
+#include <atomic>
+#include <chrono>
+#include <string>
+#include <thread>
+#include <vector>
+
 #include "gtest/gtest.h"
 
 #include "cyber/base/for_each.h"
@@ -58,6 +64,47 @@ TEST(SchedulerClassicTest, classic) {
   res.clear();
   ctx->Shutdown();
   processor->Stop();
+}
+
+TEST(SchedulerClassicTest, context_storage_remains_stable_when_groups_grow) {
+  const std::string group_name = "stable_context_group";
+  auto ctx = std::make_shared<ClassicContext>(group_name);
+  auto processor = std::make_shared<Processor>();
+  processor->BindContext(ctx);
+
+  std::atomic<bool> executed{false};
+  auto cr = std::make_shared<CRoutine>([&executed]() {
+    executed.store(true, std::memory_order_release);
+  });
+  cr->set_id(GlobalData::RegisterTaskName("stable_context_task"));
+  cr->set_name("stable_context_task");
+  cr->set_group_name(group_name);
+
+  {
+    base::WriteLockGuard<base::AtomicRWLock> lock(
+        ClassicContext::rq_locks_[group_name].at(cr->priority()));
+    ClassicContext::cr_group_[group_name].at(cr->priority()).emplace_back(cr);
+  }
+
+  std::vector<std::shared_ptr<ClassicContext>> extra_contexts;
+  for (int i = 0; i < 256; ++i) {
+    extra_contexts.emplace_back(
+        std::make_shared<ClassicContext>("extra_context_group_" +
+                                         std::to_string(i)));
+  }
+  ClassicContext::Notify(group_name);
+
+  const auto deadline =
+      std::chrono::steady_clock::now() + std::chrono::seconds(5);
+  while (!executed.load(std::memory_order_acquire) &&
+         std::chrono::steady_clock::now() < deadline) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+
+  EXPECT_TRUE(executed.load(std::memory_order_acquire));
+  ctx->Shutdown();
+  processor->Stop();
+  ClassicContext::RemoveCRoutine(cr);
 }
 
 TEST(SchedulerClassicTest, sched_classic) {

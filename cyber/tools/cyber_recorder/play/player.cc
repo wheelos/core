@@ -133,7 +133,9 @@ bool Player::Start() {
           1e9 +
       static_cast<double>(play_param.start_time_s);
 
-  term_thread_.reset(new std::thread(&Player::ThreadFunc_Term, this));
+  if (isatty(STDIN_FILENO)) {
+    term_thread_.reset(new std::thread(&Player::ThreadFunc_Term, this));
+  }
   while (!is_stopped_.load() && apollo::cyber::OK()) {
     if (is_playonce_) {
       consumer_->PlayOnce();

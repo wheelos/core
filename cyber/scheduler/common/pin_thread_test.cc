@@ -38,8 +38,13 @@ TEST(PinThreadTest, parse_cpuset) {
   ASSERT_EQ(cpus.size(), 2);
   cpuset = "0";
   cpus.clear();
-  ParseCpuset(cpuset, &cpus);
+  EXPECT_TRUE(ParseCpuset(cpuset, &cpus));
   ASSERT_EQ(cpus.size(), 1);
+
+  EXPECT_FALSE(ParseCpuset("3-1", &cpus));
+  EXPECT_FALSE(ParseCpuset("0,,1", &cpus));
+  EXPECT_FALSE(ParseCpuset("cpu0", &cpus));
+  EXPECT_FALSE(ParseCpuset("", nullptr));
 }
 
 TEST(PinThreadTest, affinity) {
