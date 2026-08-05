@@ -38,6 +38,7 @@ Key benefits of using Apollo Cyber RT:
 
    CyberRT_Quick_Start.md
    Wheelos_Core_Installation_and_Usage.md
+   WheelOS_Core_Baseline.md
    CyberRT_Terms
    CyberRT_FAQs
 

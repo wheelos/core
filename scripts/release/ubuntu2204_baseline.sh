@@ -27,12 +27,8 @@ bash scripts/release/check_bzlmod_lockfile.sh --check
 bazel build --config=ci --distdir="$DISTDIR" //cyber //:wheelos_core
 
 bazel test --config=ci --distdir="$DISTDIR" \
-  //cyber/message/... \
-  //cyber/python/cyber_py3/test:all \
-  //cyber/python/cyber_py3/examples:examples_smoke_test \
-  //cyber/transport/rtps:rtps_test \
-  //cyber/transport/integration_test:rtps_transceiver_test \
-  //cyber/examples/integration_test:examples_regression_tests
+  //cyber/... \
+  //tests/integration_test:examples_regression_tests
 
 if [ "$RUN_PYCYBER" = true ]; then
   bash scripts/release/build_and_package_pycyber.sh

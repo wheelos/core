@@ -102,7 +102,7 @@ auto CreateReader(const proto::RoleAttributes& role_attr,
 
 ### Code Example
 
-#### Talker (cyber/examples/talker.cc)
+#### Talker (examples/talker.cc)
 
 ```cpp
 #include "cyber/cyber.h"
@@ -136,7 +136,7 @@ int main(int argc, char *argv[]) {
 }
 ```
 
-#### Listener (cyber/examples/listener.cc)
+#### Listener (examples/listener.cc)
 
 ```cpp
 #include "cyber/cyber.h"
@@ -168,7 +168,7 @@ cc_binary(
     srcs = [ "talker.cc", ],
     deps = [
         "//cyber",
-        "//cyber/examples/proto:examples_cc_proto",
+        "//examples/proto:examples_cc_proto",
     ],
 )
 
@@ -177,17 +177,17 @@ cc_binary(
     srcs = [ "listener.cc", ],
     deps = [
         "//cyber",
-        "//cyber/examples/proto:examples_cc_proto",
+        "//examples/proto:examples_cc_proto",
     ],
 )
 ```
 
 #### Build and Run
 
-- Build: bazel build cyber/examples/…
+- Build: bazel build //examples/...
 - Run talker/listener in different terminals:
-  - ./bazel-bin/cyber/examples/talker
-  - ./bazel-bin/cyber/examples/listener
+  - ./bazel-bin/examples/talker
+  - ./bazel-bin/examples/listener
 - Examine the results: you should see message printing out on listener.
 
 ## Service Creation and Use
@@ -221,9 +221,9 @@ message Driver {
 #### Create a service and a client
 
 ```cpp
-// filename: cyber/examples/service.cc
+// filename: examples/service.cc
 #include "cyber/cyber.h"
-#include "cyber/examples/proto/examples.pb.h"
+#include "examples/proto/examples.pb.h"
 
 using apollo::cyber::examples::proto::Driver;
 
@@ -267,15 +267,15 @@ cc_binary(
     srcs = [ "service.cc", ],
     deps = [
         "//cyber",
-        "//cyber/examples/proto:examples_cc_proto",
+        "//examples/proto:examples_cc_proto",
     ],
 )
 ```
 
 #### Build and run
 
-- Build service/client: bazel build cyber/examples/…
-- Run: ./bazel-bin/cyber/examples/service
+- Build service/client: bazel build //examples/...
+- Run: ./bazel-bin/examples/service
 - Examining result: you should see content below in apollo/data/log/service.INFO
 
 ``` txt
@@ -502,8 +502,8 @@ int main(int argc, char** argv) {
 
 #### Build and run
 
-- Build: bazel build cyber/examples/…
-- Run: ./bazel-bin/cyber/examples/paramserver
+- Build: bazel build //examples/...
+- Run: ./bazel-bin/examples/paramserver
 
 ## Log API
 
@@ -621,7 +621,7 @@ module_config {
 
 ### Demo - examples
 
-#### Common_component_example(cyber/examples/common_component_example/*)
+#### Common_component_example(examples/common_component_example/*)
 
 Header definition(common_component_example.h)
 
@@ -630,7 +630,7 @@ Header definition(common_component_example.h)
 
 #include "cyber/class_loader/class_loader.h"
 #include "cyber/component/component.h"
-#include "cyber/examples/proto/examples.pb.h"
+#include "examples/proto/examples.pb.h"
 
 using apollo::cyber::examples::proto::Driver;
 using apollo::cyber::Component;
@@ -648,7 +648,7 @@ CYBER_REGISTER_COMPONENT(Commontestcomponent)
 Cpp file implementation(common_component_example.cc)
 
 ```cpp
-#include "cyber/examples/common_component_smaple/common_component_example.h"
+#include "examples/common_component_example/common_component_example.h"
 
 #include "cyber/class_loader/class_loader.h"
 #include "cyber/component/component.h"
@@ -666,7 +666,7 @@ bool Commontestcomponent::Proc(const std::shared_ptr<Driver>& msg0,
 }
 ```
 
-#### Timer_component_example(cyber/examples/timer_component_example/*)
+#### Timer_component_example(examples/timer_component_example/*)
 
 Header definition(timer_component_example.h)
 
@@ -676,7 +676,7 @@ Header definition(timer_component_example.h)
 #include "cyber/class_loader/class_loader.h"
 #include "cyber/component/component.h"
 #include "cyber/component/timer_component.h"
-#include "cyber/examples/proto/examples.pb.h"
+#include "examples/proto/examples.pb.h"
 
 using apollo::cyber::examples::proto::Driver;
 using apollo::cyber::Component;
@@ -698,11 +698,11 @@ CYBER_REGISTER_COMPONENT(TimertestComponent)
 Cpp file implementation(timer_component_example.cc)
 
 ```cpp
-#include "cyber/examples/timer_component_example/timer_component_example.h"
+#include "examples/timer_component_example/timer_component_example.h"
 
 #include "cyber/class_loader/class_loader.h"
 #include "cyber/component/component.h"
-#include "cyber/examples/proto/examples.pb.h"
+#include "examples/proto/examples.pb.h"
 
 bool TimertestComponent::Init() {
   driver_writer_ = node_->CreateWriter<Driver>("/carstatus/channel");
@@ -724,8 +724,8 @@ bool TimertestComponent::Proc() {
 
 Use timertestcomponent as example:
 
-- Build: bazel build cyber/examples/timer_component_smaple/…
-- Run: mainboard -d cyber/examples/timer_component_smaple/timer.dag
+- Build: bazel build //examples/timer_component_example/...
+- Run: mainboard -d examples/timer_component_example/timer.dag
 
 ### Precautions
 
@@ -886,7 +886,7 @@ int main(int argc, char** argv) {
 
 **RecordWriter** is the component used to record messages in the cyber framework. Each RecordWriter can create a new record file through the Open method. The user only needs to execute WriteMessage and WriteChannel to write message and channel information, and the writing process is asynchronous.
 
-### Demo - example(cyber/examples/record.cc)
+### Demo - example(examples/record.cc)
 
 Write 100 RawMessage to`TEST_FILE` through `test_write` method, then read them out through `test_read` method.
 
@@ -962,8 +962,8 @@ int main(int argc, char *argv[]) {
 
 #### Build and run
 
-- Build: bazel build cyber/examples/…
-- Run: ./bazel-bin/cyber/examples/record
+- Build: bazel build //examples/...
+- Run: ./bazel-bin/examples/record
 - Examining result:
 
 ```

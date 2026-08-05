@@ -19,14 +19,14 @@ To successfully create and launch a new component, there are basically 4 steps:
 The example below demonstrates how to create, build and run a simple component
 named `CommonComponentExample`. To explore more about Cyber RT, you can find a
 couple of examples showing different functionalities of Cyber RT under the
-`cyber/examples` directory.
+`examples` directory.
 
 > **Note**: The examples need to run after successfully built within Apollo
 > Docker container.
 
 ## Set up directry layout
 
-Take the sample component under `cyber/examples/common_component_example` for
+Take the sample component under `examples/common_component_example` for
 example:
 
 - Header file: common_component_example.h
@@ -51,7 +51,7 @@ In the header file (`common_component_example.h`) for the sample component:
 #include <memory>
 
 #include "cyber/component/component.h"
-#include "cyber/examples/proto/examples.pb.h"
+#include "examples/proto/examples.pb.h"
 
 using apollo::cyber::Component;
 using apollo::cyber::ComponentBase;
@@ -71,7 +71,7 @@ CYBER_REGISTER_COMPONENT(CommonComponentSample)
 Implement both the `Init` and `Proc` functions in `common_component_example.cc`:
 
 ```cpp
-#include "cyber/examples/common_component_example/common_component_example.h"
+#include "examples/common_component_example/common_component_example.h"
 
 bool CommonComponentSample::Init() {
   AINFO << "Commontest component init";
@@ -107,7 +107,7 @@ cc_library(
     visibility = ["//visibility:private"],
     deps = [
         "//cyber",
-        "//cyber/examples/proto:examples_cc_proto",
+        "//examples/proto:examples_cc_proto",
     ],
 )
 ```
@@ -125,7 +125,7 @@ To configure the DAG file (`common.dag` here), specify the following items:
 ```protobuf
 # Define all components in DAG streaming.
 module_config {
-module_library : "/apollo/bazel-bin/cyber/examples/common_component_example/libcommon_component_example.so"
+module_library : "../bazel-bin/examples/common_component_example/libcommon_component_example.so"
 components {
     class_name : "CommonComponentSample"
     config {
@@ -153,7 +153,7 @@ To configure the launch (`common.launch`) file, specify the following items:
 <cyber>
     <component>
         <name>common</name>
-        <dag_conf>/apollo/cyber/examples/common_component_example/common.dag</dag_conf>
+        <dag_conf>../examples/common_component_example/common.dag</dag_conf>
         <process_name>common</process_name>
     </component>
 </cyber>
@@ -166,8 +166,7 @@ To configure the launch (`common.launch`) file, specify the following items:
 Build the sample component by running the command below:
 
 ```bash
-cd /apollo
-bash apollo.sh build
+bazel build //examples/common_component_example/...
 ```
 
 ### Environment setup
@@ -188,13 +187,13 @@ You can choose either of the two ways to launch the newly built component:
 - Launch with the launch file (recommended)
 
 ```bash
-cyber_launch start cyber/examples/common_component_example/common.launch
+cyber_launch start examples/common_component_example/common.launch
 ```
 
 - Launch with the DAG file
 
 ```bash
-mainboard -d cyber/examples/common_component_example/common.dag
+mainboard -d examples/common_component_example/common.dag
 ```
 
 ### _Feed_ channel data for the component to process
@@ -204,7 +203,7 @@ Open another terminal:
 ```bash
 source cyber/setup.bash
 export GLOG_alsologtostderr=1
-/apollo/bazel-bin/cyber/examples/common_component_example/channel_test_writer
+./bazel-bin/examples/common_component_example/channel_test_writer
 ```
 
 Open the 3rd terminal and run:
@@ -212,7 +211,7 @@ Open the 3rd terminal and run:
 ```bash
 source cyber/setup.bash
 export GLOG_alsologtostderr=1
-/apollo/bazel-bin/cyber/examples/common_component_example/channel_prediction_writer
+./bazel-bin/examples/common_component_example/channel_prediction_writer
 ```
 
 And you should see output from terminal #1 like the following:

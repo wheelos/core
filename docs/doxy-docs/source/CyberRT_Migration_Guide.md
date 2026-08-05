@@ -30,7 +30,7 @@ cc_binary(
   srcs = ["talker.cc"],
   deps = [
     "//cyber",
-    "//cyber/examples/proto:examples_cc_proto",
+    "//examples/proto:examples_cc_proto",
     ],
   )
 cc_binary(
@@ -38,7 +38,7 @@ cc_binary(
   srcs = ["listener.cc"],
   deps = [
     "//cyber",
-    "//cyber/examples/proto:examples_cc_proto",
+    "//examples/proto:examples_cc_proto",
     ],
   )
 ```
@@ -97,7 +97,7 @@ Cyber RT
 
 ```cpp
 #include "cyber/cyber.h"
-#include "cyber/examples/proto/examples.pb.h"
+#include "examples/proto/examples.pb.h"
 
 void MessageCallback(
     const std::shared_ptr<apollo::cyber::examples::proto::Chatter>& msg) {
@@ -155,7 +155,7 @@ Cyber RT
 
 ```cpp
 #include "cyber/cyber.h"
-#include "cyber/examples/proto/examples.pb.h"
+#include "examples/proto/examples.pb.h"
 
 using apollo::cyber::examples::proto::Chatter;
 

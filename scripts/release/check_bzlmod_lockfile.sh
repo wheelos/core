@@ -31,7 +31,7 @@ LOCKFILE_TARGETS=(
   //cyber/python/cyber_py3/examples:examples_smoke_test
   //cyber/transport/rtps:rtps_test
   //cyber/transport/integration_test:rtps_transceiver_test
-  //cyber/examples/integration_test:examples_regression_tests
+  //tests/integration_test:examples_regression_tests
   //cyber/proto:record_py_pb2
 )
 

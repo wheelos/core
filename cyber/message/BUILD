@@ -2,6 +2,11 @@ load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 
 package(default_visibility = ["//visibility:public"])
 
+cc_library(
+    name = "flatbuffers_message",
+    hdrs = ["flatbuffers_message.h"],
+    deps = ["@flatbuffers//:flatbuffers"],
+)
 
 cc_test(
     name = "message_header_test",

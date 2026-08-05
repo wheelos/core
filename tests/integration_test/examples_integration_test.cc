@@ -30,7 +30,7 @@
 
 #include "gtest/gtest.h"
 
-#include "cyber/examples/proto/examples.pb.h"
+#include "examples/proto/examples.pb.h"
 
 #include "tests/integration_test/examples_test_utils.h"
 

@@ -78,8 +78,8 @@ Of course you can change all three to RTPS. Or change `same_proc` and `diff_proc
 The message types supported by Cyber RT include both serializable structured data like protobuf and raw sequence of bytes.
 You can refer the sample code:
 - apollo::cyber::message::RawMessage
-- talker: https://github.com/gruminions/apollo/blob/record/cyber/examples/talker.cc
-- listener: https://github.com/gruminions/apollo/blob/record/cyber/examples/listener.cc
+- talker: `examples/talker.cc`
+- listener: `examples/listener.cc`
 
 ## How to configure multiple hosts communication?
 

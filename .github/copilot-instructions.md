@@ -42,23 +42,23 @@
   bazel test //cyber/message:message_header_test --test_output=errors
   ```
   In general, tests are defined as `cc_test` targets in the nearest `BUILD` file and should be run as `bazel test //path/to/package:target_name`.
-- After Fast DDS / RTPS / `cyber/examples` changes, run the durable regression suite:
+- After Fast DDS / RTPS / `examples` changes, run the durable regression suite:
   ```bash
   bazel test \
-    //cyber/examples/integration_test:examples_regression_tests \
+    //tests/integration_test:examples_regression_tests \
     //cyber/transport/integration_test:rtps_transceiver_test \
     //cyber/transport/rtps:rtps_test \
     --test_output=errors
   ```
-- `//cyber/examples/integration_test:examples_regression_tests` is the long-lived example coverage entrypoint. It covers binary payload integrity (including embedded `\0` bytes for the Fast CDR string patch path), 1 writer / N readers fanout, N writers / 1 reader fanin, multi-client service round trips, payload-size pub/sub stress, and service burst matrices. Keep these tests discovery-gated and rely on bounded completion plus low-bar throughput assertions instead of brittle absolute latency checks.
+- `//tests/integration_test:examples_regression_tests` is the long-lived example coverage entrypoint. It covers binary payload integrity (including embedded `\0` bytes for the Fast CDR string patch path), 1 writer / N readers fanout, N writers / 1 reader fanin, multi-client service round trips, payload-size pub/sub stress, and service burst matrices. Keep these tests discovery-gated and rely on bounded completion plus low-bar throughput assertions instead of brittle absolute latency checks.
 - Before running built tools or examples from `bazel-bin`, source the runtime environment:
   ```bash
   source scripts/env/runtime.bash
   ```
   The README examples then run binaries like:
   ```bash
-  ./bazel-bin/cyber/examples/listener
-  ./bazel-bin/cyber/examples/talker
+  ./bazel-bin/examples/listener
+  ./bazel-bin/examples/talker
   ```
 - Lint scripts exist under `scripts/lint/`:
   ```bash
@@ -80,7 +80,7 @@
 - Component wiring is configuration-driven:
   - `cyber/proto/dag_conf.proto` defines `module_config`, `module_library`, `components`, and `timer_components`
   - `cyber/proto/component_conf.proto` defines component names, reader channels, config files, flag files, and timer intervals
-  - `cyber/examples/common_component_example/` and `cyber/examples/timer_component_example/` are the best end-to-end references for how a component class, its shared library, and its `.dag` file fit together
+  - `examples/common_component_example/` and `examples/timer_component_example/` are the best end-to-end references for how a component class, its shared library, and its `.dag` file fit together
 - Message transport is layered:
   - `cyber/transport/transport.h` can create INTRA, SHM, RTPS, or HYBRID transmitters/receivers
   - HYBRID is the default

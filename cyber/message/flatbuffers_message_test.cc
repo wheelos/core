@@ -20,7 +20,7 @@
 
 #include "gtest/gtest.h"
 
-#include "cyber/examples/proto/examples_generated.h"
+#include "examples/proto/examples_generated.h"
 #include "cyber/message/message_traits.h"
 
 namespace apollo {

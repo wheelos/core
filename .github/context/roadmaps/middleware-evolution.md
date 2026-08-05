@@ -41,11 +41,11 @@
 - Required zero-copy transport regression gates:
   - `bazel test //cyber/transport:transport_test --test_output=errors`
   - `bazel test //cyber/transport/integration_test:hybrid_transceiver_test --test_output=errors`
-  - `bazel test //cyber/examples/record_play:record_play_tool_test //cyber/examples/record_play:record_play_test --test_output=errors`
+  - `bazel test //examples/record_play:record_play_tool_test //examples/record_play:record_play_test --test_output=errors`
 - Record-play benchmark entrypoint:
-  - `bazel build //cyber/examples/record_play:record_play_tool_example`
+  - `bazel build //examples/record_play:record_play_tool_example`
   - `source scripts/env/runtime.bash`
-  - `./bazel-bin/cyber/examples/record_play/record_play_tool_example --mode=benchmark --source=/mnt/synology/apollo/sensor_rgb.record --output=/tmp/record_play_pod.record --manifest=/tmp/record_play_pod.manifest.tsv --max_per_channel=64`
+  - `./bazel-bin/examples/record_play/record_play_tool_example --mode=benchmark --source=/mnt/synology/apollo/sensor_rgb.record --output=/tmp/record_play_pod.record --manifest=/tmp/record_play_pod.manifest.tsv --max_per_channel=64`
   - parse the emitted `baseline` line for protobuf/POD messages, bytes, MB/s,
     msg/s, and speedup.
 - Known remaining production work:
