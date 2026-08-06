@@ -1,54 +1,41 @@
-# Common Component Example of the CyberRT framework
+# Common Component Example
 
+This example loads a component from a shared library and feeds it messages
+from two writer processes.
 
-## How to Build
+## Build
 
-```
-./apollo.sh build cyber
-```
-
-Or if you use Bazel directly,
-
-```
+```bash
 bazel build //examples/common_component_example/...
 ```
 
-## How to Run
+## Run
 
-### Enable logging to stderr
-
-- Change `GLOG_alsologtostderr` from `0` to `1` in `cyber/setup.bash`
-- Run `source cyber/setup.bash` in current console.
-
-```
+```bash
 export GLOG_alsologtostderr=1
 ```
 
-### Start the sample component
+Start the component in one terminal:
 
-```
+```bash
 cyber_launch start examples/common_component_example/common.launch
 ```
 
-Or
+Alternatively, start it directly from the DAG file:
 
-```
+```bash
 mainboard -d examples/common_component_example/common.dag
 ```
 
-### Start the writer nodes
+Start the two writer nodes in separate terminals:
 
-Open two more terminals, run the following commands respectively.
-
-```
+```bash
 bazel run //examples/common_component_example:channel_test_writer
 ```
 
-and ...
-
-```
+```bash
 bazel run //examples/common_component_example:channel_prediction_writer
 ```
 
-Now you should see console output of the `CommonComponentSample` example from the first terminal.
-
+The component output appears in the terminal running `mainboard` or
+`cyber_launch`.

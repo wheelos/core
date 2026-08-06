@@ -1,16 +1,20 @@
-# WheelOS Core 基础发布 Baseline
+# WheelOS Core Release Baseline
 
-本项目的基础发布只关注三项可验证的核心能力：
+The release baseline verifies three capabilities:
 
-1. Cyber RT 的基础通信、服务、调度、发现、记录和 Python API 可用。
-2. 用户可运行的示例完整、路径一致，并能通过自动化 smoke/integration 测试。
-3. 性能结果可复现、可归档，作为版本间比较依据。
+1. Cyber RT communication, services, scheduling, discovery, record I/O, and
+   Python APIs work.
+2. Runnable examples have consistent paths and pass automated smoke or
+   integration tests.
+3. Performance results are reproducible and archived for version comparisons.
 
-## 架构边界
+## Architecture boundaries
 
-`cyber/` 只承载 Runtime 与公共 API：初始化、Node、调度、发现、传输、Record、
-Mainboard 和 Python 绑定。`examples/` 是唯一用户示例入口；`tests/` 承载单元、
-集成和性能验证。Runtime 目录不保留示例副本。
+`cyber/` contains the runtime and public APIs: initialization, nodes,
+scheduling, discovery, transport, record I/O, mainboard, and Python bindings.
+`examples/` is the user-facing example entry point. `tests/` contains unit,
+integration, and performance validation. Runtime packages do not contain
+duplicate examples.
 
 ```text
 cyber/       Runtime and public APIs
@@ -19,10 +23,10 @@ tests/       Integration and performance validation
 scripts/     Build, release, and report entrypoints
 ```
 
-## 基础功能门禁
+## Functional release gates
 
-基础发布使用 Ubuntu 22.04、受版本锁定的 Bzlmod 依赖和已提交的
-`MODULE.bazel.lock`。发布前依次执行：
+The baseline uses Ubuntu 22.04, version-locked Bzlmod dependencies, and the
+checked-in `MODULE.bazel.lock`. Run these commands before publishing:
 
 ```bash
 bash scripts/release/check_bzlmod_lockfile.sh --check
@@ -32,54 +36,62 @@ bazel test --config=ci //tests/integration_test:examples_regression_tests \
   --test_output=errors
 ```
 
-`examples_regression_tests` 覆盖生命周期、Mainboard 错误处理、跨进程工具发现、
-Record 回放、二进制 payload、fanout、fanin、payload 压力和 service burst。
-核心 C++ 与 Python 单元测试由 `ubuntu2204_baseline.sh` 执行；新增 Runtime 功能
-必须在对应 `cyber/` 包中增加确定性的单元测试。
+`examples_regression_tests` covers lifecycle, mainboard error handling,
+cross-process tool discovery, record playback, binary payloads, fanout,
+fanin, payload stress, and service bursts. The Ubuntu baseline script runs
+the core C++ and Python unit tests. New runtime functionality must add a
+deterministic unit test in its corresponding `cyber/` package.
 
-每个示例必须满足：
+Every example must:
 
-- 有 Bazel 构建目标；
-- 有最小运行说明；
-- 不依赖 `/apollo` 等机器绝对路径；
-- 至少由一个 smoke 或 integration 测试覆盖。
+- provide a Bazel build target;
+- include minimal run instructions;
+- avoid machine-specific absolute paths such as `/apollo`;
+- be covered by at least one smoke or integration test.
 
-## 性能 Baseline
+## Performance baseline
 
-性能不与短时功能测试共用绝对阈值。基础发布归档结构化 JSON，并仅与同硬件、
-同系统、同配置下的历史结果比较：
+Performance does not share absolute thresholds with short functional tests.
+The release archives structured JSON and compares results only with historical
+results from the same hardware, operating system, and configuration:
 
 ```bash
 bash scripts/release/run_performance_baseline.sh
 ```
 
-报告写入 `artifacts/performance/<UTC timestamp>/`：
+Reports are written to `artifacts/performance/<UTC timestamp>/`:
 
-- `baseline.json`：延迟、吞吐、丢失、重复、CPU、RSS、上下文切换；
-- `summary.md`：按传输覆盖范围和消息类型汇总的可阅读结果；
-- `benchmark.log`：执行日志；
-- `metadata.txt`：Git SHA、Bazel 版本、内核与执行模式。
+- `baseline.json`: latency, throughput, loss, duplicates, CPU, RSS, and
+  context switches;
+- `summary.md`: readable results grouped by transport coverage and message
+  type;
+- `benchmark.log`: execution log;
+- `metadata.txt`: Git SHA, Bazel version, kernel, and execution mode.
 
-默认 `--quick` 用于 release candidate 冒烟。使用 `--full` 运行完整矩阵。若性能
-结果中存在失败 case、核心 intra/SHM 1:1 场景出现非零丢失、异常资源增长，或相对
-上一同环境基线明显退化，则阻断发布。跨主机模拟场景用于趋势观察，不应用作首次基础
-版本的绝对性能门槛。
+The default `--quick` mode is for release-candidate smoke testing. Use
+`--full` for the complete matrix. Block a release if a case fails, a core
+intra/SHM 1:1 case loses messages, resources grow unexpectedly, or results
+regress materially against the previous equivalent baseline. Cross-host
+simulations are for trend analysis, not absolute gates for the first stable
+release.
 
-### 大消息 Protobuf 与 POD 比较
+### Large-message Protobuf and POD comparison
 
-默认性能脚本额外执行同机跨进程 1:1 的大消息对比：SHM Protobuf 与 Iceoryx POD
-以相同的 30 Hz 发送 1、4、7 MiB payload，每个点持续 3 秒。`summary.md` 的
-`Large-message comparison` 表记录 p99 延迟、MiB/s、丢失率和 POD 零拷贝状态。
-这用于确认同机数据平面的合理性；它不与 RTPS 跨主机路径混合比较。
+The performance script also compares same-host, cross-process 1:1 transfers:
+SHM Protobuf and Iceoryx POD send 1, 4, and 7 MiB payloads at 30 Hz for
+three seconds per point. The `Large-message comparison` table in `summary.md`
+records p99 latency, MiB/s, loss rate, and POD zero-copy status. This validates
+the same-host data plane and is not mixed with cross-host RTPS results.
 
-Iceoryx POD 的单 chunk 容量约为 8 MiB，因此 7 MiB 是当前基础版本的最大对比点。
-超过该上限应使用分片/分块协议或 RTPS，而不是将单个 payload 强行发送到 POD 通道。
+An Iceoryx POD chunk is approximately 8 MiB, making 7 MiB the largest comparison
+point in this baseline. Larger payloads should use a chunked protocol or RTPS.
 
-#### 2026-08-05 同机大消息基线
+#### Same-host large-message baseline on 2026-08-05
 
-以下结果来自 `artifacts/performance/protobuf-pod-20260805/`。所有 case 均为
-独立 publisher/subscriber 进程、1:1、30 Hz、持续 3 秒；Protobuf 使用 SHM，
-POD 使用 Iceoryx loan。两条路径均无发送失败和消息丢失。
+The results below are from `artifacts/performance/protobuf-pod-20260805/`.
+Each case uses independent publisher and subscriber processes, 1:1 delivery,
+30 Hz, and three seconds. Protobuf uses SHM; POD uses an Iceoryx loan. Neither
+path had send failures or message loss.
 
 | Payload | Protobuf p99 | POD p99 | Payload throughput | Protobuf CPU | POD CPU | Protobuf RSS | POD RSS |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -87,19 +99,23 @@ POD 使用 Iceoryx loan。两条路径均无发送失败和消息丢失。
 | 4 MiB | 6.034 ms | 1.192 ms | 120 MiB/s | 7.40% | 2.20% | 594 MiB | 196 MiB |
 | 7 MiB | 9.241 ms | 3.473 ms | 210 MiB/s | 9.33% | 3.02% | 793 MiB | 298 MiB |
 
-POD 在上述矩阵中每点完成 90 次借用发布且 `zero_copy_copy_count=0`。因此基础版本
-的推荐策略是：同机大消息优先使用 POD/Iceoryx；需要 protobuf 语义或超过 8 MiB
-单 chunk 上限时使用 Protobuf SHM，并采用分块传输控制内存占用。该表是同一机器上的
-首个参考基线；版本间比较必须使用相同内核、CPU 绑定、Iceoryx 配置和脚本参数。
+POD completed 90 loaned publications per point with
+`zero_copy_copy_count=0`. The baseline recommendation is to prefer POD/Iceoryx
+for same-host large messages. Use Protobuf SHM when protobuf semantics are
+required or payloads exceed the 8 MiB single-chunk limit, with chunking to
+control memory usage. This is a first reference baseline; comparisons require
+the same kernel, CPU affinity, Iceoryx configuration, and script arguments.
 
-## 发布最小验收
+## Minimum release acceptance
 
-发布候选必须具备：
+A release candidate must have:
 
-1. 锁文件检查、基础发布脚本和示例构建全部通过；
-2. 集成回归全部通过；
-3. 性能 JSON、日志和元数据已归档；
-4. `build_release_artifacts.sh` 生成的 native 包和 Python wheel 可安装、可启动。
+1. passing lockfile checks, baseline scripts, and example builds;
+2. passing integration regression tests;
+3. archived performance JSON, logs, and metadata;
+4. installable and runnable native and Python artifacts from
+   `build_release_artifacts.sh`.
 
-不在基础版本强制要求完整覆盖率门槛、24 小时 soak 或跨主机性能比较；这些属于后续
-增强门禁，不应拖慢首次稳定发布。
+The first stable release does not require a full coverage threshold, a
+24-hour soak, or cross-host performance comparison. Those are later
+enhancements and should not delay the initial stable baseline.

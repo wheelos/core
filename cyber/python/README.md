@@ -1,70 +1,25 @@
-# Cyber RT Python API : An Example
+# pycyber
 
-This document is an example demonstrating how to use Cyber RT Python API
-to write your own Python3 programs. Please make sure you have built Apollo
-successfully.
+`pycyber` packages the Cyber RT Python bindings from this repository.
 
-## Step 1: Write your own code.
+The release flow stages Bazel-built native extensions and Python modules,
+builds wheel and source distributions, repairs Linux wheels with `auditwheel`,
+validates installation and imports in an isolated virtual environment, and
+runs `cyber/python/cyber_py3/examples` smoke tests.
 
-Save it as, say, `path/to/my_demo.py`.
+For packaging-side example verification, run:
 
-```python3
-#!/usr/bin/env python3
-
-import sys
-
-from cyber.python.cyber_py3 import cyber
-
-
-cyber.init()
-
-if not cyber.ok():
-    print('Well, something went wrong.')
-    sys.exit(1)
-
-# Do your job here.
-cyber.shutdown()
+```bash
+python packaging/pycyber/verify_pycyber_examples.py
 ```
 
-## Step 2: Write Python rule for Bazel to build
+Release CI verifies wheel installation and import compatibility on CPython 3.11
+across supported Linux architectures before publishing.
 
-Edit `path/to/BUILD` file, add the followng section:
+Build artifacts with:
 
-```
-load("@rules_python//python:defs.bzl", "py_binary")
-
-# blablahblah...
-
-# Add your own section here
-py_binary(
-    name = "my_demo",
-    srcs = ["my_demo.py"],
-    deps = [
-        "//cyber/python/cyber_py3:cyber",
-    ],
-)
+```bash
+scripts/release/build_and_package_pycyber.sh
 ```
 
-**Note**: Like C++, Python code is also managed by Bazel starting from Apollo 6.0.
-Please refer to [How to Build and Run Python Apps in Apollo](../../docs/howto/how_to_build_and_run_python_app.md) for more on that.
-
-## Step 3: Build and run the demo program
-
-Now you can run the following commands to build and run the demo program.
-
-```
-bazel build //path/to:my_demo
-./bazel-bin/path/to/my_demo
-```
-
-Or simply run
-
-```
-bazel run //path/to:my_demo
-```
-
-## More Examples ...
-
-Learn more Cyber RT Python examples under the [examples](cyber_py3/examples/) and
-[tests](cyber_py3/test/) directory.
-
+Artifacts are written to `packaging/pycyber/wheelhouse/`.

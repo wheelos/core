@@ -1,60 +1,61 @@
-Cyber RT Terms
-=================
-
-This page describes the definitions of the most commonly used terminologies in Cyber RT.
+# Cyber RT terms
 
 ## Component
 
-In an autonomous driving system, modules(like perception, localization, control systems...) exist in the form of components under Cyber RT. Each component communicates with the others through Cyber channels. The component concept not only decouples modules but also provides the flexibility for modules to be divided into components based individual module design.
-
-## Channel
-
-Channels are used to manage data communication in Cyber RT. Users can publish/subscribe to the same channel to achieve p2p communication.
-
-## Task
-
-Task is the abstract description of an asynchronous computation task in Cyber RT.
+A dynamically loaded application module. A component implements `Init()` and
+`Proc(...)`, declares its input readers, and is registered with
+`CYBER_REGISTER_COMPONENT`.
 
 ## Node
 
-Node is the fundamental building block of Cyber RT; every module contains and communicates through the node. A module can have different types of communication by defining read/write and/or service/client in a node.
+The application-facing object that owns publishers, subscribers, services,
+clients, timers, and parameters.
 
-## Reader/Writer
+## Channel
 
-Message read/write class from/to channel. Reader/Writer are normally created within a node as the major message transfer interface in Cyber RT.
+A named publish/subscribe data path. Writers publish messages and readers
+receive messages through the configured transport.
 
-## Service/Client
+## Writer and reader
 
-Besides Reader/writer, Cyber RT also provides service/client pattern for module communication. It supports two-way communication between nodes. A client node will receive a response when a request is made to a service.
+A writer publishes typed or raw messages to a channel. A reader subscribes to
+a channel and invokes its callback or schedules a component task.
+
+## Service and client
+
+A service handles request/response RPC calls. A client sends requests and
+waits for responses. Service discovery is separate from message transport.
 
 ## Parameter
 
-Parameter service provides a global parameter access interface in Cyber RT. It's built based on the service/client pattern.
+A key/value API implemented through the service/client mechanism. Parameters
+can be read and updated by nodes that share the same discovery domain.
 
-## Service discovery
+## Task and coroutine
 
-As a decentralized design framework, Cyber RT does not have a master/central node for service registration. All nodes are treated equally and can find other service nodes through `service discovery`. `UDP` is used in Service discovery.
+A task is a schedulable unit of work. Cyber RT uses cooperative, stackful
+coroutines; blocking work can occupy its assigned Processor and delay other
+tasks.
 
-## CRoutine
+## Component DAG
 
-Referred to as Coroutine concept, Cyber RT implemented CRoutine to optimize thread usage and system resource allocation.
+A protobuf configuration that names shared libraries, registered classes,
+reader channels, and timer components. `mainboard` loads the DAG.
 
-## Scheduler
+## Record
 
-To better support autonomous driving scenarios, Cyber RT provides different kinds of resource scheduling algorithms for developers to choose from.
+An on-disk stream of channel messages used for capture, inspection, and
+playback. The native recorder tools and Python record APIs provide access to
+record files.
 
-## Message
+## Transport
 
-Message is the data unit used in Cyber RT for data transfer between modules.
+The runtime can select in-process, shared-memory, RTPS, or hybrid transport.
+Topology discovery tells participants which endpoints exist; transport moves
+the data.
 
-## Dag file
+## Domain and topology
 
-Dag file is the config file of module topology. You can define components used and upstream/downstream channels in the dag file.
-
-## Launch files
-
-The Launch file provides an easy way to start modules. By defining one or multiple dag files in the launch file, you can start multiple modules at the same time.
-
-## Record file
-
-The Record file is used to record messages sent/received to/from channels in Cyber RT. Reply record files can help reproduce the behavior of previous operations of Cyber RT.
+`CYBER_DOMAIN_ID` separates independent runtime domains. Topology discovery
+announces nodes, channels, readers, writers, services, and clients inside a
+domain.

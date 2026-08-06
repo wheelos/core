@@ -1,47 +1,24 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import os
-import subprocess
-
-import sphinx_rtd_theme
-
-
-on_rtd = os.environ.get('READTHEDOCS', None) == 'True'
-
-if on_rtd:
-    subprocess.call('cd ..; doxygen', shell=True)
-
-
 html_theme = "sphinx_rtd_theme"
 
-html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
-
-
-def setup(app):
-    if hasattr(app, "add_css_file"):
-        app.add_css_file("main_stylesheet.css")
-    else:
-        app.add_stylesheet("main_stylesheet.css")
-
-
-extensions = ['breathe', 'recommonmark']
-breathe_projects = {'Cyber RT Documents': '../xml'}
-templates_path = ['_templates']
-html_static_path = ['_static']
+extensions = ["breathe", "recommonmark"]
+breathe_projects = {"wheelos_core": "../xml"}
+breathe_default_project = "wheelos_core"
 source_suffix = {
-    '.rst': 'restructuredtext',
-    '.md': 'markdown',
+    ".rst": "restructuredtext",
+    ".md": "markdown",
 }
-master_doc = 'index'
-project = 'Cyber RT Documents'
-copyright = '2019, Apollo'
-author = 'Apollo Baidu'
+master_doc = "index"
+project = "wheelos_core"
+copyright = "2024, WheelOS contributors"
+author = "WheelOS contributors"
 
 #html_logo = 'quantstack-white.svg'
 
 exclude_patterns = []
-highlight_language = 'c++'
-pygments_style = 'sphinx'
+highlight_language = "c++"
+pygments_style = "sphinx"
 todo_include_todos = False
-htmlhelp_basename = 'CyberRTdoc'
+htmlhelp_basename = "wheelos_core"
