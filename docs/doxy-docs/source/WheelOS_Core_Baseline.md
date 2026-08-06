@@ -65,6 +65,33 @@ bash scripts/release/run_performance_baseline.sh
 上一同环境基线明显退化，则阻断发布。跨主机模拟场景用于趋势观察，不应用作首次基础
 版本的绝对性能门槛。
 
+### 大消息 Protobuf 与 POD 比较
+
+默认性能脚本额外执行同机跨进程 1:1 的大消息对比：SHM Protobuf 与 Iceoryx POD
+以相同的 30 Hz 发送 1、4、7 MiB payload，每个点持续 3 秒。`summary.md` 的
+`Large-message comparison` 表记录 p99 延迟、MiB/s、丢失率和 POD 零拷贝状态。
+这用于确认同机数据平面的合理性；它不与 RTPS 跨主机路径混合比较。
+
+Iceoryx POD 的单 chunk 容量约为 8 MiB，因此 7 MiB 是当前基础版本的最大对比点。
+超过该上限应使用分片/分块协议或 RTPS，而不是将单个 payload 强行发送到 POD 通道。
+
+#### 2026-08-05 同机大消息基线
+
+以下结果来自 `artifacts/performance/protobuf-pod-20260805/`。所有 case 均为
+独立 publisher/subscriber 进程、1:1、30 Hz、持续 3 秒；Protobuf 使用 SHM，
+POD 使用 Iceoryx loan。两条路径均无发送失败和消息丢失。
+
+| Payload | Protobuf p99 | POD p99 | Payload throughput | Protobuf CPU | POD CPU | Protobuf RSS | POD RSS |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 MiB | 1.129 ms | 0.468 ms | 30 MiB/s | 4.27% | 1.43% | 392 MiB | 96 MiB |
+| 4 MiB | 6.034 ms | 1.192 ms | 120 MiB/s | 7.40% | 2.20% | 594 MiB | 196 MiB |
+| 7 MiB | 9.241 ms | 3.473 ms | 210 MiB/s | 9.33% | 3.02% | 793 MiB | 298 MiB |
+
+POD 在上述矩阵中每点完成 90 次借用发布且 `zero_copy_copy_count=0`。因此基础版本
+的推荐策略是：同机大消息优先使用 POD/Iceoryx；需要 protobuf 语义或超过 8 MiB
+单 chunk 上限时使用 Protobuf SHM，并采用分块传输控制内存占用。该表是同一机器上的
+首个参考基线；版本间比较必须使用相同内核、CPU 绑定、Iceoryx 配置和脚本参数。
+
 ## 发布最小验收
 
 发布候选必须具备：

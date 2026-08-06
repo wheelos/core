@@ -3,13 +3,15 @@ set -euo pipefail
 
 OUTDIR=""
 QUICK=true
+LARGE_MESSAGE_COMPARISON=true
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --outdir) OUTDIR="$2"; shift 2 ;;
     --full) QUICK=false; shift ;;
+    --skip-large-message-comparison) LARGE_MESSAGE_COMPARISON=false; shift ;;
     -h|--help)
-      echo "Usage: $0 [--outdir DIR] [--full]"
+      echo "Usage: $0 [--outdir DIR] [--full] [--skip-large-message-comparison]"
       exit 0
       ;;
     *)
@@ -35,6 +37,14 @@ bazel build --config=ci \
 BENCHMARK_ARGS=("--output_json=$REPO_ROOT/$OUTDIR/baseline.json")
 if [ "$QUICK" = true ]; then
   BENCHMARK_ARGS+=("--quick")
+fi
+if [ "$LARGE_MESSAGE_COMPARISON" = true ]; then
+  BENCHMARK_ARGS+=(
+    "--run_payload_sweep_comparison=true"
+    "--payload_sweep_sizes_mb=1,4,7"
+    "--payload_sweep_frequency_hz=30"
+    "--payload_sweep_duration_s=3"
+  )
 fi
 
 CYBER_PATH="$REPO_ROOT/cyber" \
@@ -70,6 +80,70 @@ with open(sys.argv[2], "w", encoding="utf-8") as summary:
             f"{values[3]:.0f} | {values[4]:.1f} | {values[2]} | "
             f"{values[5]:.6f} |\n"
         )
+
+payloads = defaultdict(dict)
+for result in results:
+    if result["scenario"] == "payload_sweep":
+        payloads[result["payload_bytes"] // (1024 * 1024)][
+            result["message_type"]
+        ] = result
+
+if payloads:
+    with open(sys.argv[2], "a", encoding="utf-8") as summary:
+        summary.write(
+            "\n## Large-message comparison: SHM Protobuf vs Iceoryx POD\n\n"
+        )
+        summary.write("| Payload (MiB) | Protobuf p99 (ms) | POD p99 (ms) | "
+                      "Protobuf MiB/s | POD MiB/s | Protobuf loss | POD loss | "
+                      "POD zero-copy |\n")
+        summary.write(
+            "| ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |\n"
+        )
+        for payload, pair in sorted(payloads.items()):
+            protobuf = pair.get("protobuf")
+            pod = pair.get("pod")
+
+            def value(result, group, key, scale=1.0):
+                if result is None:
+                    return "n/a"
+                return f"{result[group][key] / scale:.3f}"
+
+            pod_zero_copy = (
+                "yes" if pod and "zero_copy_copy_count=0" in pod["notes"]
+                else "no" if pod else "n/a"
+            )
+            summary.write(
+                f"| {payload} | "
+                f"{value(protobuf, 'latency', 'p99_ns', 1e6)} | "
+                f"{value(pod, 'latency', 'p99_ns', 1e6)} | "
+                f"{value(protobuf, 'throughput', 'mb_per_s')} | "
+                f"{value(pod, 'throughput', 'mb_per_s')} | "
+                f"{value(protobuf, 'reliability', 'loss_rate')} | "
+                f"{value(pod, 'reliability', 'loss_rate')} | {pod_zero_copy} |\n"
+            )
+PY
+
+python3 - "$OUTDIR/baseline.json" <<'PY'
+import json
+import sys
+
+failed = [
+    result
+    for result in json.load(open(sys.argv[1], encoding="utf-8"))["results"]
+    if not result["success"]
+]
+if failed:
+    for result in failed:
+        print(
+            "Performance case failed:",
+            result["scenario"],
+            result["coverage"],
+            result["message_type"],
+            result["payload_bytes"],
+            result["error_message"],
+            file=sys.stderr,
+        )
+    sys.exit(1)
 PY
 
 {

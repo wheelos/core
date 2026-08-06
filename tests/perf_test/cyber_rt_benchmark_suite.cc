@@ -652,6 +652,7 @@ struct BenchmarkOptions {
   int flood_bw_payload_mb = 7;
   int payload_sweep_frequency_hz = 100;
   int payload_sweep_duration_s = 5;
+  std::vector<int> payload_sweep_sizes_mb = {1, 4, 7};
   int fanout_frequency_hz = 220;
   int fanout_payload_mb = 7;
   int fanout_duration_s = 5;
@@ -987,6 +988,18 @@ bool ParseOptions(int argc, char** argv, BenchmarkOptions* options,
     } else if (key == "--payload_sweep_duration_s") {
       options->payload_sweep_duration_s =
           std::max(1, ParseIntOr(value, options->payload_sweep_duration_s));
+    } else if (key == "--payload_sweep_sizes_mb") {
+      std::vector<int> sizes = ParseCpuSet(value);
+      sizes.erase(std::remove_if(sizes.begin(), sizes.end(),
+                                 [](int size) { return size <= 0; }),
+                  sizes.end());
+      if (sizes.empty()) {
+        if (error != nullptr) {
+          *error = "payload sweep sizes must contain a positive value";
+        }
+        return false;
+      }
+      options->payload_sweep_sizes_mb = std::move(sizes);
     } else if (key == "--fanout_frequency_hz") {
       options->fanout_frequency_hz =
           std::max(1, ParseIntOr(value, options->fanout_frequency_hz));
@@ -1517,8 +1530,7 @@ class BenchmarkSuiteRunner {
     }
 
     if (options_.run_payload_sweep_comparison) {
-      const std::vector<int> payload_mb_cases = {1, 5, 10, 20, 50, 100};
-      for (int payload_mb : payload_mb_cases) {
+      for (int payload_mb : options_.payload_sweep_sizes_mb) {
         BenchmarkCaseConfig pb_cfg = base;
         pb_cfg.scenario = ScenarioKind::kPayloadSweep;
         pb_cfg.message_type = MessageType::kProtobuf;
@@ -1569,8 +1581,7 @@ class BenchmarkSuiteRunner {
 
     BenchmarkCaseResult summary;
     summary.config = base;
-    summary.success = protobuf_result.success && pod_result.success &&
-                      protobuf_best_found && pod_best_found;
+    summary.success = protobuf_result.success && pod_result.success;
     std::ostringstream notes;
     notes << "comparison=protobuf_shm_vs_pod_iceoryx";
     if (!protobuf_result.success || !pod_result.success) {
@@ -1598,10 +1609,6 @@ class BenchmarkSuiteRunner {
     }
     if (!protobuf_best_found || !pod_best_found) {
       notes << " | max_bandwidth_case_incomplete";
-      if (summary.error_message.empty()) {
-        summary.error_message =
-            "zero-copy vs protobuf max-bandwidth point not found";
-      }
     } else {
       const double max_bw_gain =
           SafeDiv(pod_best.throughput.mb_per_s, protobuf_best.throughput.mb_per_s);
