@@ -23,6 +23,11 @@
 #include <thread>
 #include <vector>
 
+#if __has_include(<valgrind/memcheck.h>)
+#include <valgrind/memcheck.h>
+#define WHEELOS_RECORD_PERF_HAS_VALGRIND 1
+#endif
+
 #include "google/protobuf/io/zero_copy_stream_impl_lite.h"
 #include "google/protobuf/wire_format_lite.h"
 
@@ -93,6 +98,15 @@ struct QueuedMessage {
   proto::SingleMessage message;
   uint64_t byte_size = 0;
 };
+
+void MarkReadBufferDefined(const char* payload, size_t size) {
+#if WHEELOS_RECORD_PERF_HAS_VALGRIND
+  VALGRIND_MAKE_MEM_DEFINED(payload, size);
+#else
+  (void)payload;
+  (void)size;
+#endif
+}
 
 class ReservoirQueue {
  public:
@@ -298,6 +312,9 @@ void UpdateMessageJitter(const proto::ChunkBody& chunk_body, RunningStats* stats
 bool ParseChunkBodyStreamingWithCallback(
     const char* payload, size_t size,
     const std::function<bool(const proto::SingleMessage&)>& on_message) {
+  if (size > static_cast<size_t>(std::numeric_limits<int>::max())) {
+    return false;
+  }
   google::protobuf::io::ArrayInputStream array_input(payload, static_cast<int>(size));
   google::protobuf::io::CodedInputStream coded_input(&array_input);
   proto::SingleMessage reusable_message;
@@ -319,6 +336,11 @@ bool ParseChunkBodyStreamingWithCallback(
     }
     uint32_t len = 0;
     if (!coded_input.ReadVarint32(&len)) {
+      return false;
+    }
+    const int bytes_until_limit = coded_input.BytesUntilLimit();
+    if (bytes_until_limit >= 0 &&
+        static_cast<uint64_t>(len) > static_cast<uint64_t>(bytes_until_limit)) {
       return false;
     }
     auto limit = coded_input.PushLimit(static_cast<int>(len));
@@ -463,6 +485,15 @@ bool RunIoUringPingPong(int fd, const std::vector<ChunkMeta>& chunks, uint32_t s
       io_uring_queue_exit(&ring);
       return false;
     }
+    const auto& meta = chunks[i];
+    if (cqe->res != static_cast<int>(meta.payload_size)) {
+      io_uring_cqe_seen(&ring, cqe);
+      io_uring_unregister_buffers(&ring);
+      free(slot0);
+      free(slot1);
+      io_uring_queue_exit(&ring);
+      return false;
+    }
     const int slot_index = static_cast<int>(io_uring_cqe_get_data64(cqe) & 0x1ULL);
     io_uring_cqe_seen(&ring, cqe);
 
@@ -479,8 +510,8 @@ bool RunIoUringPingPong(int fd, const std::vector<ChunkMeta>& chunks, uint32_t s
       }
     }
 
-    const auto& meta = chunks[i];
     const char* payload = reinterpret_cast<const char*>(slot_index == 0 ? slot0 : slot1);
+    MarkReadBufferDefined(payload, meta.payload_size);
     if (stream_parse) {
       bool ok = ParseChunkBodyStreamingWithCallback(
           payload, meta.payload_size, [&](const proto::SingleMessage&) {
@@ -637,11 +668,17 @@ bool RunIoUringHysteresisReplay(int fd, const std::vector<ChunkMeta>& chunks, ui
       failed = true;
       break;
     }
+    const auto& meta = chunks[i];
+    if (cqe->res != static_cast<int>(meta.payload_size)) {
+      io_uring_cqe_seen(&ring, cqe);
+      failed = true;
+      break;
+    }
     const int slot_index = static_cast<int>(io_uring_cqe_get_data64(cqe) & 0x1ULL);
     io_uring_cqe_seen(&ring, cqe);
 
-    const auto& meta = chunks[i];
     const char* payload = reinterpret_cast<const char*>(slot_index == 0 ? slot0 : slot1);
+    MarkReadBufferDefined(payload, meta.payload_size);
     bool parse_ok = ParseChunkBodyStreamingWithCallback(
         payload, meta.payload_size, [&](const proto::SingleMessage& msg) {
           while (queue.BytesInQueue() >= config.high_watermark_bytes) {

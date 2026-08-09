@@ -18,6 +18,7 @@ record I/O, native tools, and Python bindings.
 - [Scheduling and deployment](CyberRT_Scheduling_Deployment.md)
 - [Terminology](CyberRT_Terms.md)
 - [Release baseline](WheelOS_Core_Baseline.md)
+- [Release readiness](WheelOS_Core_Release_Readiness.md)
 
 ## API reference
 
@@ -39,6 +40,7 @@ Doxygen and rendered by Sphinx:
    CyberRT_Scheduling_Deployment
    CyberRT_Terms
    WheelOS_Core_Baseline
+   WheelOS_Core_Release_Readiness
 
 ## Build the documentation
 
