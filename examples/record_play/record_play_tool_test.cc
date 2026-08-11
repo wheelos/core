@@ -22,6 +22,7 @@
 
 #include "gtest/gtest.h"
 
+#include "google/protobuf/any.pb.h"
 #include "cyber/cyber.h"
 #include "examples/record_play/record_play_tool.h"
 #include "cyber/message/raw_message.h"
@@ -37,6 +38,7 @@ constexpr char kTestSource[] = "record_play_tool_test_source.record";
 constexpr char kTestPodSource[] = "record_play_tool_test_pod_source.record";
 constexpr char kTestConverted[] = "record_play_tool_test_converted.record";
 constexpr char kTestManifest[] = "record_play_tool_test.manifest";
+constexpr char kTestMixedSource[] = "record_play_tool_test_mixed_source.record";
 
 struct FakeWriter {
   explicit FakeWriter(bool write_result) : write_result(write_result) {}
@@ -55,6 +57,7 @@ void CleanupArtifacts() {
   (void)std::remove(kTestPodSource);
   (void)std::remove(kTestConverted);
   (void)std::remove(kTestManifest);
+  (void)std::remove(kTestMixedSource);
 }
 
 void WriteSourceRecord() {
@@ -148,6 +151,118 @@ bool WritePodSourceRecord(RecordPlayItems* expected) {
   return true;
 }
 
+void WriteMixedSourceRecord() {
+  record::RecordWriter writer;
+  writer.SetSizeOfFileSegmentation(0);
+  writer.SetIntervalOfFileSegmentation(0);
+  ASSERT_TRUE(writer.Open(kTestMixedSource));
+
+  google::protobuf::FileDescriptorProto image_file;
+  image_file.set_name("record_play_test_image.proto");
+  image_file.set_package("apollo.drivers");
+  auto* image_descriptor = image_file.add_message_type();
+  image_descriptor->set_name("Image");
+  auto* data_field = image_descriptor->add_field();
+  data_field->set_name("data");
+  data_field->set_number(1);
+  data_field->set_label(google::protobuf::FieldDescriptorProto::LABEL_OPTIONAL);
+  data_field->set_type(google::protobuf::FieldDescriptorProto::TYPE_BYTES);
+  auto* width_field = image_descriptor->add_field();
+  width_field->set_name("width");
+  width_field->set_number(2);
+  width_field->set_label(
+      google::protobuf::FieldDescriptorProto::LABEL_OPTIONAL);
+  width_field->set_type(google::protobuf::FieldDescriptorProto::TYPE_UINT32);
+  auto* height_field = image_descriptor->add_field();
+  height_field->set_name("height");
+  height_field->set_number(3);
+  height_field->set_label(
+      google::protobuf::FieldDescriptorProto::LABEL_OPTIONAL);
+  height_field->set_type(google::protobuf::FieldDescriptorProto::TYPE_UINT32);
+  auto* step_field = image_descriptor->add_field();
+  step_field->set_name("step");
+  step_field->set_number(4);
+  step_field->set_label(google::protobuf::FieldDescriptorProto::LABEL_OPTIONAL);
+  step_field->set_type(google::protobuf::FieldDescriptorProto::TYPE_UINT32);
+  ASSERT_TRUE(message::ProtobufFactory::Instance()->RegisterMessage(image_file));
+  std::unique_ptr<google::protobuf::Message> image_message(
+      message::ProtobufFactory::Instance()->GenerateMessageByType(
+          "apollo.drivers.Image"));
+  ASSERT_NE(image_message, nullptr);
+  const auto* image_reflection = image_message->GetReflection();
+  image_reflection->SetString(
+      image_message.get(),
+      image_message->GetDescriptor()->FindFieldByName("data"), "image");
+  image_reflection->SetUInt32(
+      image_message.get(),
+      image_message->GetDescriptor()->FindFieldByName("width"), 2);
+  image_reflection->SetUInt32(
+      image_message.get(),
+      image_message->GetDescriptor()->FindFieldByName("height"), 1);
+  image_reflection->SetUInt32(
+      image_message.get(),
+      image_message->GetDescriptor()->FindFieldByName("step"), 5);
+  std::string image_bytes;
+  ASSERT_TRUE(image_message->SerializeToString(&image_bytes));
+  std::string image_descriptor_string;
+  message::ProtobufFactory::GetDescriptorString(*image_message,
+                                                &image_descriptor_string);
+
+  std::string descriptor;
+  message::ProtobufFactory::GetDescriptorString(
+      google::protobuf::Any::descriptor(), &descriptor);
+  ASSERT_TRUE(writer.WriteChannel("/test/other", "google.protobuf.Any",
+                                  descriptor));
+  google::protobuf::Any any;
+  any.set_type_url("test/type");
+  any.set_value("exact protobuf bytes");
+  const std::string any_bytes = [&any]() {
+    std::string bytes;
+    EXPECT_TRUE(any.SerializeToString(&bytes));
+    return bytes;
+  }();
+
+  const transport::PodChunkHeader cloud_header{
+      transport::PodChunkHeader::kMagic,
+      transport::PodChunkHeader::kVersion,
+      sizeof(transport::PodChunkHeader),
+      static_cast<uint32_t>(transport::PodPayloadKind::POINT_CLOUD),
+      103,
+      2,
+      1,
+      1,
+      24,
+      0,
+      5,
+      9,
+      {1, 2, 3, 4}};
+  transport::PodMessage cloud(cloud_header, "point", 5);
+  std::string cloud_bytes;
+  ASSERT_TRUE(cloud.SerializeToString(&cloud_bytes));
+
+  ASSERT_TRUE(writer.WriteChannel(kImageFront6mm, "apollo.drivers.Image",
+                                  image_descriptor_string));
+  ASSERT_TRUE(writer.WriteChannel(kImageFront12mm, "apollo.drivers.Image",
+                                  image_descriptor_string));
+  ASSERT_TRUE(writer.WriteChannel(kPointCloud64,
+                                  transport::PodMessage::TypeName(),
+                                  transport::PodSchemaDescriptor()));
+  ASSERT_TRUE(writer.WriteMessage(kImageFront6mm, image_bytes, 101));
+  ASSERT_TRUE(writer.WriteMessage("/test/other", any_bytes, 102));
+  ASSERT_TRUE(writer.WriteMessage(kPointCloud64, cloud_bytes, 103));
+  ASSERT_TRUE(writer.WriteMessage(kImageFront12mm, image_bytes, 104));
+  writer.Close();
+}
+
+std::string MakeExpectedAnyBytes() {
+  google::protobuf::Any any;
+  any.set_type_url("test/type");
+  any.set_value("exact protobuf bytes");
+  std::string bytes;
+  EXPECT_TRUE(any.SerializeToString(&bytes));
+  return bytes;
+}
+
 }  // namespace
 
 TEST(RecordPlayToolTest, ConvertAndBorrowRoundTrip) {
@@ -211,6 +326,47 @@ TEST(RecordPlayToolTest, ConvertExistingPodRecordPreservesHeaders) {
   }
   EXPECT_EQ(seen, expected_items.size());
 
+  CleanupArtifacts();
+}
+
+TEST(RecordPlayToolTest, MixedConversionPreservesNonSensorAndAlignment) {
+  CleanupArtifacts();
+  WriteMixedSourceRecord();
+
+  MixedConvertedRecordResult result;
+  ASSERT_TRUE(ConvertRecordToMixedPod(
+      kTestMixedSource, kTestConverted, kTestManifest,
+      /*max_per_channel=*/0, &result));
+  EXPECT_EQ(result.channels, 4U);
+  EXPECT_EQ(result.messages, 4U);
+  EXPECT_EQ(result.pod_messages, 3U);
+  EXPECT_EQ(result.protobuf_messages, 1U);
+  ASSERT_EQ(result.by_type["google.protobuf.Any"].messages, 1U);
+
+  record::RecordReader reader(kTestConverted);
+  ASSERT_TRUE(reader.IsValid());
+  const std::vector<std::string> expected_channels = {
+      kImageFront6mm, "/test/other", kPointCloud64, kImageFront12mm};
+  const std::vector<uint64_t> expected_times = {101, 102, 103, 104};
+  record::RecordMessage message;
+  std::size_t index = 0;
+  while (reader.ReadMessage(&message)) {
+    ASSERT_LT(index, expected_channels.size());
+    EXPECT_EQ(message.channel_name, expected_channels[index]);
+    EXPECT_EQ(message.time, expected_times[index]);
+    if (message.channel_name == "/test/other") {
+      EXPECT_EQ(reader.GetMessageType(message.channel_name),
+                "google.protobuf.Any");
+      EXPECT_EQ(message.content, MakeExpectedAnyBytes());
+    } else {
+      EXPECT_EQ(reader.GetMessageType(message.channel_name),
+                transport::PodMessage::TypeName());
+      transport::PodMessage pod;
+      EXPECT_TRUE(pod.ParseFromString(message.content));
+    }
+    ++index;
+  }
+  EXPECT_EQ(index, expected_channels.size());
   CleanupArtifacts();
 }
 

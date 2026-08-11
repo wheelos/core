@@ -51,6 +51,26 @@ cc_binary(
     ],
 )
 
+cc_binary(
+    name = "pod_image_publisher",
+    srcs = ["pod_image_publisher.cc"],
+    deps = [
+        "//cyber",
+        "//cyber:init",
+        "//cyber/transport/message:pod_message",
+    ],
+)
+
+cc_binary(
+    name = "pod_image_subscriber",
+    srcs = ["pod_image_subscriber.cc"],
+    deps = [
+        "//cyber",
+        "//cyber:init",
+        "//cyber/transport/message:pod_message",
+    ],
+)
+
 cc_test(
     name = "record_play_tool_test",
     size = "small",
@@ -58,6 +78,7 @@ cc_test(
     deps = [
         ":record_play_tool",
         "//cyber:init",
+        "@com_google_protobuf//:protobuf",
         "@com_google_googletest//:gtest_main",
     ],
 )

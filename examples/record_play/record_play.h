@@ -22,6 +22,7 @@
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
+#include <initializer_list>
 #include <limits>
 #include <map>
 #include <memory>
@@ -33,7 +34,11 @@
 
 #include <unistd.h>
 
+#include "google/protobuf/descriptor.h"
+#include "google/protobuf/message.h"
 #include "cyber/common/log.h"
+#include "cyber/message/message_traits.h"
+#include "cyber/message/protobuf_factory.h"
 #include "cyber/record/record_reader.h"
 #include "cyber/transport/message/pod_message.h"
 #include "cyber/transport/transport.h"
@@ -80,6 +85,7 @@ struct RecordPlayItem {
   std::string channel_name;
   transport::PodChunkHeader header;
   uint64_t payload_hash = 0;
+  std::size_t source_size = 0;
   std::vector<uint8_t> payload;
 };
 
@@ -133,6 +139,28 @@ inline bool LoadRecordPlayItems(const std::string& record_path,
   }
 
   std::map<std::string, std::size_t> per_channel_count;
+  auto* factory = message::ProtobufFactory::Instance();
+  for (const auto& channel : reader.GetChannelList()) {
+    const auto& descriptor = reader.GetProtoDesc(channel);
+    if (!descriptor.empty() &&
+        !transport::IsPodSchemaDescriptor(descriptor)) {
+      if (!factory->RegisterMessage(descriptor)) {
+        AERROR << "failed to register protobuf descriptor for " << channel;
+        return false;
+      }
+    }
+  }
+
+  const auto find_field = [](const google::protobuf::Descriptor* descriptor,
+                             std::initializer_list<const char*> names) {
+    for (const auto* name : names) {
+      if (const auto* field = descriptor->FindFieldByName(name)) {
+        return field;
+      }
+    }
+    return static_cast<const google::protobuf::FieldDescriptor*>(nullptr);
+  };
+
   record::RecordMessage message;
   while (reader.ReadMessage(&message)) {
     if (!IsRecordPlayChannel(message.channel_name)) {
@@ -145,6 +173,7 @@ inline bool LoadRecordPlayItems(const std::string& record_path,
 
     RecordPlayItem item;
     item.channel_name = message.channel_name;
+    item.source_size = message.content.size();
     item.header.payload_kind = static_cast<uint32_t>(
         PayloadKindForChannel(message.channel_name));
     item.header.timestamp_ns = message.time;
@@ -159,8 +188,127 @@ inline bool LoadRecordPlayItems(const std::string& record_path,
                           pod_view.payload + pod_view.payload_size);
       preserve_header = true;
     } else {
-      item.payload.assign(message.content.begin(), message.content.end());
-    }
+      const auto& message_type = reader.GetMessageType(message.channel_name);
+      const bool is_sensor_payload =
+          message_type == "apollo.drivers.Image" ||
+          message_type == "apollo.drivers.PointCloud";
+      if (!is_sensor_payload) {
+        item.payload.assign(message.content.begin(), message.content.end());
+      } else {
+        std::unique_ptr<google::protobuf::Message> protobuf(
+            factory->GenerateMessageByType(message_type));
+        if (protobuf == nullptr ||
+            !message::ParseFromArray(message.content.data(),
+                                     static_cast<int>(message.content.size()),
+                                     protobuf.get())) {
+          AERROR << "failed to decode protobuf payload for "
+                 << message.channel_name;
+          return false;
+        }
+
+        const auto* descriptor = protobuf->GetDescriptor();
+        const auto* reflection = protobuf->GetReflection();
+        const auto* data_field = find_field(descriptor, {"data"});
+        if (data_field != nullptr &&
+            data_field->cpp_type() ==
+                google::protobuf::FieldDescriptor::CPPTYPE_STRING &&
+            !data_field->is_repeated()) {
+          const std::string& data =
+              reflection->GetString(*protobuf, data_field);
+          item.payload.assign(data.begin(), data.end());
+        } else {
+          const auto* point_field = find_field(descriptor, {"point"});
+          if (point_field == nullptr || !point_field->is_repeated() ||
+              point_field->cpp_type() !=
+                  google::protobuf::FieldDescriptor::CPPTYPE_MESSAGE) {
+            AERROR << "protobuf sensor channel has no image data or point "
+                      "message field: "
+                   << message.channel_name << " type=" << message_type;
+            return false;
+          }
+          const auto* point_descriptor = point_field->message_type();
+          const auto* x_field = point_descriptor->FindFieldByName("x");
+          const auto* y_field = point_descriptor->FindFieldByName("y");
+          const auto* z_field = point_descriptor->FindFieldByName("z");
+          const auto* intensity_field =
+              point_descriptor->FindFieldByName("intensity");
+          const auto* timestamp_field =
+              point_descriptor->FindFieldByName("timestamp");
+          if (x_field == nullptr || y_field == nullptr || z_field == nullptr ||
+              intensity_field == nullptr || timestamp_field == nullptr) {
+            AERROR << "unsupported point schema in " << message.channel_name;
+            return false;
+          }
+          auto append_bytes = [&item](const void* value, std::size_t size) {
+            const auto* bytes = static_cast<const uint8_t*>(value);
+            item.payload.insert(item.payload.end(), bytes, bytes + size);
+          };
+          for (int i = 0; i < reflection->FieldSize(*protobuf, point_field);
+               ++i) {
+            const auto& point =
+                reflection->GetRepeatedMessage(*protobuf, point_field, i);
+            const auto* point_reflection = point.GetReflection();
+            const float x = point_reflection->GetFloat(point, x_field);
+            const float y = point_reflection->GetFloat(point, y_field);
+            const float z = point_reflection->GetFloat(point, z_field);
+            const uint32_t intensity =
+                intensity_field->cpp_type() ==
+                        google::protobuf::FieldDescriptor::CPPTYPE_UINT32
+                    ? point_reflection->GetUInt32(point, intensity_field)
+                    : static_cast<uint32_t>(
+                          point_reflection->GetInt32(point, intensity_field));
+            const uint64_t timestamp =
+                point_reflection->GetUInt64(point, timestamp_field);
+            append_bytes(&x, sizeof(x));
+            append_bytes(&y, sizeof(y));
+            append_bytes(&z, sizeof(z));
+            append_bytes(&intensity, sizeof(intensity));
+            append_bytes(&timestamp, sizeof(timestamp));
+          }
+          item.header.stride_bytes = 24;
+        }
+
+        const auto* width_field = find_field(descriptor, {"width"});
+        const auto* height_field = find_field(descriptor, {"height"});
+        const auto* stride_field = find_field(
+            descriptor, {"step", "row_step", "point_step"});
+        const auto read_uint32 =
+            [&](const google::protobuf::FieldDescriptor* field) {
+              if (field == nullptr || field->is_repeated()) {
+                return 0U;
+              }
+              switch (field->cpp_type()) {
+                case google::protobuf::FieldDescriptor::CPPTYPE_UINT32:
+                  return reflection->GetUInt32(*protobuf, field);
+                case google::protobuf::FieldDescriptor::CPPTYPE_UINT64:
+                  return static_cast<uint32_t>(
+                      reflection->GetUInt64(*protobuf, field));
+                case google::protobuf::FieldDescriptor::CPPTYPE_INT32:
+                  return static_cast<uint32_t>(
+                      reflection->GetInt32(*protobuf, field));
+                case google::protobuf::FieldDescriptor::CPPTYPE_INT64:
+                  return static_cast<uint32_t>(
+                      reflection->GetInt64(*protobuf, field));
+                default:
+                  return 0U;
+              }
+            };
+        item.header.width = read_uint32(width_field);
+        item.header.height = read_uint32(height_field);
+        item.header.stride_bytes = read_uint32(stride_field);
+        const auto* encoding_field = find_field(descriptor, {"encoding"});
+        if (encoding_field != nullptr &&
+            encoding_field->cpp_type() ==
+                google::protobuf::FieldDescriptor::CPPTYPE_STRING &&
+            !encoding_field->is_repeated()) {
+          const std::string& encoding =
+              reflection->GetString(*protobuf, encoding_field);
+          item.header.pixel_format = static_cast<uint32_t>(
+              HashBytes(reinterpret_cast<const uint8_t*>(encoding.data()),
+                        encoding.size()));
+        }
+      }
+      }
     item.payload_hash = HashBytes(item.payload.data(), item.payload.size());
     item.header.payload_size = static_cast<uint32_t>(item.payload.size());
     if (!preserve_header) {

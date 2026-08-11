@@ -26,10 +26,10 @@ namespace record_play {
 struct RecordPlayToolOptions {
   std::string mode = "convert";
   std::string source = kDefaultRecordPath;
-  std::string output = "/tmp/record_play_pod.record";
-  std::string manifest = "/tmp/record_play_pod.manifest.tsv";
+  std::string output = "record_play_pod.record";
+  std::string manifest = "record_play_pod.manifest.tsv";
   std::string dump_dir;
-  std::size_t max_per_channel = 64;
+  std::size_t max_per_channel = 0;
 };
 
 RecordPlayToolOptions ParseOptions(int argc, char** argv) {
@@ -68,54 +68,108 @@ int RunConvert(const RecordPlayToolOptions& options) {
   return 0;
 }
 
+int RunMixedConvert(const RecordPlayToolOptions& options) {
+  MixedConvertedRecordResult result;
+  if (!ConvertRecordToMixedPod(options.source, options.output, options.manifest,
+                               options.max_per_channel, &result)) {
+    std::cerr << "mixed conversion failed" << std::endl;
+    return 1;
+  }
+  std::cout << "mixed converted " << result.messages << " messages across "
+            << result.channels << " channels (pod=" << result.pod_messages
+            << ", protobuf=" << result.protobuf_messages << ") to "
+            << options.output << std::endl;
+  for (const auto& [type, stats] : result.by_type) {
+    std::cout << "type\t" << type << "\tmessages=" << stats.messages
+              << "\tbytes=" << stats.bytes << std::endl;
+  }
+  return 0;
+}
+
 int RunBenchmark(const RecordPlayToolOptions& options) {
-  const auto protobuf_stats =
-      BenchmarkProtobufDecode(options.source, options.max_per_channel);
-  if (protobuf_stats.messages == 0) {
+  const auto protobuf_stats = BenchmarkFullProtobufRecord(
+      options.source, options.max_per_channel);
+  if (protobuf_stats.messages == 0 || protobuf_stats.failed_messages != 0) {
     std::cerr << "protobuf benchmark failed" << std::endl;
     return 1;
   }
 
   std::string converted = options.output;
-  ConvertedRecordResult result;
-  if (!ConvertRecordToPod(options.source, converted, options.manifest,
-                          options.max_per_channel, &result)) {
+  MixedConvertedRecordResult result;
+  if (!ConvertRecordToMixedPod(options.source, converted, options.manifest,
+                               options.max_per_channel, &result)) {
     return 1;
   }
 
-  const auto pod_stats = BenchmarkPodBorrow(converted);
-  if (pod_stats.messages == 0) {
-    std::cerr << "pod benchmark failed" << std::endl;
+  const auto mixed_stats =
+      BenchmarkMixedRecord(converted, options.max_per_channel);
+  if (mixed_stats.messages == 0 || mixed_stats.failed_messages != 0) {
+    std::cerr << "mixed benchmark failed" << std::endl;
     return 1;
   }
 
-  std::cout << "protobuf parse: "
+  std::cout << "protobuf parse (all channels): "
             << protobuf_stats.throughput_mb_s << " MB/s, "
             << protobuf_stats.throughput_msg_s << " msg/s\n";
-  std::cout << "pod borrow: " << pod_stats.throughput_mb_s << " MB/s, "
-            << pod_stats.throughput_msg_s << " msg/s\n";
-  std::cout << "speedup_mb=" << (pod_stats.throughput_mb_s /
+  std::cout << "mixed read/borrow: " << mixed_stats.throughput_mb_s
+            << " MB/s, " << mixed_stats.throughput_msg_s << " msg/s\n";
+  std::cout << "speedup_mb=" << (mixed_stats.throughput_mb_s /
                                  std::max(0.001, protobuf_stats.throughput_mb_s))
             << " speedup_msg="
-            << (pod_stats.throughput_msg_s /
+            << (mixed_stats.throughput_msg_s /
                 std::max(0.001, protobuf_stats.throughput_msg_s))
             << std::endl;
-  std::cout << "baseline\tprotobuf_messages=" << protobuf_stats.messages
+  std::cout << "protobuf_total\tmessages=" << protobuf_stats.messages
             << "\tprotobuf_bytes=" << protobuf_stats.bytes
             << "\tprotobuf_MBps=" << protobuf_stats.throughput_mb_s
             << "\tprotobuf_msgps=" << protobuf_stats.throughput_msg_s
-            << "\tpod_messages=" << pod_stats.messages
-            << "\tpod_bytes=" << pod_stats.bytes
-            << "\tpod_MBps=" << pod_stats.throughput_mb_s
-            << "\tpod_msgps=" << pod_stats.throughput_msg_s
+            << std::endl;
+  std::cout << "mixed_total\tmessages=" << mixed_stats.messages
+            << "\tbytes=" << mixed_stats.bytes
+            << "\tMBps=" << mixed_stats.throughput_mb_s
+            << "\tmsgps=" << mixed_stats.throughput_msg_s
             << "\tspeedup_MBps="
-            << (pod_stats.throughput_mb_s /
+            << (mixed_stats.throughput_mb_s /
                 std::max(0.001, protobuf_stats.throughput_mb_s))
             << "\tspeedup_msgps="
-            << (pod_stats.throughput_msg_s /
+            << (mixed_stats.throughput_msg_s /
                 std::max(0.001, protobuf_stats.throughput_msg_s))
             << std::endl;
+  for (const auto& [type, stats] : protobuf_stats.by_type) {
+    std::cout << "protobuf_type\t" << type << "\tmessages=" << stats.messages
+              << "\tbytes=" << stats.bytes << std::endl;
+  }
+  for (const auto& [type, stats] : mixed_stats.by_type) {
+    std::cout << "mixed_type\t" << type << "\tmessages=" << stats.messages
+              << "\tbytes=" << stats.bytes << std::endl;
+  }
   return 0;
+}
+
+int RunProtobufBenchmark(const RecordPlayToolOptions& options) {
+  const auto stats =
+      BenchmarkFullProtobufRecord(options.source, options.max_per_channel);
+  std::cout << "protobuf_total\tmessages=" << stats.messages
+            << "\tbytes=" << stats.bytes
+            << "\tMBps=" << stats.throughput_mb_s
+            << "\tmsgps=" << stats.throughput_msg_s
+            << "\tread_s=" << stats.read_seconds
+            << "\tprocess_s=" << stats.process_seconds
+            << "\tfailed=" << stats.failed_messages << std::endl;
+  return stats.messages == 0 || stats.failed_messages != 0 ? 1 : 0;
+}
+
+int RunMixedBenchmark(const RecordPlayToolOptions& options) {
+  const auto stats =
+      BenchmarkMixedRecord(options.source, options.max_per_channel);
+  std::cout << "mixed_total\tmessages=" << stats.messages
+            << "\tbytes=" << stats.bytes
+            << "\tMBps=" << stats.throughput_mb_s
+            << "\tmsgps=" << stats.throughput_msg_s
+            << "\tread_s=" << stats.read_seconds
+            << "\tprocess_s=" << stats.process_seconds
+            << "\tfailed=" << stats.failed_messages << std::endl;
+  return stats.messages == 0 || stats.failed_messages != 0 ? 1 : 0;
 }
 
 int RunDump(const RecordPlayToolOptions& options) {
@@ -137,8 +191,14 @@ int main(int argc, char** argv) {
   int ret = 0;
   if (options.mode == "convert") {
     ret = apollo::cyber::examples::record_play::RunConvert(options);
+  } else if (options.mode == "mixed") {
+    ret = apollo::cyber::examples::record_play::RunMixedConvert(options);
   } else if (options.mode == "benchmark") {
     ret = apollo::cyber::examples::record_play::RunBenchmark(options);
+  } else if (options.mode == "protobuf_benchmark") {
+    ret = apollo::cyber::examples::record_play::RunProtobufBenchmark(options);
+  } else if (options.mode == "mixed_benchmark") {
+    ret = apollo::cyber::examples::record_play::RunMixedBenchmark(options);
   } else if (options.mode == "dump") {
     ret = apollo::cyber::examples::record_play::RunDump(options);
   } else {

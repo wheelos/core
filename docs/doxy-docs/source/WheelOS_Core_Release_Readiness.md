@@ -8,13 +8,151 @@ on the target hardware and their output is archived with the release.
 
 | Selling point | Evidence |
 | --- | --- |
-| Same-host zero-copy | `bash scripts/release/run_performance_baseline.sh --full`; inspect `summary.md` for `shm_zero_copy_probe`, `zero_copy_copy_count=0`, loss, p99 latency, throughput, CPU, and RSS. |
-| Record data written/read from disk | `bash scripts/record_perf_reader.sh <record-file> 0 artifacts/performance/record-reader-<id>`; archive the four JSON mode reports, `benchmark.log`, `metadata.txt`, and optional `strace_*.txt`. |
+| Same-host zero-copy | `bash scripts/release/run_performance_baseline.sh --full`; publish only cases with `zero_copy_copy_count=0`, zero loss/hash mismatch, bounded p99 latency, and archived CPU/RSS. |
+| Record data written/read from disk | `bazel-bin/cyber/record/record_io_perf --messages=N --payload_size=...` reports write/read throughput; `bash scripts/record_perf_reader.sh <local-record> 0 artifacts/performance/record-reader-<id>` reports reader modes. Publish write and read as separate metrics, with payload bytes, wall time, I/O counters, chunk size, storage type, and CPU/RSS. |
+| Mixed record protobuf/POD benchmark | `bash scripts/record_play_pod_benchmark.sh`; this keeps every source channel and message in order, converts the two camera channels and Velodyne `PointCloud2` channel to `PodMessage`, preserves all other protobuf bytes/type/descriptor, and compares full-protobuf parsing with mixed protobuf/POD reading. Archive the generated `.record`, `.manifest.tsv`, and benchmark output. |
 
 The performance claims are hardware-specific. Publish the CPU, kernel,
 transport configuration, payload sizes, duration, and Git SHA alongside the
 numbers; do not present the checked-in example numbers as universal
 guarantees.
+
+### Canonical sensor benchmark datasets
+
+The regenerated sensor files are test fixtures, not a replacement for the
+original record. Protobuf and POD fixtures must be generated from the same
+source messages, in the same channel/timestamp/frame order, so every result is
+a paired comparison.
+
+The dataset levels are:
+
+| Level | Sampling rule | Purpose |
+| --- | --- | --- |
+| `smoke` | Four messages per sensor channel | Fast correctness and CI checks |
+| `standard` | 64 messages per sensor channel | Release performance baseline |
+| `full` | All selected source messages | Long-run throughput and stability |
+
+The selected channels are the two camera channels and the Velodyne64
+PointCloud channel used by `record_play_tool`. Camera payloads contain the
+protobuf `Image.data` bytes. LiDAR payloads use the POD v1 point layout
+`float32 x/y/z`, `uint32 intensity`, and `uint64 timestamp`, for 24 bytes per
+point. The layout is little-endian and its field offsets, alignment, and
+schema version must remain explicit before fixtures are used across x86 and
+ARM.
+
+Each generated dataset must contain paired Protobuf and POD records plus a
+manifest and metadata file:
+
+```text
+<dataset>.protobuf.record
+<dataset>.pod.record
+<dataset>.manifest.tsv
+<dataset>.metadata.json
+```
+
+The manifest records the source and generated SHA256 values, channel,
+timestamp, frame ID, original protobuf size, POD payload size, payload hash,
+and conversion status. Metadata records the source record, sampling level,
+generator/schema versions, conversion parameters, platform, and Git SHA.
+Generation fails rather than silently skipping a message, and validation must
+confirm equal message counts, channel/timestamp ordering, payload hashes,
+LiDAR point counts, POD header sizes, and successful `BorrowFromArray`.
+
+The benchmark matrix is intentionally separated into three measurements:
+
+1. Protobuf record read and full message parse.
+2. POD record read and `BorrowFromArray` view construction.
+3. Cross-process transport `Writer::Loan`/publish and subscriber borrow,
+   including loss, hash mismatches, borrowed/copy counts, latency, CPU, and
+   RSS.
+
+The second measurement is not evidence of transport zero-copy. Only the third
+measurement validates the end-to-end loan/borrow path. The current `record_play_pod_benchmark.sh` provides the mixed conversion and
+first two measurements; transport validation remains a separate release gate.
+Use `--mode=mixed --max_per_channel=0` for a complete mixed conversion (the
+benchmark script defaults to 64 messages per channel). Conversion fails on a
+descriptor, sensor decode, POD serialization, or record-write error; it does
+not silently drop messages. The generated output reports per-message-type and
+total counts, and the converter preserves channel order, message order, and
+timestamps for the selected source messages.
+
+For a publishable record comparison, copy both records to local storage and
+run the alternating multi-round baseline:
+
+```bash
+bash scripts/release/run_record_pod_performance_baseline.sh \
+  --protobuf-record /local/path/sensor_rgb.protobuf.record \
+  --mixed-record /local/path/sensor_rgb.mixed_pod.record \
+  --outdir artifacts/performance/record-pod-<id> \
+  --rounds 5
+```
+
+This produces `record_baseline.json`, `summary.md`, per-round logs, and
+`metadata.txt`. It reports median total throughput together with record-read
+and application-processing time. Network filesystem results are rejected by
+default because NFS/cache/writeback behavior is storage data, not a
+protobuf-versus-POD performance claim. Use `--allow-network-fs` only for a
+separately labelled diagnostic run.
+
+For the zero-copy claim, archive the full `run_performance_baseline.sh`
+output separately from the record benchmark. The release gate requires the
+POD SHM cases to report `zero_copy_copy_count=0`, positive borrowed-message
+counts, zero loss and hash mismatch, and successful completion under the
+declared payload sweep. Record borrowing and transport loan/borrow must never
+be combined into one speedup number.
+
+### POD Camera application example
+
+Build the two single-purpose examples:
+
+```bash
+bazel build //examples/record_play:pod_image_publisher \
+  //examples/record_play:pod_image_subscriber
+```
+
+Start a subscriber in one process:
+
+```bash
+./bazel-bin/examples/record_play/pod_image_subscriber \
+  --channel=/example/sensor/camera
+```
+
+Publish camera POD frames from another process:
+
+```bash
+./bazel-bin/examples/record_play/pod_image_publisher \
+  --channel=/example/sensor/camera \
+  --bytes=6220800 --count=100
+```
+
+The publisher uses `Writer<PodMessage>::Loan`, writes an image
+`PodChunkHeader` and payload into the loaned buffer, then calls `Publish`. The
+subscriber validates the header and payload size and reports whether the
+received message is borrowed. Use an Iceoryx/SHM-capable transport
+configuration; a failed loan is an explicit transport capability error, not a
+fallback to a copying publish. LiDAR applications use the same two-program
+pattern with `PodPayloadKind::POINT_CLOUD`, a 24-byte point layout, and
+LiDAR-specific header dimensions.
+
+Record write/read and transport publish/receive are independent performance
+claims. Record benchmarks measure storage plus record framing; transport
+benchmarks measure delivery, latency, loss, and loan/borrow behavior. Do not
+compare their MB/s values directly.
+
+The current local `/tmp` baseline is representative of the two separate
+claims:
+
+| Measurement | Result | Interpretation |
+| --- | ---: | --- |
+| 1 GiB synthetic Record write | 1249.93 MiB/s | Local NVMe write path with record framing |
+| 1 GiB synthetic Record read | 2044.87 MiB/s | Local cached/read path with record framing |
+| Full sensor protobuf parse | 453.352 MB/s | 43,820-message application baseline |
+| Full mixed POD/protobuf processing | 732.378 MB/s | 1.615x total throughput; 65.1x lower application processing time |
+| POD 7 MiB transport p99 | 3.716 ms | 210 MiB/s, zero loss, loan/borrow verified |
+
+The synthetic Record result is a storage/framing baseline, while the sensor
+result includes application parsing. The transport result is a separate
+delivery benchmark; these numbers are not interchangeable.
 
 ## APIs and application scenarios
 

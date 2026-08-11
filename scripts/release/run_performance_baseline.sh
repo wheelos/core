@@ -27,6 +27,9 @@ cd "$REPO_ROOT"
 if [ -z "$OUTDIR" ]; then
   OUTDIR="artifacts/performance/$(date -u +%Y%m%dT%H%M%SZ)"
 fi
+if [[ "$OUTDIR" != /* ]]; then
+  OUTDIR="$REPO_ROOT/$OUTDIR"
+fi
 mkdir -p "$OUTDIR"
 
 bazel build --config=ci \
@@ -34,7 +37,7 @@ bazel build --config=ci \
   //tests/perf_test:benchmark_pub \
   //tests/perf_test:benchmark_sub
 
-BENCHMARK_ARGS=("--output_json=$REPO_ROOT/$OUTDIR/baseline.json")
+BENCHMARK_ARGS=("--output_json=$OUTDIR/baseline.json")
 if [ "$QUICK" = true ]; then
   BENCHMARK_ARGS+=("--quick")
 fi
