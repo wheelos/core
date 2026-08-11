@@ -328,7 +328,7 @@ bool RunBenchmarkPublisher(const PublisherOptions& options, std::string* error) 
   }
   const ResourceSnapshot end = CaptureResourceSnapshot();
   StopCpuInterference(&interference);
-  // Keep transport objects alive until process _Exit() to avoid teardown crashes
+
   // on large RTPS payloads in short-lived benchmark workers.
 
   const double cpu_delta =
@@ -470,6 +470,6 @@ int main(int argc, char** argv) {
   if (!ok && !run_error.empty()) {
     apollo::cyber::examples::perf_test::WriteErrorResult(options, run_error);
   }
-  std::fflush(nullptr);
-  _Exit(ok ? 0 : 1);
+  apollo::cyber::Clear();
+  return ok ? 0 : 1;
 }

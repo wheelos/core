@@ -33,6 +33,7 @@ using BufferVector =
 
 auto channel0 = common::Hash("/channel0");
 auto channel1 = common::Hash("/channel1");
+auto channel2 = common::Hash("/channel2");
 
 TEST(DataDispatcher, AddBuffer) {
   auto cache_buffer1 = new CacheBuffer<std::shared_ptr<int>>(2);
@@ -56,6 +57,21 @@ TEST(DataDispatcher, Dispatch) {
   auto notifier = std::make_shared<Notifier>();
   DataNotifier::Instance()->AddNotifier(channel0, notifier);
   EXPECT_TRUE(dispatcher->Dispatch(channel0, msg));
+}
+
+TEST(DataNotifier, RemoveNotifier) {
+  int notifications = 0;
+  auto notifier = std::make_shared<Notifier>();
+  notifier->callback = [&notifications]() { ++notifications; };
+
+  auto* data_notifier = DataNotifier::Instance();
+  data_notifier->AddNotifier(channel2, notifier);
+  EXPECT_TRUE(data_notifier->Notify(channel2));
+  EXPECT_EQ(notifications, 1);
+
+  data_notifier->RemoveNotifier(channel2, notifier);
+  EXPECT_TRUE(data_notifier->Notify(channel2));
+  EXPECT_EQ(notifications, 1);
 }
 
 }  // namespace data

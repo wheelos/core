@@ -383,6 +383,6 @@ int main(int argc, char** argv) {
   testing::InitGoogleTest(&argc, argv);
   apollo::cyber::Init(argv[0]);
   const int result = RUN_ALL_TESTS();
-  std::fflush(nullptr);
-  _Exit(result);
+  apollo::cyber::Clear();
+  return result;
 }

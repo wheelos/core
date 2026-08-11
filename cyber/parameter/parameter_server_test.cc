@@ -70,3 +70,11 @@ TEST_F(ParameterServerTest, list_parameter) {
 
 }  // namespace cyber
 }  // namespace apollo
+
+int main(int argc, char** argv) {
+  testing::InitGoogleTest(&argc, argv);
+  apollo::cyber::Init(argv[0]);
+  const int ret = RUN_ALL_TESTS();
+  apollo::cyber::Clear();
+  return ret;
+}

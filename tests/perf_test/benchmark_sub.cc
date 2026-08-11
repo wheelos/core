@@ -648,6 +648,6 @@ int main(int argc, char** argv) {
   if (!ok && !run_error.empty()) {
     apollo::cyber::examples::perf_test::WriteErrorResult(options, run_error);
   }
-  std::fflush(nullptr);
-  _Exit(ok ? 0 : 1);
+  apollo::cyber::Clear();
+  return ok ? 0 : 1;
 }

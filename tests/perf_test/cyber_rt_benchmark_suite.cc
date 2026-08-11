@@ -2683,6 +2683,6 @@ int main(int argc, char** argv) {
   }
   std::cout << "Cyber RT Benchmark Suite completed: success=" << success_count
             << " fail=" << fail_count << std::endl;
-  std::fflush(nullptr);
-  _Exit(ok ? 0 : 1);
+  apollo::cyber::Clear();
+  return ok ? 0 : 1;
 }

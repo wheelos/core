@@ -180,9 +180,9 @@ class ReaderBinding : public std::enable_shared_from_this<ReaderBinding> {
 
  private:
   void FinishClose() {
+    WaitForDrainWithOptionalGilRelease(&lifecycle_);
     wrapped_reader_.reset();
     raw_reader_.reset();
-    WaitForDrainWithOptionalGilRelease(&lifecycle_);
     py::gil_scoped_acquire acquire;
     lifecycle_.ClearCallback();
     node_.reset();

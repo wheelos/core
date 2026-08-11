@@ -133,7 +133,6 @@ def _run_until_contains(command, expected, timeout=15):
         last_result = subprocess.run(
             command,
             capture_output=True,
-            check=True,
             text=True,
             timeout=10,
         )
@@ -141,8 +140,11 @@ def _run_until_contains(command, expected, timeout=15):
             return last_result.stdout
         time.sleep(0.2)
     raise AssertionError(
-        "expected {!r} in output {!r}; stderr={!r}".format(
-            expected, last_result.stdout, last_result.stderr
+        "expected {!r} in output {!r}; returncode={!r}; stderr={!r}".format(
+            expected,
+            last_result.stdout,
+            last_result.returncode,
+            last_result.stderr,
         )
     )
 
@@ -385,6 +387,7 @@ class CyberToolsDiscoveryTest(unittest.TestCase):
                     "play",
                     "-f",
                     record_path,
+                    "-l",
                     "-p",
                     "1",
                 ],
@@ -394,6 +397,7 @@ class CyberToolsDiscoveryTest(unittest.TestCase):
             )
             try:
                 self.assertTrue(replayed.wait(15), "record replay was not received")
+                player.send_signal(signal.SIGINT)
                 player.wait(timeout=20)
                 self.assertEqual(0, player.returncode, player.stderr.read())
             finally:

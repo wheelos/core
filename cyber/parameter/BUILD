@@ -41,7 +41,7 @@ cc_test(
     srcs = ["parameter_client_test.cc"],
     deps = [
         "//cyber",
-        "@com_google_googletest//:gtest_main",
+        "@com_google_googletest//:gtest",
     ],
 )
 
@@ -64,7 +64,7 @@ cc_test(
     srcs = ["parameter_server_test.cc"],
     deps = [
         "//cyber",
-        "@com_google_googletest//:gtest_main",
+        "@com_google_googletest//:gtest",
     ],
 )
 

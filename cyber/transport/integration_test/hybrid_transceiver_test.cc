@@ -497,6 +497,6 @@ int main(int argc, char** argv) {
   apollo::cyber::Init(argv[0]);
   apollo::cyber::transport::Transport::Instance();
   auto res = RUN_ALL_TESTS();
-  apollo::cyber::transport::Transport::Instance()->Shutdown();
+  apollo::cyber::Clear();
   return res;
 }

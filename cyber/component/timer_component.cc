@@ -43,9 +43,13 @@ bool TimerComponent::Initialize(const TimerComponentConfig& config) {
     return false;
   }
 
-  std::shared_ptr<TimerComponent> self =
+  std::weak_ptr<TimerComponent> self =
       std::dynamic_pointer_cast<TimerComponent>(shared_from_this());
-  auto func = [self]() { self->Proc(); };
+  auto func = [self]() {
+    if (auto component = self.lock()) {
+      component->Process();
+    }
+  };
   timer_.reset(new Timer(config.interval(), func, false));
   timer_->Start();
   return true;

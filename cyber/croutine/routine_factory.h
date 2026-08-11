@@ -59,6 +59,7 @@ RoutineFactory CreateRoutineFactory(
         CRoutine::GetCurrentRoutine()->set_state(RoutineState::DATA_WAIT);
         if (dv->TryFetch(msg)) {
           f(msg);
+          msg.reset();
           CRoutine::Yield(RoutineState::READY);
         } else {
           CRoutine::Yield();
@@ -82,6 +83,8 @@ RoutineFactory CreateRoutineFactory(
         CRoutine::GetCurrentRoutine()->set_state(RoutineState::DATA_WAIT);
         if (dv->TryFetch(msg0, msg1)) {
           f(msg0, msg1);
+          msg0.reset();
+          msg1.reset();
           CRoutine::Yield(RoutineState::READY);
         } else {
           CRoutine::Yield();
@@ -106,6 +109,9 @@ RoutineFactory CreateRoutineFactory(
         CRoutine::GetCurrentRoutine()->set_state(RoutineState::DATA_WAIT);
         if (dv->TryFetch(msg0, msg1, msg2)) {
           f(msg0, msg1, msg2);
+          msg0.reset();
+          msg1.reset();
+          msg2.reset();
           CRoutine::Yield(RoutineState::READY);
         } else {
           CRoutine::Yield();
@@ -131,6 +137,10 @@ RoutineFactory CreateRoutineFactory(
         CRoutine::GetCurrentRoutine()->set_state(RoutineState::DATA_WAIT);
         if (dv->TryFetch(msg0, msg1, msg2, msg3)) {
           f(msg0, msg1, msg2, msg3);
+          msg0.reset();
+          msg1.reset();
+          msg2.reset();
+          msg3.reset();
           CRoutine::Yield(RoutineState::READY);
         } else {
           CRoutine::Yield();

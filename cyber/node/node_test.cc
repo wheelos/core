@@ -79,6 +79,6 @@ int main(int argc, char** argv) {
   testing::InitGoogleTest(&argc, argv);
   apollo::cyber::Init(argv[0]);
   const int ret = RUN_ALL_TESTS();
-  std::fflush(nullptr);
-  _Exit(ret);
+  apollo::cyber::Clear();
+  return ret;
 }

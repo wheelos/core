@@ -60,6 +60,7 @@ py_test(
     data = [
         "//cyber:cyber_conf",
         "//cyber/mainboard:mainboard",
+        "//examples/timer_component_example:libtimer_component_example.so",
     ],
 )
 

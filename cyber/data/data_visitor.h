@@ -66,6 +66,7 @@ class DataVisitor : public DataVisitorBase {
   }
 
   ~DataVisitor() {
+    data_notifier_->RemoveNotifier(buffer_m0_.channel_id(), notifier_);
     if (data_fusion_) {
       delete data_fusion_;
       data_fusion_ = nullptr;
@@ -108,6 +109,7 @@ class DataVisitor<M0, M1, M2, NullType> : public DataVisitorBase {
   }
 
   ~DataVisitor() {
+    data_notifier_->RemoveNotifier(buffer_m0_.channel_id(), notifier_);
     if (data_fusion_) {
       delete data_fusion_;
       data_fusion_ = nullptr;
@@ -145,6 +147,7 @@ class DataVisitor<M0, M1, NullType, NullType> : public DataVisitorBase {
   }
 
   ~DataVisitor() {
+    data_notifier_->RemoveNotifier(buffer_m0_.channel_id(), notifier_);
     if (data_fusion_) {
       delete data_fusion_;
       data_fusion_ = nullptr;
@@ -178,6 +181,10 @@ class DataVisitor<M0, NullType, NullType, NullType> : public DataVisitorBase {
       : buffer_(channel_id, new BufferType<M0>(queue_size)) {
     DataDispatcher<M0>::Instance()->AddBuffer(buffer_);
     data_notifier_->AddNotifier(buffer_.channel_id(), notifier_);
+  }
+
+  ~DataVisitor() {
+    data_notifier_->RemoveNotifier(buffer_.channel_id(), notifier_);
   }
 
   bool TryFetch(std::shared_ptr<M0>& m0) {  // NOLINT

@@ -17,8 +17,11 @@
 #ifndef CYBER_DATA_DATA_NOTIFIER_H_
 #define CYBER_DATA_DATA_NOTIFIER_H_
 
+#include <algorithm>
 #include <memory>
 #include <mutex>
+#include <shared_mutex>
+#include <unordered_map>
 #include <vector>
 
 #include "cyber/common/log.h"
@@ -32,7 +35,6 @@ namespace cyber {
 namespace data {
 
 using apollo::cyber::Time;
-using apollo::cyber::base::AtomicHashMap;
 using apollo::cyber::event::PerfEventCache;
 
 struct Notifier {
@@ -42,16 +44,19 @@ struct Notifier {
 class DataNotifier {
  public:
   using NotifyVector = std::vector<std::shared_ptr<Notifier>>;
+  using NotifySnapshot = std::shared_ptr<const NotifyVector>;
   ~DataNotifier() {}
 
   void AddNotifier(uint64_t channel_id,
                    const std::shared_ptr<Notifier>& notifier);
+  void RemoveNotifier(uint64_t channel_id,
+                      const std::shared_ptr<Notifier>& notifier);
 
   bool Notify(const uint64_t channel_id);
 
  private:
-  std::mutex notifies_map_mutex_;
-  AtomicHashMap<uint64_t, NotifyVector> notifies_map_;
+  std::shared_mutex notifies_map_mutex_;
+  std::unordered_map<uint64_t, NotifySnapshot> notifies_map_;
 
   DECLARE_SINGLETON(DataNotifier)
 };
@@ -60,27 +65,48 @@ inline DataNotifier::DataNotifier() {}
 
 inline void DataNotifier::AddNotifier(
     uint64_t channel_id, const std::shared_ptr<Notifier>& notifier) {
-  std::lock_guard<std::mutex> lock(notifies_map_mutex_);
-  NotifyVector* notifies = nullptr;
-  if (notifies_map_.Get(channel_id, &notifies)) {
+  std::unique_lock<std::shared_mutex> lock(notifies_map_mutex_);
+  auto it = notifies_map_.find(channel_id);
+  if (it != notifies_map_.end()) {
+    auto notifies = std::make_shared<NotifyVector>(*it->second);
     notifies->emplace_back(notifier);
+    it->second = std::move(notifies);
   } else {
-    NotifyVector new_notify = {notifier};
-    notifies_map_.Set(channel_id, new_notify);
+    notifies_map_.emplace(
+        channel_id, std::make_shared<const NotifyVector>(NotifyVector{notifier}));
   }
 }
 
-inline bool DataNotifier::Notify(const uint64_t channel_id) {
-  NotifyVector* notifies = nullptr;
-  if (notifies_map_.Get(channel_id, &notifies)) {
-    for (auto& notifier : *notifies) {
-      if (notifier && notifier->callback) {
-        notifier->callback();
-      }
-    }
-    return true;
+inline void DataNotifier::RemoveNotifier(
+    uint64_t channel_id, const std::shared_ptr<Notifier>& notifier) {
+  std::unique_lock<std::shared_mutex> lock(notifies_map_mutex_);
+  auto it = notifies_map_.find(channel_id);
+  if (it == notifies_map_.end()) {
+    return;
   }
-  return false;
+  auto notifies = std::make_shared<NotifyVector>(*it->second);
+  notifies->erase(
+      std::remove(notifies->begin(), notifies->end(), notifier),
+      notifies->end());
+  it->second = std::move(notifies);
+}
+
+inline bool DataNotifier::Notify(const uint64_t channel_id) {
+  NotifySnapshot notifiers;
+  {
+    std::shared_lock<std::shared_mutex> lock(notifies_map_mutex_);
+    auto it = notifies_map_.find(channel_id);
+    if (it == notifies_map_.end()) {
+      return false;
+    }
+    notifiers = it->second;
+  }
+  for (const auto& notifier : *notifiers) {
+    if (notifier && notifier->callback) {
+      notifier->callback();
+    }
+  }
+  return true;
 }
 
 }  // namespace data
