@@ -18,3 +18,14 @@ The reference content here is intended for:
 - component authoring
 - implementation details
 - release and scheduling context
+
+## Build locally
+
+From this directory:
+
+```bash
+python3 -m pip install -r requirements.txt
+make html
+```
+
+The generated site is written to `build/html`.
