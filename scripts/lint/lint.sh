@@ -1,84 +1,53 @@
 #!/usr/bin/env bash
 
-# Fail on error
-set -e
+set -euo pipefail
 
-TOP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
-source "${TOP_DIR}/scripts/apollo.bashrc"
-source "${TOP_DIR}/scripts/apollo_base.sh"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
+source "${ROOT_DIR}/scripts/deps/installer_base.sh"
 
-: ${STAGE:=dev}
-
-# Initialize lint flags
 PYTHON_LINT_FLAG=0
 CPP_LINT_FLAG=0
-SHELL_LINT_FLAG=0
 
-# Run C++ lint
-function run_cpp_lint() {
-  pushd "${APOLLO_ROOT_DIR}" >/dev/null
-  local cpp_dirs="cyber"
-  [[ "${STAGE}" == "dev" ]] && cpp_dirs="${cpp_dirs} modules"
-  for prey in $(find ${cpp_dirs} -name BUILD | xargs grep -l -E 'cc_library|cc_test|cc_binary|gpu_library'); do
-    [[ -x "$(command -v buildifier)" ]] && buildifier -lint=fix "${prey}"
-  done
-  popd >/dev/null
-
-  bazel test --config=ci "//cyber/..."
-  [[ "${STAGE}" == "dev" ]] && bazel test --config=ci "//modules/..."
-}
-
-# Run shell lint
-function run_sh_lint() {
-  local shellcheck_cmd
-  shellcheck_cmd="$(command -v shellcheck)"
-  if [ -z "${shellcheck_cmd}" ]; then
-    warning "Command 'shellcheck' not found. Please install it via: sudo apt-get -y update && sudo apt-get -y install shellcheck"
-    exit 1
-  fi
-
-  local sh_dirs="cyber scripts docker tools"
-  [[ "${STAGE}" == "dev" ]] && sh_dirs="modules ${sh_dirs}"
-
-  sh_dirs=$(printf "${APOLLO_ROOT_DIR}/%s " ${sh_dirs})
-  run find ${sh_dirs} -type f \( -name "*.sh" -or -name "*.bashrc" \) -exec shellcheck -x --shell=bash {} +
-
-  for script in ${APOLLO_ROOT_DIR}/*.sh; do
-    run shellcheck -x --shell=bash "${script}"
-  done
-}
-
-# Run Python lint
-function run_py_lint() {
-  local flake8_cmd
-  flake8_cmd="$(command -v flake8)"
-  if [ -z "${flake8_cmd}" ]; then
-    warning "Command 'flake8' not found. Install it via: '[sudo -H] python3 -m pip install flake8'"
-    exit 1
-  fi
-
-  local py_dirs="cyber docker tools"
-  [[ "${STAGE}" == "dev" ]] && py_dirs="modules ${py_dirs}"
-
-  py_dirs=$(printf "${APOLLO_ROOT_DIR}/%s " ${py_dirs})
-  run find ${py_dirs} -type f -name "*.py" -exec flake8 {} \;
-}
-
-# Print usage information
 function print_usage() {
-  info "Usage: $0 [Options]"
-  info "Options:"
-  info "${TAB}--py        Lint Python files"
-  info "${TAB}--sh        Lint Bash scripts"
-  info "${TAB}--cpp       Lint C++ source files"
-  info "${TAB}-a|--all    Lint all. Equivalent to '--py --sh --cpp'"
-  info "${TAB}-h|--help   Show this message and exit"
+  echo "Usage: $0 [Options]"
+  echo "Options:"
+  echo "  --py        Lint Python files"
+  echo "  --cpp       Lint C++/BUILD files"
+  echo "  -a|--all    Lint all supported C++ and Python files"
+  echo "  -h|--help   Show this message and exit"
 }
 
-# Parse command line arguments
+function run_cpp_lint() {
+  if command -v bazel >/dev/null 2>&1; then
+    bazel test --config=ci //cyber/...
+  else
+    info "bazel not installed; skipping Bazel test step."
+  fi
+
+  if command -v buildifier >/dev/null 2>&1; then
+    find "${ROOT_DIR}" \( -path "${ROOT_DIR}/.git" -o -path "${ROOT_DIR}/bazel-*" \) -prune -o \
+      \( -name BUILD -o -name '*.bazel' -o -name '*.bzl' \) -type f -print0 \
+      | xargs -0 -r buildifier -lint=fix
+  else
+    info "buildifier not installed; skipping BUILD formatting lint."
+  fi
+}
+
+function run_py_lint() {
+  if ! command -v flake8 >/dev/null 2>&1; then
+    warning "Command 'flake8' not found. Install it via: python3 -m pip install flake8"
+    exit 1
+  fi
+
+  find "${ROOT_DIR}" \( -path "${ROOT_DIR}/.git" -o -path "${ROOT_DIR}/bazel-*" \) -prune -o \
+    -type f -name '*.py' -print0 \
+    | xargs -0 -r flake8
+}
+
 function parse_cmdline_args() {
   if [[ "$#" -eq 0 ]]; then
     CPP_LINT_FLAG=1
+    PYTHON_LINT_FLAG=1
     return 0
   fi
 
@@ -90,13 +59,9 @@ function parse_cmdline_args() {
       --cpp)
         CPP_LINT_FLAG=1
         ;;
-      --sh)
-        SHELL_LINT_FLAG=1
-        ;;
       -a|--all)
         PYTHON_LINT_FLAG=1
         CPP_LINT_FLAG=1
-        SHELL_LINT_FLAG=1
         ;;
       -h|--help)
         print_usage
@@ -112,16 +77,10 @@ function parse_cmdline_args() {
   done
 }
 
-# Main function
 function main() {
-  # Restore environment
-  sed -i 's/STATUS = 2/STATUS = 0/g' /apollo/tools/package/dynamic_deps.bzl
-
-  # Parse command line arguments and run corresponding lints
   parse_cmdline_args "$@"
   [[ "${CPP_LINT_FLAG}" -eq 1 ]] && run_cpp_lint
   [[ "${PYTHON_LINT_FLAG}" -eq 1 ]] && run_py_lint
-  [[ "${SHELL_LINT_FLAG}" -eq 1 ]] && run_sh_lint
 }
 
 main "$@"

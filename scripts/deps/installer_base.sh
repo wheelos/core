@@ -54,7 +54,7 @@ function source_date_epoch_setup() {
 }
 
 function apollo_environ_setup() {
-    if [ -z "${SOURCE_DATE_EPOCH}" ]; then
+    if [ -z "${SOURCE_DATE_EPOCH:-}" ]; then
         source_date_epoch_setup
     fi
 
