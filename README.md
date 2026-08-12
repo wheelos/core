@@ -1,41 +1,93 @@
-# wheelos_core
+# Project Name
 
-`wheelos_core` is a C++17, Bazel-first Cyber RT middleware foundation for
-high-throughput autonomous systems. The repository contains the runtime,
-public C++ APIs, Python bindings, tools, examples, and release scripts.
+wheelos_core
 
-## Choose an integration surface
+# Overview
 
-| Goal | Supported interface |
-| --- | --- |
-| Build a C++ or Bazel Python application | Bzlmod source dependency |
-| Run native processes and tools | `/opt/wheelos_core` runtime bundle |
-| Use Python from a normal Python environment | Version-matched `pycyber` wheel |
+`wheelos_core` is the WheelOS runtime foundation for message passing and middleware coordination. The repository implements the Cyber RT stack used for publish/subscribe channels, service/client RPC, component lifecycle management, coroutine-style scheduling, topology discovery, shared-memory and RTPS transport, record/playback, native tools, and Python bindings.
 
-Do not treat copied headers, `bazel-bin`, runfiles, or a hand-built
-`PYTHONPATH` as a supported SDK.
+The code is organized under `cyber/`, with the public C++ entry point exposed through `cyber/cyber.h`. The project is built with Bazel and ships native runtime tools such as `cyber_launch`, `cyber_monitor`, and `cyber_recorder`.
 
-## Build and test
+# Role in WheelOS
 
-Install the build environment and run the repository build:
+`wheelos_core` sits in the WheelOS Runtime layer and provides the message-oriented middleware runtime used by higher-level components and applications.
+
+```text
+WheelOS
+ |
+ +--- Runtime
+      |
+      +--- wheelos_core
+           |
+           +--- cyber runtime
+           |    +--- Node / Channel / Service APIs
+           |    +--- Scheduler and task execution
+           |    +--- Transport: INTRA / SHM / RTPS
+           |    +--- Topology and service discovery
+           |    +--- Record, tools, and Python integration
+           |
+           +--- examples
+           +--- docs and release tooling
+```
+
+# Architecture
+
+```text
+Application / Component
+          |
+          v
++-----------------------------------------------+
+| Node API (CreateNode / Channel / Service)     |
++-----------------------------------------------+
+          |
+          +----------------------+------------------+
+          |                      |
+          v                      v
++-------------------+   +----------------------------+
+| Scheduler / Task  |   | Component loader / lifecycle |
++-------------------+   +----------------------------+
+          |
+          v
++-----------------------------------------------+
+| Topology manager / service discovery          |
++-----------------------------------------------+
+          |
+          v
++-----------------------------------------------+
+| Transport layer                                |
+| INTRA / SHM / RTPS / QoS / message routing    |
++-----------------------------------------------+
+          |
+          v
+Subscriber / Receiver / Proc() execution
+```
+
+The actual build graph includes targets such as `//cyber:cyber`, `//cyber:cyber_core`, `//cyber/service_discovery`, `//cyber/transport`, `//cyber/record`, and the tool targets under `//cyber/tools/...`.
+
+# Installation
+
+## Build the toolchain and dependencies
 
 ```bash
 sudo bash scripts/deploy/build.sh
+```
+
+This installs the Bazel build dependencies used by the repository.
+
+## Build the project
+
+```bash
 bash scripts/build.sh
 ```
 
-Useful CI-aligned checks:
+The repository default build entry point is `scripts/build.sh`, which runs Bazel with the CI configuration and `//cyber/...` by default. For narrower checks, the repository also documents:
 
 ```bash
 bazel build //cyber
 bazel test //cyber/message/...
-bash scripts/release/check_bzlmod_lockfile.sh --check
 ```
 
-See the [documentation index](docs/doxy-docs/source/index.md) for the
-installation, component, API, scheduling, and release guides.
-
-## Build a runtime package
+## Install the runtime bundle
 
 ```bash
 bazel build //:wheelos_core
@@ -44,46 +96,60 @@ source /opt/wheelos_core/setup.bash
 cyber_launch --help
 ```
 
-The Debian package is a runtime bundle. It provides `mainboard`,
-`cyber_launch`, `cyber_monitor`, `cyber_recorder`, libraries, and resources;
-use Bzlmod for C++ development headers and dependencies.
+The Debian package is the supported native runtime bundle. It installs commands such as `mainboard`, `cyber_launch`, `cyber_monitor`, and `cyber_recorder` under `/opt/wheelos_core`.
 
-## Consume from Bazel
+# Examples
 
-```starlark
-# MODULE.bazel
-bazel_dep(name = "wheelos_core", version = "1.0.0")
-```
-
-```python
-cc_binary(
-    name = "my_node",
-    srcs = ["my_node.cc"],
-    deps = ["@wheelos_core//cyber:cyber"],
-)
-```
-
-Enable C++17 in the downstream workspace:
-
-```text
-build --cxxopt=-std=c++17
-build --host_cxxopt=-std=c++17
-```
-
-For a local checkout, use an explicit module override:
+The repository contains minimal example components under `examples/`. The clearest end-to-end example is `examples/common_component_example`.
 
 ```bash
-bazel build --override_module=wheelos_core=/path/to/core //:my_node
+cd /path/to/core
+bazel build //examples/common_component_example/...
 ```
 
-## Python and releases
-
-Build matching runtime and Python artifacts together:
+Start the component in one terminal:
 
 ```bash
-bash scripts/release/build_release_artifacts.sh
-python3 -m pip install artifacts/release/pycyber/pycyber-*.whl
+cyber_launch start examples/common_component_example/common.launch
 ```
 
-Release tags use `wheelos_core-v<module-version>`, for example
-`wheelos_core-v1.0.0`. Run the release validation scripts before publishing.
+Or start it directly from the DAG file:
+
+```bash
+mainboard -d examples/common_component_example/common.dag
+```
+
+Then start the two writer nodes in separate terminals:
+
+```bash
+bazel run //examples/common_component_example:channel_test_writer
+bazel run //examples/common_component_example:channel_prediction_writer
+```
+
+This example demonstrates loading a component from a shared library and feeding it messages from multiple writer processes.
+
+There are additional related examples under `examples/timer_component_example`, but the common component example is the smallest repository-provided example with explicit build and run commands.
+
+# Documentation
+
+The repository separates operational documentation from generated API reference docs.
+
+- [Documentation index](docs/README.md)
+- [Installation and setup](docs/getting-started/installation.md)
+- [Quick start](docs/getting-started/quickstart.md)
+- [Build and run](docs/guides/build-and-run.md)
+- [Component development](docs/guides/component-development.md)
+- [Tools and monitoring](docs/guides/tools-and-monitoring.md)
+- [Topology and transport](docs/guides/topology-and-transport.md)
+- [Common issues](docs/troubleshooting/common-issues.md)
+- [Generated API reference](docs/reference/api.md)
+- [Doxygen/Sphinx documentation index](docs/doxy-docs/source/index.md)
+- [C++ API](docs/doxy-docs/source/cpp-api.md)
+- [Python API](docs/doxy-docs/source/python-api.md)
+- [Terms](docs/doxy-docs/source/terms.md)
+- [Common component example](examples/common_component_example/README.md)
+- [Timer component example](examples/timer_component_example/README.md)
+- [Project repository](https://github.com/wheelos/core)
+- [Repository context index](.github/context/index.md)
+
+The operational documentation is the recommended entry point for installation and runtime usage; the generated API docs remain the code-level reference.

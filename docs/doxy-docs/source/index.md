@@ -1,46 +1,42 @@
-# wheelos_core documentation
+# wheelos_core API and implementation reference
 
-`wheelos_core` is a Bazel-first Cyber RT middleware foundation. It provides
-publish/subscribe channels, service and client RPC, component loading,
-coroutine scheduling, topology discovery, shared-memory and RTPS transport,
-record I/O, native tools, and Python bindings.
+This section is the generated reference for the repository's implementation and
+APIs. It is intended for developers who already understand the project and are
+looking for code-level details, component wiring, scheduling concepts, and
+framework terminology.
 
-## Start here
+For first-time setup and end-user workflow, start with the repository's task-
+orientated documentation instead:
 
-1. [Install and use wheelos_core](Wheelos_Core_Installation_and_Usage.md)
-2. [Build a component](CyberRT_Quick_Start.md)
-3. [Use the C++ API](CyberRT_API_for_Developers.md)
-4. [Use the Python API](CyberRT_Python_API.md)
+- [Documentation index](../../README.md)
+- [Installation and setup](../../getting-started/installation.md)
+- [Quick start](../../getting-started/quickstart.md)
+- [Build and run](../../guides/build-and-run.md)
 
-## Guides
+## Primary purpose of this section
 
-- [Developer tools](CyberRT_Developer_Tools.md)
-- [Scheduling and deployment](CyberRT_Scheduling_Deployment.md)
-- [Terminology](CyberRT_Terms.md)
-- [Release baseline](WheelOS_Core_Baseline.md)
-- [Release readiness](WheelOS_Core_Release_Readiness.md)
+This API reference is generated from the current C++ and Python sources with
+Doxygen and rendered by Sphinx. Use it when you need implementation detail,
+public APIs, or framework concepts, not when you are onboarding to the project.
 
-## API reference
-
-The API reference is generated from the current C++ and Python sources with
-Doxygen and rendered by Sphinx:
+## API entry points
 
 - [C++ API](api/cppapi_index.rst)
 - [Python API](api/pythonapi_index.rst)
 
+## Reference pages in this section
+
+- [C++ API](cpp-api.md)
+- [Python API](python-api.md)
+- [Terminology](terms.md)
+
 .. toctree::
    :maxdepth: 2
-   :caption: Guides
+   :caption: API and implementation reference
 
-   Wheelos_Core_Installation_and_Usage
-   CyberRT_Quick_Start
-   CyberRT_API_for_Developers
-   CyberRT_Python_API
-   CyberRT_Developer_Tools
-   CyberRT_Scheduling_Deployment
-   CyberRT_Terms
-   WheelOS_Core_Baseline
-   WheelOS_Core_Release_Readiness
+   cpp-api
+   python-api
+   terms
 
 ## Build the documentation
 

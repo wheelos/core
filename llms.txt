@@ -5,14 +5,15 @@
 ## Canonical documentation
 
 - [Repository README](README.md): build, test, packaging, and integration overview.
-- [Documentation index](docs/doxy-docs/source/index.md): user and developer guides.
-- [Installation and usage](docs/doxy-docs/source/Wheelos_Core_Installation_and_Usage.md): Bzlmod, runtime bundle, and Python wheel boundaries.
-- [Component tutorial](docs/doxy-docs/source/CyberRT_Quick_Start.md): component, DAG, BUILD, and launch workflow.
-- [C++ API tutorial](docs/doxy-docs/source/CyberRT_API_for_Developers.md): nodes, pub/sub, services, parameters, timers, and records.
-- [Python API](docs/doxy-docs/source/CyberRT_Python_API.md): Python bindings and examples.
-- [Developer tools](docs/doxy-docs/source/CyberRT_Developer_Tools.md): monitor, recorder, and supported runtime commands.
-- [Scheduling and deployment](docs/doxy-docs/source/CyberRT_Scheduling_Deployment.md): coroutine scheduling, CPU placement, IRQs, and shared memory.
-- [Release baseline](docs/doxy-docs/source/WheelOS_Core_Baseline.md): repository validation gates.
+- [Documentation index](docs/README.md): operational docs and reference entry points.
+- [Installation and setup](docs/getting-started/installation.md): Bazel dependencies, build steps, and runtime bundle setup.
+- [Quick start](docs/getting-started/quickstart.md): minimal publish/subscribe example.
+- [Build and run](docs/guides/build-and-run.md): source-build and runtime workflow.
+- [Component development](docs/guides/component-development.md): DAG, launch, and component lifecycle.
+- [Generated API index](docs/doxy-docs/source/index.md): generated implementation and API reference.
+- [C++ API guide](docs/doxy-docs/source/cpp-api.md): nodes, pub/sub, services, parameters, timers, and records.
+- [Python API](docs/doxy-docs/source/python-api.md): Python bindings and examples.
+- [Terms](docs/doxy-docs/source/terms.md): framework terminology.
 - [Generated C++ API](docs/doxy-docs/source/api/cppapi_index.rst): Doxygen reference.
 - [Generated Python API](docs/doxy-docs/source/api/pythonapi_index.rst): Doxygen reference.
 - [C++ component example](examples/common_component_example/README.md): build and

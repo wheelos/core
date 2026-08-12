@@ -155,7 +155,7 @@ The installed runtime writes logs below
 
 Use a `Component<M0, ...>` when a class should be loaded from a shared
 library and receive messages through DAG-configured readers. Use
-`TimerComponent` for periodic work. The [component tutorial](CyberRT_Quick_Start.md)
+`TimerComponent` for periodic work. The [component tutorial](../../getting-started/quickstart.md)
 contains a complete BUILD, DAG, launch, and runtime example.
 
 The timer example can be built and run with:
