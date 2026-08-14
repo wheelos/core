@@ -1,11 +1,21 @@
 #!/usr/bin/env python3
 
 import importlib.util
+import os
 import sys
 from pathlib import Path
 
 
 def _extension_directories():
+    runfiles_dir = os.environ.get("RUNFILES_DIR")
+    if runfiles_dir:
+        root = Path(runfiles_dir)
+        if root.is_dir():
+            yield root / "cyber/python/internal"
+            for workspace in root.iterdir():
+                if workspace.is_dir():
+                    yield workspace / "cyber/python/internal"
+
     package_dir = Path(__file__).resolve().parent
     yield package_dir / "internal"
     yield package_dir.parent / "internal"

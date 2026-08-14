@@ -13,6 +13,7 @@ cc_binary(
         "renderable_message.cc",
         "screen.cc",
     ],
+    data = ["//cyber:runtime_resources"],
     linkopts = ["-pthread"],
     deps = [
         ":cyber_topology_message",

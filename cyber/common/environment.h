@@ -18,6 +18,7 @@
 #define CYBER_COMMON_ENVIRONMENT_H_
 
 #include <cassert>
+#include <cstdlib>
 #include <filesystem>
 #include <string>
 
@@ -40,6 +41,29 @@ inline std::string GetEnv(const std::string& var_name,
 
 inline const std::string WorkRoot() {
   std::string work_root = GetEnv("CYBER_PATH");
+  if (work_root.empty()) {
+    const char* runfiles_dir = std::getenv("RUNFILES_DIR");
+    if (runfiles_dir != nullptr) {
+      const std::filesystem::path runfiles_root(runfiles_dir);
+      const auto config_relative_path =
+          std::filesystem::path("cyber") / "conf" / "cyber.pb.conf";
+      if (std::filesystem::is_directory(runfiles_root)) {
+        const auto direct_config = runfiles_root / config_relative_path;
+        if (std::filesystem::exists(direct_config)) {
+          work_root = (runfiles_root / "cyber").string();
+        } else {
+          for (const auto& entry :
+               std::filesystem::directory_iterator(runfiles_root)) {
+            const auto candidate = entry.path() / config_relative_path;
+            if (std::filesystem::exists(candidate)) {
+              work_root = (entry.path() / "cyber").string();
+              break;
+            }
+          }
+        }
+      }
+    }
+  }
   if (work_root.empty()) {
     const std::filesystem::path cwd = std::filesystem::current_path();
     for (auto path = cwd; !path.empty();) {

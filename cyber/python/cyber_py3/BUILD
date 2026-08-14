@@ -13,6 +13,7 @@ py_library(
     name = "internal",
     srcs = ["_internal.py"],
     data = [
+        "//cyber:runtime_resources",
         "//cyber/python/internal:_cyber_wrapper",
     ],
 )

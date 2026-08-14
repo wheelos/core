@@ -5,6 +5,7 @@ package(default_visibility = ["//visibility:public"])
 cc_binary(
     name = "cyber_recorder",
     srcs = ["main.cc"],
+    data = ["//cyber:runtime_resources"],
     linkopts = ["-pthread"],
     deps = [
         ":info",
