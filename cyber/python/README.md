@@ -13,7 +13,7 @@ For packaging-side example verification, run:
 python packaging/pycyber/verify_pycyber_examples.py
 ```
 
-Release CI verifies wheel installation and import compatibility on CPython 3.11
+Release CI verifies wheel installation and import compatibility on CPython 3.10
 across supported Linux architectures before publishing.
 
 Build artifacts with:

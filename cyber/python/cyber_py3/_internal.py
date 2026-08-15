@@ -7,6 +7,26 @@ from pathlib import Path
 
 
 def _extension_directories():
+    manifest_file = os.environ.get("RUNFILES_MANIFEST_FILE")
+    if manifest_file and os.path.isfile(manifest_file):
+        suffixes = (
+            "cyber/python/internal/_cyber_wrapper.so",
+            "cyber/python/internal/_cyber_wrapper.pyd",
+        )
+        with open(manifest_file, encoding="utf-8") as manifest:
+            for entry in manifest:
+                logical_path, separator, resolved_path = entry.rstrip("\n").partition(" ")
+                if not separator or not resolved_path:
+                    continue
+                if logical_path.endswith(suffixes):
+                    yield Path(resolved_path).parent
+
+    pythonpath = os.environ.get("PYTHONPATH")
+    if pythonpath:
+        for directory in pythonpath.split(os.pathsep):
+            if directory:
+                yield Path(directory)
+
     runfiles_dir = os.environ.get("RUNFILES_DIR")
     if runfiles_dir:
         root = Path(runfiles_dir)

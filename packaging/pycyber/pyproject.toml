@@ -7,7 +7,7 @@ name = "pycyber"
 dynamic = ["version"]
 description = "Apollo Cyber RT Python bindings packaged from the core repository."
 readme = "README.md"
-requires-python = ">=3.11,<3.12"
+requires-python = ">=3.10,<3.11"
 license = "Apache-2.0"
 authors = [{ name = "Apollo Authors" }]
 urls = { Homepage = "https://github.com/wheelos/core", Source = "https://github.com/wheelos/core" }
@@ -15,7 +15,7 @@ dependencies = ["protobuf>=5.29.0,<6"]
 classifiers = [
   "Operating System :: POSIX :: Linux",
   "Programming Language :: Python :: 3 :: Only",
-  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: Implementation :: CPython",
 ]
 

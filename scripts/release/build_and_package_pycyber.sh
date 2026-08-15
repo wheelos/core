@@ -36,9 +36,9 @@ if ! "$PYTHON_BIN" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3,
   echo "Error: pycyber release requires Python >= 3.8, got $TARGET_PYTHON_VERSION from $PYTHON_BIN" >&2
   exit 1
 fi
-if [ -z "${PYTHON:-}" ] && [ "$TARGET_PYTHON_VERSION" != "3.11" ]; then
+if [ -z "${PYTHON:-}" ] && [ "$TARGET_PYTHON_VERSION" != "3.10" ]; then
   BAZEL_EXECROOT="$(bazel info execution_root 2>/dev/null || true)"
-  for candidate in "$BAZEL_EXECROOT"/external/rules_python~~python~python_3_11_*/bin/python3; do
+  for candidate in "$BAZEL_EXECROOT"/external/rules_python~~python~python_3_10_*/bin/python3; do
     if [ -x "$candidate" ]; then
       PYTHON_BIN="$candidate"
       TARGET_PYTHON_VERSION="$("$PYTHON_BIN" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
@@ -47,8 +47,8 @@ if [ -z "${PYTHON:-}" ] && [ "$TARGET_PYTHON_VERSION" != "3.11" ]; then
     fi
   done
 fi
-if [ "$TARGET_PYTHON_VERSION" != "3.11" ]; then
-  echo "Error: pycyber packaging currently requires Python 3.11, got $TARGET_PYTHON_VERSION from $PYTHON_BIN" >&2
+if [ "$TARGET_PYTHON_VERSION" != "3.10" ]; then
+  echo "Error: pycyber packaging currently requires Python 3.10, got $TARGET_PYTHON_VERSION from $PYTHON_BIN" >&2
   exit 1
 fi
 if [ -x "$VENV_DIR/bin/python" ]; then

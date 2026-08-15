@@ -20,6 +20,7 @@
 #include <cassert>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <string>
 
 #include "cyber/common/log.h"
@@ -60,6 +61,24 @@ inline const std::string WorkRoot() {
               break;
             }
           }
+        }
+      }
+    }
+  }
+  if (work_root.empty()) {
+    const char* manifest_file = std::getenv("RUNFILES_MANIFEST_FILE");
+    if (manifest_file != nullptr) {
+      std::ifstream manifest(manifest_file);
+      std::string logical_path;
+      std::string resolved_path;
+      while (manifest >> logical_path >> resolved_path) {
+        const std::string suffix = "cyber/conf/cyber.pb.conf";
+        if (logical_path.size() >= suffix.size() &&
+            logical_path.compare(logical_path.size() - suffix.size(),
+                                 suffix.size(), suffix) == 0) {
+          work_root =
+              std::filesystem::path(resolved_path).parent_path().parent_path();
+          break;
         }
       }
     }
