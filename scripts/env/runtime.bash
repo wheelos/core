@@ -6,22 +6,29 @@ if [ ! -d "${WHEEL_ROOT_DIR}/data/log" ]; then
     mkdir -p "${WHEEL_ROOT_DIR}/data/log"
 fi
 
-# Prepend each tool path to PATH
-bazel_bin_path="${WHEEL_ROOT_DIR}/bazel-bin"
-declare -A tools_paths=(
-    ["mainboard"]="${bazel_bin_path}/cyber/mainboard"
-    ["recorder"]="${bazel_bin_path}/cyber/tools/cyber_recorder"
-    ["monitor"]="${bazel_bin_path}/cyber/tools/cyber_monitor"
-    ["channel"]="${bazel_bin_path}/cyber/tools/cyber_channel"
-    ["node"]="${bazel_bin_path}/cyber/tools/cyber_node"
-    ["service"]="${bazel_bin_path}/cyber/tools/cyber_service"
-    ["launch"]="${bazel_bin_path}/cyber/tools/cyber_launch"
-    ["visualizer"]="${bazel_bin_path}/tools/visualizer"
+# Resolve each tool from its stable local Bazel label. Aliases preserve the
+# actual Bazel output location, so do not assume a fixed bazel-bin layout.
+declare -A tools_targets=(
+    ["mainboard"]="mainboard"
+    ["cyber_launch"]="cyber_launch"
+    ["cyber_recorder"]="cyber_recorder"
+    ["cyber_monitor"]="cyber_monitor"
+    ["cyber_channel"]="cyber_channel"
+    ["cyber_node"]="cyber_node"
+    ["cyber_service"]="cyber_service"
 )
 
-for tool in "${!tools_paths[@]}"; do
-    pathprepend "${tools_paths[$tool]}"
+for tool in "${!tools_targets[@]}"; do
+    tool_name="${tools_targets[$tool]}"
+    tool_path="$(cd "${WHEEL_ROOT_DIR}" &&
+        bazel cquery "//tools:${tool_name}" --output=files 2>/dev/null |
+        awk -v name="${tool_name}" '$0 ~ "/" name "$" { print; exit }')"
+    if [[ -n "${tool_path}" ]]; then
+        pathprepend "${WHEEL_ROOT_DIR}/${tool_path%/*}"
+    fi
 done
+
+bazel_bin_path="${WHEEL_ROOT_DIR}/bazel-bin"
 
 export CYBER_PATH="${WHEEL_ROOT_DIR}/cyber"
 source ${CYBER_PATH}/tools/cyber_tools_auto_complete.bash
