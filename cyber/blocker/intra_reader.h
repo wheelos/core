@@ -196,8 +196,9 @@ auto IntraReader<MessageT>::End() const -> Iterator {
 
 template <typename MessageT>
 void IntraReader<MessageT>::OnMessage(const MessagePtr& msg_ptr) {
-  this->second_to_lastest_recv_time_sec_ = this->latest_recv_time_sec_;
-  this->latest_recv_time_sec_ = apollo::cyber::Time::Now().ToSecond();
+  this->second_to_lastest_recv_time_ns_ = this->latest_recv_time_ns_;
+  this->latest_recv_time_ns_ =
+      static_cast<int64_t>(apollo::cyber::Time::Now().ToNanosecond());
   if (msg_callback_ != nullptr) {
     msg_callback_(msg_ptr);
   }

@@ -49,7 +49,7 @@ TEST(ReaderTest, test1) {
 
     EXPECT_FALSE(r.HasReceived());
     EXPECT_TRUE(r.Empty());
-    EXPECT_LT(r.GetDelaySec(), 0);
+    EXPECT_LT(r.GetDelayNs(), 0);
 
     r.ClearData();
     r.Shutdown();
@@ -67,7 +67,7 @@ TEST(ReaderTest, test1) {
 
     EXPECT_FALSE(r.HasReceived());
     EXPECT_TRUE(r.Empty());
-    EXPECT_LT(r.GetDelaySec(), 0);
+    EXPECT_LT(r.GetDelayNs(), 0);
 
     r.ClearData();
     r.Shutdown();
@@ -93,7 +93,7 @@ TEST(ReaderTest, test1) {
 
     EXPECT_FALSE(r.HasReceived());
     EXPECT_TRUE(r.Empty());
-    EXPECT_LT(r.GetDelaySec(), 0);
+    EXPECT_LT(r.GetDelayNs(), 0);
 
     r.ClearData();
     r.Shutdown();
@@ -111,7 +111,7 @@ TEST(ReaderTest, test1) {
 
     EXPECT_FALSE(r.HasReceived());
     EXPECT_TRUE(r.Empty());
-    EXPECT_LT(r.GetDelaySec(), 0);
+    EXPECT_LT(r.GetDelayNs(), 0);
 
     r.ClearData();
     r.Shutdown();
@@ -144,7 +144,7 @@ TEST(ReaderTest, test2) {
     r.Enqueue(c);
   }
   EXPECT_EQ(r.GetHistoryDepth(), 1);
-  EXPECT_GT(r.GetDelaySec(), 0);
+  EXPECT_GT(r.GetDelayNs(), 0);
 
   r.SetHistoryDepth(0);
   {
@@ -157,7 +157,7 @@ TEST(ReaderTest, test2) {
   }
   EXPECT_EQ(r.GetHistoryDepth(), 0);
   EXPECT_EQ(r.Begin(), r.End());
-  EXPECT_GT(r.GetDelaySec(), 0);
+  EXPECT_GT(r.GetDelayNs(), 0);
 
   r.SetHistoryDepth(3);
   {

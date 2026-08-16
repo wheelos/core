@@ -89,11 +89,11 @@ class ReaderBase {
   virtual bool HasReceived() const = 0;
 
   /**
-   * @brief Get time interval of since last receive message
+   * @brief Get the receive delay in nanoseconds
    *
-   * @return double seconds delay
+   * @return int64_t nanoseconds, or -1 if no message has been received
    */
-  virtual double GetDelaySec() const = 0;
+  virtual int64_t GetDelayNs() const = 0;
 
   /**
    * @brief Get the value of pending queue size

@@ -243,12 +243,12 @@ TEST(WriterReaderTest, get_delay_sec) {
   Reader<proto::UnitTest> reader(attr);
   reader.Init();
 
-  EXPECT_LT(reader.GetDelaySec(), 0);
+  EXPECT_LT(reader.GetDelayNs(), 0);
   reader.Enqueue(std::make_shared<proto::UnitTest>());
-  EXPECT_GT(reader.GetDelaySec(), 0);
+  EXPECT_GT(reader.GetDelayNs(), 0);
   sleep(1);
   reader.Enqueue(std::make_shared<proto::UnitTest>());
-  EXPECT_GT(reader.GetDelaySec(), 1);
+  EXPECT_GT(reader.GetDelayNs(), 1000000000);
 }
 
 class Message {

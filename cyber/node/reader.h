@@ -128,11 +128,11 @@ class Reader : public ReaderBase {
   bool Empty() const override;
 
   /**
-   * @brief Get time interval of since last receive message
+   * @brief Get the receive delay in nanoseconds
    *
-   * @return double seconds delay
+   * @return int64_t nanoseconds, or -1 if no message has been received
    */
-  double GetDelaySec() const override;
+  int64_t GetDelayNs() const override;
 
   /**
    * @brief Get pending_queue_size configuration
@@ -207,8 +207,8 @@ class Reader : public ReaderBase {
   void GetWriters(std::vector<proto::RoleAttributes>* writers) override;
 
  protected:
-  double latest_recv_time_sec_ = -1.0;
-  double second_to_lastest_recv_time_sec_ = -1.0;
+  int64_t latest_recv_time_ns_ = -1;
+  int64_t second_to_lastest_recv_time_ns_ = -1;
   uint32_t pending_queue_size_;
 
  private:
@@ -244,8 +244,8 @@ Reader<MessageT>::~Reader() {
 
 template <typename MessageT>
 void Reader<MessageT>::Enqueue(const std::shared_ptr<MessageT>& msg) {
-  second_to_lastest_recv_time_sec_ = latest_recv_time_sec_;
-  latest_recv_time_sec_ = Time::Now().ToSecond();
+  second_to_lastest_recv_time_ns_ = latest_recv_time_ns_;
+  latest_recv_time_ns_ = static_cast<int64_t>(Time::Now().ToNanosecond());
   blocker_->Publish(msg);
 }
 
@@ -358,15 +358,20 @@ bool Reader<MessageT>::Empty() const {
 }
 
 template <typename MessageT>
-double Reader<MessageT>::GetDelaySec() const {
-  if (latest_recv_time_sec_ < 0) {
-    return -1.0;
+int64_t Reader<MessageT>::GetDelayNs() const {
+  if (latest_recv_time_ns_ < 0) {
+    return -1;
   }
-  if (second_to_lastest_recv_time_sec_ < 0) {
-    return Time::Now().ToSecond() - latest_recv_time_sec_;
+
+  const auto now_ns = static_cast<int64_t>(Time::Now().ToNanosecond());
+  const auto age_ns = now_ns - latest_recv_time_ns_;
+  if (second_to_lastest_recv_time_ns_ < 0) {
+    return std::max<int64_t>(0, age_ns);
   }
-  return std::max((Time::Now().ToSecond() - latest_recv_time_sec_),
-                  (latest_recv_time_sec_ - second_to_lastest_recv_time_sec_));
+
+  const auto interval_ns =
+      latest_recv_time_ns_ - second_to_lastest_recv_time_ns_;
+  return std::max<int64_t>(0, std::max(age_ns, interval_ns));
 }
 
 template <typename MessageT>
