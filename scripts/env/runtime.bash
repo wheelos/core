@@ -49,6 +49,7 @@ export GLOG_minloglevel=0
 #export GLOG_v=4
 
 
-export TERMINFO=/lib/terminfo/
+export TERM="${TERM:-xterm-256color}"
+export TERMINFO="${TERMINFO:-/lib/terminfo/}"
 
 export sysmo_start=0
