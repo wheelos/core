@@ -25,6 +25,17 @@ bazel build //cyber
 bazel test //cyber/message/...
 ```
 
+### 2a. Optional: offline vendor build mode
+
+The default release flow is unchanged. `--config=vendor` is an opt-in mode for air-gapped or reproducible offline builds. It keeps the standard build path intact while creating a vendored Bazel dependency snapshot for use with the repository source tree.
+
+```bash
+bazel build --config=vendor --nobuild //:wheelos_core
+bash scripts/release/build_vendor_bundle.sh --outdir artifacts/vendor
+```
+
+This bundle includes the repository snapshot plus the vendored external dependency cache under `vendor/bazel`; it is for offline rebuilds, not as a substitute for the normal `.deb` / wheel publishing flow.
+
 ### 3. Use the source-tree runtime
 
 ```bash

@@ -9,6 +9,7 @@ MODULE.bazel.lock
 
 .pycyber-build-venv/
 artifacts/
+vendor/
 packaging/pycyber/API_DOCS.md
 packaging/pycyber/staging/
 packaging/pycyber/build/

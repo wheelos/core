@@ -87,6 +87,17 @@ bazel build //cyber
 bazel test //cyber/message/...
 ```
 
+## Offline / vendor build mode
+
+The default release flow remains unchanged. `--config=vendor` is an opt-in Bazel mode for offline or air-gapped builds that need a local Bzlmod dependency snapshot.
+
+```bash
+bazel build --config=vendor --nobuild //:wheelos_core
+bash scripts/release/build_vendor_bundle.sh --outdir artifacts/vendor
+```
+
+This mode packages the repository snapshot plus the vendored dependency cache under `vendor/bazel`, and it is intended for reproducible offline builds rather than as a replacement for the standard Debian/wheel publication flow.
+
 ## Install the runtime bundle
 
 ```bash
