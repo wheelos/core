@@ -1,48 +1,48 @@
 # Build and release validation
 
-Use this workflow to validate changes in `wheelos/core`.
+## When
 
-## Preconditions
+Read this when validating builds, the Ubuntu baseline, or complete release
+artifacts.
 
-- Run from the repository root.
-- Use Bazel 7 with the repository Bzlmod configuration.
-- Use Python 3.10 for pycyber packaging.
-- Linux auditwheel repair requires `patchelf >= 0.14.5`.
+## Rules / Facts
 
-## Validation
-
-1. Check the Bzlmod lockfile:
+- Run from the repository root with the repository's Bazel 7/Bzlmod
+  configuration. Use Python 3.10 for pycyber packaging; Linux auditwheel
+  repair requires `patchelf >= 0.14.5`.
+- Check the lockfile first:
 
    ```bash
    bash scripts/release/check_bzlmod_lockfile.sh --check
    ```
 
-2. Run the Ubuntu baseline:
+- Run the Ubuntu baseline:
 
    ```bash
    bash scripts/release/ubuntu2204_baseline.sh --distdir /tmp/cache/
    ```
 
-   If a timing-sensitive integration test fails, rerun only the failed
-   targets once before treating the result as a reproducible regression.
+- If a timing-sensitive integration test fails, rerun only the failed target
+  once before deciding whether it is a reproducible regression.
 
-3. Build and package all release artifacts:
+- Build and package the complete release artifacts:
 
    ```bash
    PATH="$PWD/packaging/pycyber/.venv/bin:$PATH" \
      bash scripts/release/build_release_artifacts.sh --distdir /tmp/cache/
    ```
 
-4. Confirm the manifest and artifacts:
+- Confirm that `artifacts/release/core/` contains the native package,
+  `artifacts/release/pycyber/` contains a wheel, source archive, and
+  `SHA256SUMS`, and `artifacts/release/manifest.txt` records the Git SHA and
+  Bazel version.
+- Report lockfile, baseline, native build, pycyber, auditwheel, and smoke-test
+  results separately. Do not claim the complete release flow passed if
+  auditwheel was skipped or the baseline required a rerun.
 
-   - `artifacts/release/core/` contains the native package.
-   - `artifacts/release/pycyber/` contains a wheel, source archive, and
-     `SHA256SUMS`.
-   - `artifacts/release/manifest.txt` records the Git SHA and Bazel version.
+## Sources
 
-## Result reporting
-
-Report the lockfile, baseline, native build, pycyber packaging, auditwheel,
-and smoke-test results separately. Do not claim the full release flow passed
-when auditwheel is skipped or when the baseline only passed after rerunning
-flaky targets.
+- `scripts/release/check_bzlmod_lockfile.sh`
+- `scripts/release/ubuntu2204_baseline.sh`
+- `scripts/release/build_release_artifacts.sh`
+- `packaging/pycyber/`
