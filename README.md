@@ -89,14 +89,49 @@ bazel test //cyber/message/...
 
 ## Offline / vendor build mode
 
-The default release flow remains unchanged. `--config=vendor` is an opt-in Bazel mode for offline or air-gapped builds that need a local Bzlmod dependency snapshot.
+The default release flow remains unchanged. Vendor mode is an opt-in Bazel
+workflow for offline or air-gapped builds. Generate the lockfile and vendor
+tree while online, then publish a self-contained archive:
 
 ```bash
-bazel build --config=vendor --nobuild //:wheelos_core
+bazel mod deps --config=ci --lockfile_mode=update
 bash scripts/release/build_vendor_bundle.sh --outdir artifacts/vendor
 ```
 
-This mode packages the repository snapshot plus the vendored dependency cache under `vendor/bazel`, and it is intended for reproducible offline builds rather than as a replacement for the standard Debian/wheel publication flow.
+The script refreshes the Bazel 7.6.2-compatible `MODULE.bazel.lock`, runs
+`bazel vendor --lockfile_mode=update`, validates `//:wheelos_core`, and writes
+an archive such as
+`artifacts/vendor/wheelos_core_vendor_<timestamp>.tar.gz`. The archive
+contains the source snapshot, `vendor/bazel` repositories and registry files,
+and the lockfile. It does not contain `bazel-external`, which Bazel recreates
+at runtime.
+
+To compile from the archive, extract it into a writable directory. Keep the
+lockfile and vendor tree together, use a fresh output root and empty repository
+cache, and disable downloads:
+
+```bash
+mkdir -p /work/wheelos-vendor
+tar -xzf artifacts/vendor/wheelos_core_vendor_<timestamp>.tar.gz \
+  -C /work/wheelos-vendor
+cd /work/wheelos-vendor/repo
+mkdir -p /tmp/empty-repository-cache
+bazel \
+  --output_user_root=/tmp/wheelos-vendor-output \
+  build \
+  --config=ci \
+  --lockfile_mode=error \
+  --vendor_dir=vendor/bazel \
+  --repository_cache=/tmp/empty-repository-cache \
+  --repository_disable_download \
+  //:wheelos_core
+```
+
+For strict validation, run the extracted tree in an Ubuntu 22.04 container
+with Docker `--network none`. Do not mount `vendor/bazel` read-only: Bazel
+must create the runtime `bazel-external` symlink. Do not delete the lockfile
+or use `--lockfile_mode=off`, because Bazel then falls back to remote
+registries.
 
 ## Install the runtime bundle
 
