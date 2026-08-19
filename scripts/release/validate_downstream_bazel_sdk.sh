@@ -42,22 +42,21 @@ from cyber.python.cyber_py3 import cyber
 assert cyber is not None
 EOF
 
+if [ -f "${REPO_ROOT}/.bazelrc" ]; then
+  cp "${REPO_ROOT}/.bazelrc" "${WORK_DIR}/.bazelrc"
+fi
+if [ -f "${REPO_ROOT}/.bazelrc.user" ]; then
+  cp "${REPO_ROOT}/.bazelrc.user" "${WORK_DIR}/.bazelrc.user"
+fi
+
 (
   cd "${WORK_DIR}"
   bazel build \
-    --cxxopt=-std=c++17 \
-    --host_cxxopt=-std=c++17 \
-    --registry=https://bcr.wheelos.cn/ \
-    --registry=https://bcr.bazel.build \
     --override_module=wheelos_core="${REPO_ROOT}" \
     //:cpp_consumer \
     //:python_consumer \
     @wheelos_core//cyber:runtime_tools
   bazel run \
-    --cxxopt=-std=c++17 \
-    --host_cxxopt=-std=c++17 \
-    --registry=https://bcr.wheelos.cn/ \
-    --registry=https://bcr.bazel.build \
     --override_module=wheelos_core="${REPO_ROOT}" \
     @wheelos_core//cyber/tools/cyber_launch:cyber_launch -- --help
 )

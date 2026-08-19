@@ -215,6 +215,45 @@ bool RunBenchmarkPublisher(const PublisherOptions& options, std::string* error) 
                                kOneSecondNs /
                                    static_cast<uint64_t>(options.frequency_hz))
           : 0;
+
+  bool loan_supported = false;
+  std::shared_ptr<transport::Transmitter<apollo::cyber::proto::Chatter>>
+      chatter_transmitter;
+  std::shared_ptr<transport::Transmitter<transport::PodMessage>>
+      pod_transmitter;
+  std::vector<std::shared_ptr<apollo::cyber::proto::Chatter>> pool;
+
+  if (options.message_type == MessageType::kProtobuf) {
+    chatter_transmitter = transport::Transport::Instance()
+                              ->CreateTransmitter<apollo::cyber::proto::Chatter>(attr, mode);
+    if (chatter_transmitter == nullptr) {
+      if (error != nullptr) {
+        *error = "failed to create chatter transmitter";
+      }
+      return false;
+    }
+    pool.reserve(static_cast<size_t>(options.message_pool_depth));
+    for (int i = 0; i < options.message_pool_depth; ++i) {
+      auto msg = std::make_shared<apollo::cyber::proto::Chatter>();
+      msg->set_content(payload);
+      msg->set_lidar_timestamp(static_cast<uint64_t>(options.publisher_index));
+      msg->set_seq(0);
+      msg->set_timestamp(0);
+      pool.emplace_back(std::move(msg));
+    }
+  } else {
+    pod_transmitter = transport::Transport::Instance()
+                          ->CreateTransmitter<transport::PodMessage>(
+                              attr, apollo::cyber::proto::OptionalMode::SHM);
+    if (pod_transmitter == nullptr) {
+      if (error != nullptr) {
+        *error = "failed to create pod transmitter";
+      }
+      return false;
+    }
+    loan_supported = pod_transmitter->IsLoanSupported();
+  }
+
   SleepUntilNs(start_ns);
 
   CpuInterferenceController interference;
@@ -225,29 +264,8 @@ bool RunBenchmarkPublisher(const PublisherOptions& options, std::string* error) 
   uint64_t send_failures = 0;
   uint64_t seq = 0;
   uint64_t next_send_ns = start_ns;
-  bool loan_supported = false;
+
   if (options.message_type == MessageType::kProtobuf) {
-    static std::shared_ptr<transport::Transmitter<apollo::cyber::proto::Chatter>>
-        transmitter;
-    transmitter = transport::Transport::Instance()
-                      ->CreateTransmitter<apollo::cyber::proto::Chatter>(attr, mode);
-    if (transmitter == nullptr) {
-      if (error != nullptr) {
-        *error = "failed to create chatter transmitter";
-      }
-      return false;
-    }
-    static std::vector<std::shared_ptr<apollo::cyber::proto::Chatter>> pool;
-    pool.clear();
-    pool.reserve(static_cast<size_t>(options.message_pool_depth));
-    for (int i = 0; i < options.message_pool_depth; ++i) {
-      auto msg = std::make_shared<apollo::cyber::proto::Chatter>();
-      msg->set_content(payload);
-      msg->set_lidar_timestamp(static_cast<uint64_t>(options.publisher_index));
-      msg->set_seq(0);
-      msg->set_timestamp(0);
-      pool.emplace_back(std::move(msg));
-    }
     while (true) {
       const uint64_t now = MonotonicRawNowNs();
       if (now >= end_ns) {
@@ -261,7 +279,7 @@ bool RunBenchmarkPublisher(const PublisherOptions& options, std::string* error) 
       msg->set_seq(seq);
       msg->set_timestamp(now);
       msg->set_lidar_timestamp(static_cast<uint64_t>(options.publisher_index));
-      if (transmitter->Transmit(msg)) {
+      if (chatter_transmitter->Transmit(msg)) {
         ++sent_messages;
       } else {
         ++send_failures;
@@ -272,16 +290,6 @@ bool RunBenchmarkPublisher(const PublisherOptions& options, std::string* error) 
       }
     }
   } else {
-    auto transmitter = transport::Transport::Instance()
-                           ->CreateTransmitter<transport::PodMessage>(
-                               attr, apollo::cyber::proto::OptionalMode::SHM);
-    if (transmitter == nullptr) {
-      if (error != nullptr) {
-        *error = "failed to create pod transmitter";
-      }
-      return false;
-    }
-    loan_supported = transmitter->IsLoanSupported();
     while (true) {
       const uint64_t now = MonotonicRawNowNs();
       if (now >= end_ns) {
@@ -298,14 +306,14 @@ bool RunBenchmarkPublisher(const PublisherOptions& options, std::string* error) 
       if (loan_supported) {
         transport::LoanedMessage<transport::PodMessage> loaned;
         const std::size_t required = transport::PodChunkTotalSize(payload.size());
-        if (transmitter->Loan(required, &loaned)) {
+        if (pod_transmitter->Loan(required, &loaned)) {
           const uint64_t ptr_value = reinterpret_cast<uint64_t>(loaned.data());
           header.reserved[0] = ptr_value;
           std::size_t written = 0;
           if (transport::BuildPodChunk(header, payload.data(), payload.size(),
                                        loaned.data(), loaned.capacity(), &written) &&
               loaned.set_size(written)) {
-            published = transmitter->Publish(std::move(loaned));
+            published = pod_transmitter->Publish(std::move(loaned));
           }
         }
       }
@@ -313,7 +321,7 @@ bool RunBenchmarkPublisher(const PublisherOptions& options, std::string* error) 
         header.reserved[0] = 0;
         auto msg = std::make_shared<transport::PodMessage>(header, payload.data(),
                                                             payload.size());
-        published = transmitter->Transmit(msg);
+        published = pod_transmitter->Transmit(msg);
       }
       if (published) {
         ++sent_messages;
@@ -376,37 +384,49 @@ bool RunShmProbePublisher(const PublisherOptions& options, std::string* error) {
   const uint64_t start_ns =
       options.start_ns == 0 ? MonotonicRawNowNs() + 100 * kOneMillisecondNs
                             : options.start_ns;
+  const uint64_t end_ns =
+      start_ns + static_cast<uint64_t>(options.duration_s) * kOneSecondNs;
   SleepUntilNs(start_ns);
 
   const std::string payload(static_cast<size_t>(options.payload_bytes), 'z');
-  transport::PodChunkHeader header = transport::MakeImagePodChunkHeader(
-      MonotonicRawNowNs(), 1, 1, 1, 1, 0, static_cast<uint32_t>(payload.size()));
   bool published = false;
   uint64_t pub_ptr_value = 0;
   const bool loan_supported = transmitter->IsLoanSupported();
   std::string publish_mode = "fallback_transmit";
+  uint64_t sent_count = 0;
 
-  if (loan_supported) {
-    transport::LoanedMessage<transport::PodMessage> loaned;
-    const std::size_t required = transport::PodChunkTotalSize(payload.size());
-    if (transmitter->Loan(required, &loaned)) {
-      pub_ptr_value = reinterpret_cast<uint64_t>(loaned.data());
-      header.reserved[0] = pub_ptr_value;
-      std::size_t written = 0;
-      if (transport::BuildPodChunk(header, payload.data(), payload.size(),
-                                   loaned.data(), loaned.capacity(), &written) &&
-          loaned.set_size(written)) {
-        published = transmitter->Publish(std::move(loaned));
-        publish_mode = "loan_publish";
+  for (uint64_t frame = 0; MonotonicRawNowNs() < end_ns; ++frame) {
+    transport::PodChunkHeader header = transport::MakeImagePodChunkHeader(
+        MonotonicRawNowNs(), frame, 1, 1, 1, 0,
+        static_cast<uint32_t>(payload.size()));
+    bool current_published = false;
+    if (loan_supported) {
+      transport::LoanedMessage<transport::PodMessage> loaned;
+      const std::size_t required = transport::PodChunkTotalSize(payload.size());
+      if (transmitter->Loan(required, &loaned)) {
+        pub_ptr_value = reinterpret_cast<uint64_t>(loaned.data());
+        header.reserved[0] = pub_ptr_value;
+        std::size_t written = 0;
+        if (transport::BuildPodChunk(header, payload.data(), payload.size(),
+                                     loaned.data(), loaned.capacity(), &written) &&
+            loaned.set_size(written)) {
+          current_published = transmitter->Publish(std::move(loaned));
+          publish_mode = "loan_publish";
+        }
       }
     }
-  }
 
-  if (!published) {
-    header.reserved[0] = 0;
-    auto msg = std::make_shared<transport::PodMessage>(header, payload.data(),
-                                                        payload.size());
-    published = transmitter->Transmit(msg);
+    if (!current_published) {
+      header.reserved[0] = 0;
+      auto msg = std::make_shared<transport::PodMessage>(header, payload.data(),
+                                                          payload.size());
+      current_published = transmitter->Transmit(msg);
+    }
+    if (current_published) {
+      published = true;
+      ++sent_count;
+    }
+    SleepNs(100 * kOneMillisecondNs);
   }
 
   const bool ok = WriteKvFile(
@@ -417,7 +437,7 @@ bool RunShmProbePublisher(const PublisherOptions& options, std::string* error) {
        {"probe_loan_supported", loan_supported ? "1" : "0"},
        {"probe_pub_ptr_value", std::to_string(pub_ptr_value)},
        {"probe_publish_mode", publish_mode},
-       {"sent_messages", published ? "1" : "0"},
+       {"sent_messages", std::to_string(sent_count)},
        {"send_failures", published ? "0" : "1"},
        {"cpu_delta_s", "0"},
        {"rss_kb_begin", "0"},

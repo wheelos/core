@@ -21,6 +21,7 @@ RUN apt-get update && apt-get install -y \
     patchelf \
     dpkg-dev \
     zlib1g-dev \
+    valgrind \
     git \
     && rm -rf /var/lib/apt/lists/*
 

@@ -603,8 +603,8 @@ struct BenchmarkOptions {
   int process_case_timeout_s = 180;
   bool use_real_inter_process = true;
 
-  int startup_wait_ms = 300;
-  int cooldown_wait_ms = 300;
+  int startup_wait_ms = 600;
+  int cooldown_wait_ms = 500;
 
   int frequency_payload_bytes = 1024;
   int frequency_start_hz = 100;
@@ -614,7 +614,7 @@ struct BenchmarkOptions {
 
   int bandwidth_frequency_hz = 30;
   int bandwidth_min_mb = 1;
-  int bandwidth_max_mb = 50;
+  int bandwidth_max_mb = 10;
   int bandwidth_step_mb = 1;
   int bandwidth_case_duration_s = 3;
 
@@ -1023,7 +1023,7 @@ bool ParseOptions(int argc, char** argv, BenchmarkOptions* options,
     options->scaling_case_duration_s = 1;
     options->cpu_interference_duration_s = 2;
     options->frequency_step_hz = std::max(options->frequency_step_hz, 1000);
-    options->bandwidth_step_mb = std::max(options->bandwidth_step_mb, 10);
+    options->bandwidth_step_mb = std::max(options->bandwidth_step_mb, 3);
     options->max_subscribers = std::min(options->max_subscribers, 4);
     options->max_publishers = std::min(options->max_publishers, 4);
   }

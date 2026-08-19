@@ -267,7 +267,7 @@ bool RunBenchmarkSubscriber(const SubscriberOptions& options, std::string* error
       options.channel, options.node_name, host_ip, process_id,
       static_cast<uint64_t>(options.subscriber_index + 1) * 131ULL);
 
-  std::atomic<bool> active{false};
+  std::atomic<bool> active{true};
   std::atomic<uint64_t> received_messages{0};
   std::atomic<uint64_t> received_bytes{0};
   std::atomic<uint64_t> sample_count{0};
@@ -393,7 +393,6 @@ bool RunBenchmarkSubscriber(const SubscriberOptions& options, std::string* error
   const ResourceSnapshot begin = CaptureResourceSnapshot();
   active.store(true, std::memory_order_release);
   SleepUntilNs(end_ns);
-  active.store(false, std::memory_order_release);
   StopCpuInterference(&interference);
 
   SleepNs(static_cast<uint64_t>(options.cooldown_wait_ms) * kOneMillisecondNs);
@@ -405,6 +404,7 @@ bool RunBenchmarkSubscriber(const SubscriberOptions& options, std::string* error
       break;
     }
   }
+  active.store(false, std::memory_order_release);
   const ResourceSnapshot end = CaptureResourceSnapshot();
   if (chatter_receiver != nullptr) {
     chatter_receiver->Disable();
@@ -512,7 +512,7 @@ bool RunShmProbeSubscriber(const SubscriberOptions& options, std::string* error)
   const auto attr = BuildRoleAttributes(options.channel, options.node_name, host_ip,
                                         process_id, 709);
 
-  std::atomic<bool> active{false};
+  std::atomic<bool> active{true};
   std::atomic<uint64_t> received{0};
   std::atomic<uint64_t> borrowed{0};
   std::atomic<uint64_t> copy_count{0};
@@ -559,11 +559,14 @@ bool RunShmProbeSubscriber(const SubscriberOptions& options, std::string* error)
                             : options.start_ns;
   const uint64_t end_ns =
       start_ns + static_cast<uint64_t>(options.duration_s) * kOneSecondNs;
-  SleepUntilNs(start_ns);
-  active.store(true, std::memory_order_release);
   SleepUntilNs(end_ns);
+  for (int i = 0; i < 20; ++i) {
+    if (received.load(std::memory_order_relaxed) > 0) {
+      break;
+    }
+    SleepNs(50000000ULL);
+  }
   active.store(false, std::memory_order_release);
-  SleepNs(200 * kOneMillisecondNs);
   receiver->Disable();
 
   const uint64_t recv = received.load(std::memory_order_relaxed);

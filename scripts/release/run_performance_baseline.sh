@@ -8,7 +8,9 @@ LARGE_MESSAGE_COMPARISON=true
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --outdir) OUTDIR="$2"; shift 2 ;;
+    --outdir=*) OUTDIR="${1#*=}"; shift ;;
     --full) QUICK=false; shift ;;
+    --quick) QUICK=true; shift ;;
     --skip-large-message-comparison) LARGE_MESSAGE_COMPARISON=false; shift ;;
     -h|--help)
       echo "Usage: $0 [--outdir DIR] [--full] [--skip-large-message-comparison]"

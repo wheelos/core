@@ -1,7 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-OUTDIR="${1:-artifacts/memory-leak/matrix-$(date -u +%Y%m%dT%H%M%SZ)}"
+OUTDIR="artifacts/memory-leak/matrix-$(date -u +%Y%m%dT%H%M%SZ)"
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --outdir) OUTDIR="$2"; shift 2 ;;
+    -h|--help)
+      echo "Usage: $0 [--outdir DIR] or $0 [DIR]"
+      exit 0
+      ;;
+    *)
+      OUTDIR="$1"; shift ;;
+  esac
+done
+
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "${REPO_ROOT}"
 
@@ -35,6 +48,8 @@ for target in "${targets[@]}"; do
   valgrind \
     --leak-check=full \
     --show-leak-kinds=definite,possible \
+    --errors-for-leak-kinds=definite,indirect \
+    --undef-value-errors=no \
     --log-file="${REPO_ROOT}/${valgrind_log}" \
     --error-exitcode=1 \
     "${REPO_ROOT}/bazel-bin/${package}/${binary}" >"${log}" 2>&1

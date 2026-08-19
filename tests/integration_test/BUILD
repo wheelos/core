@@ -38,6 +38,7 @@ py_test(
     size = "medium",
     timeout = "moderate",
     srcs = ["cyber_tools_discovery_test.py"],
+    tags = ["local"],
     data = [
         "//cyber:cyber_conf",
         "//cyber/tools/cyber_channel:cyber_channel",

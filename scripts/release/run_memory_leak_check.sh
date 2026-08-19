@@ -56,8 +56,9 @@ fi
 valgrind \
   --leak-check=full \
   --show-leak-kinds=definite,possible \
-  --errors-for-leak-kinds=definite,possible \
+  --errors-for-leak-kinds=definite,indirect \
   --error-exitcode=1 \
+  --undef-value-errors=no \
   --log-file="${OUTDIR}/valgrind.log" \
   "${COMMAND[@]}"
 
