@@ -50,12 +50,11 @@ bool RecordFileReader::Open(const std::string& path) {
   }
 
   if (io_uring_queue_init(256, &ring_, 0) < 0) {
-    AERROR << "io_uring_queue_init failed, file: " << path_;
-    close(fd_);
-    fd_ = -1;
-    return false;
+    AWARN << "io_uring_queue_init unavailable, using synchronous reads, file: "
+          << path_;
+  } else {
+    ring_initialized_ = true;
   }
-  ring_initialized_ = true;
 
   slots_.resize(kSlotCount);
   registered_iovecs_.resize(kSlotCount);
@@ -72,11 +71,16 @@ bool RecordFileReader::Open(const std::string& path) {
     registered_iovecs_[i].iov_base = slots_[i].data;
     registered_iovecs_[i].iov_len = slots_[i].capacity;
   }
-  if (io_uring_register_buffers(&ring_, registered_iovecs_.data(),
-                                registered_iovecs_.size()) < 0) {
-    AERROR << "io_uring_register_buffers failed, file: " << path_;
-    Close();
-    return false;
+  if (ring_initialized_) {
+    const int register_result =
+        io_uring_register_buffers(&ring_, registered_iovecs_.data(),
+                                  registered_iovecs_.size());
+    if (register_result < 0) {
+      AWARN << "io_uring_register_buffers unavailable, using regular reads, "
+            << "file: " << path_ << ", errno: " << -register_result;
+    } else {
+      buffers_registered_ = true;
+    }
   }
 
   if (!SetPosition(0)) {
@@ -91,8 +95,9 @@ bool RecordFileReader::Open(const std::string& path) {
 }
 
 void RecordFileReader::ReleaseBuffers() {
-  if (ring_initialized_ && !registered_iovecs_.empty()) {
+  if (ring_initialized_ && buffers_registered_) {
     io_uring_unregister_buffers(&ring_);
+    buffers_registered_ = false;
   }
   for (auto& slot : slots_) {
     if (slot.data != nullptr) {
@@ -145,7 +150,7 @@ void RecordFileReader::DrainInFlightReads() {
 }
 
 bool RecordFileReader::SetPosition(uint64_t target_pos) {
-  if (fd_ < 0 || !ring_initialized_) {
+  if (fd_ < 0) {
     return false;
   }
   DrainInFlightReads();
@@ -181,14 +186,41 @@ void RecordFileReader::FillReadWindow() {
 }
 
 bool RecordFileReader::SubmitRead(int slot_index, uint64_t offset) {
+  if (!ring_initialized_) {
+    const ssize_t bytes_read =
+        pread(fd_, slots_[slot_index].data, slots_[slot_index].capacity,
+              static_cast<off_t>(offset));
+    if (bytes_read < 0) {
+      AERROR << "pread read failed, file: " << path_ << ", errno: " << errno;
+      return false;
+    }
+    slots_[slot_index].offset = offset;
+    slots_[slot_index].valid_size = static_cast<size_t>(bytes_read);
+    slots_[slot_index].state =
+        bytes_read == 0 ? BufferSlot::State::FREE : BufferSlot::State::READY;
+    if (bytes_read == 0) {
+      reached_physical_eof_ = true;
+    } else {
+      ready_slots_by_offset_[offset] = slot_index;
+      if (static_cast<size_t>(bytes_read) < slots_[slot_index].capacity) {
+        reached_physical_eof_ = true;
+      }
+    }
+    return true;
+  }
   struct io_uring_sqe* sqe = io_uring_get_sqe(&ring_);
   if (sqe == nullptr) {
     return false;
   }
   slots_[slot_index].offset = offset;
   slots_[slot_index].state = BufferSlot::State::IN_FLIGHT;
-  io_uring_prep_read_fixed(sqe, fd_, slots_[slot_index].data,
-                           slots_[slot_index].capacity, offset, slot_index);
+  if (buffers_registered_) {
+    io_uring_prep_read_fixed(sqe, fd_, slots_[slot_index].data,
+                             slots_[slot_index].capacity, offset, slot_index);
+  } else {
+    io_uring_prep_read(sqe, fd_, slots_[slot_index].data,
+                       slots_[slot_index].capacity, offset);
+  }
   io_uring_sqe_set_data64(sqe, static_cast<uint64_t>(slot_index));
   if (io_uring_submit(&ring_) < 0) {
     slots_[slot_index].state = BufferSlot::State::FREE;

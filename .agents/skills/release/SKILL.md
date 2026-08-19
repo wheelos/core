@@ -14,6 +14,9 @@ validating deliverables.
   environment.
 - Before delivery, confirm that the native package, pycyber wheelhouse,
   checksums, and manifest were generated.
+- Separate acceptance into package delivery/customer installation and runtime
+  tools/examples execution. Both parts must be reported; package installation
+  success does not imply that tools or examples run successfully.
 - Report lockfile, baseline, native build, pycyber, auditwheel, and smoke-test
   results separately; partial success is not full release success.
 - Keep `MODULE.bazel.lock` synchronized with the Bzlmod configuration; do not

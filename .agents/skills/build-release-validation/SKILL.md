@@ -40,6 +40,80 @@ artifacts.
   results separately. Do not claim the complete release flow passed if
   auditwheel was skipped or the baseline required a rerun.
 
+## Two-part acceptance model
+
+Release validation has two independent acceptance parts. A release is
+complete only when both parts pass, or when every exception is explicitly
+recorded and accepted.
+
+### Part 1: Package delivery and customer installation
+
+Validate the artifacts a customer receives in a fresh x86_64 Ubuntu 22.04
+container:
+
+| Delivery | Artifact | Customer-side check |
+| --- | --- | --- |
+| Native runtime | `artifacts/release/core/*.deb` | Extract or install the deb, source `setup.bash`, and run `mainboard`, `cyber_recorder`, `cyber_monitor`, and `cyber_launch --help` |
+| Python binary package | `artifacts/release/pycyber/*.whl` | Install into a fresh Python 3.10 venv and import `pycyber`, `pycyber.cyber`, `pycyber.record`, and `pycyber.proto.record_pb2` |
+| Python source package | `artifacts/release/pycyber/*.tar.gz` | Install from the sdist into a fresh Python 3.10 venv and run the same imports |
+
+Also verify `SHA256SUMS` and `manifest.txt`. A wheel validated with
+`--skip-auditwheel` is only an x86_64 installation check; it is not a repaired
+manylinux release.
+
+### Part 2: Runtime, tools, and examples
+
+Run the shipped runtime and examples in the same clean image, using the named
+non-root `wheelos` user. The standard targets are:
+
+```bash
+bazel test --config=ci --test_output=errors \
+  //cyber/python/cyber_py3/examples:examples_smoke_test \
+  //tests/integration_test:examples_regression_tests
+```
+
+Set an unlimited memlock limit for runtime/example containers that exercise
+io_uring or shared-memory paths:
+
+```yaml
+ulimits:
+  memlock:
+    soft: -1
+    hard: -1
+```
+
+Use `--privileged` only when the target also requires other kernel or IPC
+permissions. Keep Bazel analysis and hermetic Python builds as the
+non-root `wheelos` user; running Bazel as root is rejected by `rules_python`.
+If an io_uring example passes only as privileged root, record that as an
+environment/UID requirement rather than silently changing the standard
+non-root acceptance result.
+
+For customer data or record/play examples, mount the data directory read-only:
+
+```bash
+-v /mnt/synology:/mnt/synology:ro
+```
+
+If a test expects a fixed fixture such as
+`/mnt/synology/apollo/sensor_rgb.record`, map an existing fixture to that
+container path without modifying the source data. Record/play, recorder
+cross-process `info`, and Python record examples must be reported separately
+from the general examples smoke result because they depend on io_uring,
+filesystem, and process-lifecycle behavior.
+
+The runtime result must distinguish:
+
+- build/packaging success;
+- package installation and import success;
+- tools starting successfully;
+- Python example success;
+- C++/integration example success;
+- environmental or fixture failures.
+
+Do not convert an example or tool failure into a package pass, and do not
+claim the full release flow passed when either acceptance part is incomplete.
+
 ## Sources
 
 - `scripts/release/check_bzlmod_lockfile.sh`

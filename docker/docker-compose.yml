@@ -24,6 +24,10 @@ services:
     ipc: private
     network_mode: host
     privileged: true
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
     deploy:
       resources:
         reservations:

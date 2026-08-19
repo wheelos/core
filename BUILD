@@ -27,6 +27,7 @@ pkg_files(
     srcs = ["//cyber:runtime_native_tools"],
     prefix = "/opt/wheelos_core/bin",
     strip_prefix = strip_prefix.files_only(),
+    include_runfiles = True,
     attributes = pkg_attributes(mode = "0755"),
 )
 

@@ -81,6 +81,7 @@ class RecordFileReader : public RecordFileBase {
 
   struct io_uring ring_ = {};
   bool ring_initialized_ = false;
+  bool buffers_registered_ = false;
   std::vector<BufferSlot> slots_;
   std::vector<struct iovec> registered_iovecs_;
   std::map<uint64_t, int> ready_slots_by_offset_;

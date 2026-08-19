@@ -184,6 +184,7 @@ The repository separates operational documentation from generated API reference 
 - [Installation and setup](docs/getting-started/installation.md)
 - [Quick start](docs/getting-started/quickstart.md)
 - [Build and run](docs/guides/build-and-run.md)
+- [Release validation](docs/guides/release-validation.md)
 - [Component development](docs/guides/component-development.md)
 - [Tools and monitoring](docs/guides/tools-and-monitoring.md)
 - [Topology and transport](docs/guides/topology-and-transport.md)

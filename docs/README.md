@@ -16,6 +16,7 @@ This repository has two documentation layers:
 - [Component development](guides/component-development.md)
 - [Tools and monitoring](guides/tools-and-monitoring.md)
 - [Topology and transport](guides/topology-and-transport.md)
+- [Release validation](guides/release-validation.md)
 - [Common issues](troubleshooting/common-issues.md)
 
 ## Examples
