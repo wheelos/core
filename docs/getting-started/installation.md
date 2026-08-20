@@ -1,69 +1,40 @@
 # Installation and setup
 
-## Before you begin
+Choose the deployment mode that matches your goal.
 
-Use either the repository source-build flow or the packaged runtime bundle.
+## Choose a deployment path
 
-## Steps
+### Source build and run
 
-### 1. Install build dependencies
+Use this path when you are working from a repository checkout and want to build and run examples directly from the source tree.
+
+- [Source build and run](../guides/source-build-and-run.md)
+
+### Package installation and run
+
+Use this path when you want the installed runtime bundle and a system-level entry point.
+
+- [Package installation and run](../guides/package-installation.md)
+
+## Common prerequisite
+
+Install the repository build dependencies before either path:
 
 ```bash
 sudo bash scripts/deploy/build.sh
 ```
 
-### 2. Build from source
+The repository uses Bzlmod and resolves external modules from the configured Bazel registries. Ensure network access to `https://bcr.wheelos.cn/` and the default Bazel BCR before building. In an offline or air-gapped environment, use the vendor/offline build flow instead of a standard checkout build.
 
-```bash
-bash scripts/build.sh
-```
+## Decision guide
 
-Useful narrow checks:
-
-```bash
-bazel build //cyber
-bazel test //cyber/message/...
-```
-
-### 3. Install the runtime bundle
-
-```bash
-bazel build //:wheelos_core
-sudo apt install ./bazel-bin/wheelos_core_1.0.0_all.deb
-```
-
-Load the installed runtime environment:
-
-```bash
-source /opt/wheelos_core/setup.bash
-cyber_launch --help
-mainboard --help
-cyber_monitor --help
-cyber_recorder --help
-```
-
-### 4. Run directly from a checkout
-
-If you want to run binaries from the source tree instead of the installed bundle:
-
-```bash
-source scripts/env/runtime.bash
-```
-
-This sets `CYBER_PATH`, adds Bazel outputs to `PATH`, and configures the repo-local runtime environment.
-
-## Verify
-
-The minimal validation is:
-
-```bash
-cyber_launch --help
-```
-
-If it succeeds, the runtime is available in the current shell.
+- Use the source build path when you are developing from the repository checkout.
+- Use the package installation path when you want the installed runtime bundle.
+- Use [Secondary development and integration](../guides/secondary-development.md) when you are writing a downstream Bazel project that depends on `wheelos_core`.
 
 ## Next
 
 - [Quick start](quickstart.md)
-- [Build and run](../guides/build-and-run.md)
+- [Deployment options](../guides/build-and-run.md)
+- [Secondary development and integration](../guides/secondary-development.md)
 - [Common component example](../../examples/common_component_example/README.md)

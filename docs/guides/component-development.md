@@ -77,7 +77,7 @@ The component loads from the shared library and processes input as configured in
 
 ## Next
 
-- [Build and run](build-and-run.md)
+- [Deployment options](build-and-run.md)
 - [Quick start](../getting-started/quickstart.md)
 - [Common component example](../../examples/common_component_example/README.md)
 - [Timer component example](../../examples/timer_component_example/README.md)

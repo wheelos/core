@@ -42,4 +42,10 @@ The component receives messages and prints output in the terminal running `cyber
 
 - [Common component example](../../examples/common_component_example/README.md)
 - [Timer component example](../../examples/timer_component_example/README.md)
-- [Build and run](../guides/build-and-run.md)
+- [Source build and run](../guides/source-build-and-run.md)
+- [Package installation and run](../guides/package-installation.md)
+- [Secondary development and integration](../guides/secondary-development.md)
+- [Release and verification](../guides/release-and-verification.md)
+- [Performance testing](../guides/performance-testing.md)
+- [Publish/Subscribe Basics](../guides/pubsub-basics.md)
+- [Python Quick Start](../guides/python-quickstart.md)

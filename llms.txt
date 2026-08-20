@@ -8,7 +8,7 @@
 - [Documentation index](docs/README.md): operational docs and reference entry points.
 - [Installation and setup](docs/getting-started/installation.md): Bazel dependencies, build steps, and runtime bundle setup.
 - [Quick start](docs/getting-started/quickstart.md): minimal publish/subscribe example.
-- [Build and run](docs/guides/build-and-run.md): source-build and runtime workflow.
+- [Deployment options](docs/guides/build-and-run.md): choose between source-build and packaged runtime workflows.
 - [Component development](docs/guides/component-development.md): DAG, launch, and component lifecycle.
 - [Generated API index](docs/doxy-docs/source/index.md): generated implementation and API reference.
 - [C++ API guide](docs/doxy-docs/source/cpp-api.md): nodes, pub/sub, services, parameters, timers, and records.

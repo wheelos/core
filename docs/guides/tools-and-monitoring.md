@@ -12,7 +12,7 @@ From the installed bundle or an active checkout runtime environment:
 cyber_launch --help
 mainboard --help
 cyber_monitor --help
-cyber_recorder --help
+cyber_recorder play --help
 ```
 
 ## Steps
@@ -41,7 +41,7 @@ cyber_launch start examples/common_component_example/common.launch
 
 ```bash
 cyber_monitor --help
-cyber_recorder --help
+cyber_recorder play --help
 ```
 
 ## Verify
@@ -50,6 +50,6 @@ Use `cyber_monitor` and `cyber_recorder` to inspect runtime state and recorded d
 
 ## Next
 
-- [Build and run](build-and-run.md)
+- [Deployment options](build-and-run.md)
 - [Installation guide](../getting-started/installation.md)
 - [Quick start](../getting-started/quickstart.md)

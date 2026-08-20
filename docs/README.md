@@ -9,14 +9,28 @@ This repository has two documentation layers:
 
 1. [Installation and setup](getting-started/installation.md)
 2. [Quick start](getting-started/quickstart.md)
-3. [Build and run](guides/build-and-run.md)
+3. [Deployment options](guides/build-and-run.md)
 
 ## Guides
 
+### Examples and usage guides
+
+- [Publish/Subscribe Basics](guides/pubsub-basics.md)
+- [Service and Client](guides/service-client.md)
+- [Parameter Service](guides/parameter-service.md)
+- [Record and Replay](guides/record-and-replay.md)
+- [Python Quick Start](guides/python-quickstart.md)
+- [Zero-Copy and Sensor Data](guides/zero-copy-and-sensor-data.md)
+
+### Additional operational guides
+
+- [Secondary development and integration](guides/secondary-development.md)
+- [Release and verification](guides/release-and-verification.md)
+- [Release validation](guides/release-validation.md)
+- [Performance testing](guides/performance-testing.md)
 - [Component development](guides/component-development.md)
 - [Tools and monitoring](guides/tools-and-monitoring.md)
 - [Topology and transport](guides/topology-and-transport.md)
-- [Release validation](guides/release-validation.md)
 - [Common issues](troubleshooting/common-issues.md)
 
 ## Examples

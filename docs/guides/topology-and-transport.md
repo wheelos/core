@@ -38,6 +38,6 @@ This map is a runtime-level overview; use generated API docs for advanced implem
 
 ## Next
 
-- [Build and run](build-and-run.md)
+- [Deployment options](build-and-run.md)
 - [Component development](component-development.md)
 - [Generated API index](../doxy-docs/source/index.md)

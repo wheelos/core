@@ -19,6 +19,13 @@ The reference content here is intended for:
 - implementation details
 - release and scheduling context
 
+For the operational workflow, prefer the task-oriented docs under:
+
+- [docs/README.md](../README.md)
+- [docs/getting-started/installation.md](../getting-started/installation.md)
+- [docs/getting-started/quickstart.md](../getting-started/quickstart.md)
+- [docs/guides/build-and-run.md](../guides/build-and-run.md)
+
 ## Build locally
 
 From this directory:

@@ -29,4 +29,4 @@ Use the task-oriented docs under `docs/getting-started/` and `docs/guides/` for 
 - [Documentation index](../README.md)
 - [Installation guide](../getting-started/installation.md)
 - [Quick start](../getting-started/quickstart.md)
-- [Build and run](../guides/build-and-run.md)
+- [Deployment options](../guides/build-and-run.md)

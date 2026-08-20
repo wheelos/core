@@ -1,92 +1,35 @@
-# Build and run
+# Deployment options
 
-## Before you begin
+Choose the deployment path that matches your goal.
 
-This is the standard repository build and runtime startup flow.
+## Source build and run
 
-## Steps
+Use this path when you are developing from a checkout, testing local edits, or running examples directly from the repository tree.
 
-### 1. Install build dependencies
+- [Source build and run](source-build-and-run.md)
+
+## Package installation and run
+
+Use this path when you want an installed runtime and want to work from the packaged native bundle instead of the source tree.
+
+- [Package installation and run](package-installation.md)
+
+## Common setup
+
+Both flows start with the repository build dependencies:
 
 ```bash
 sudo bash scripts/deploy/build.sh
 ```
 
-### 2. Build the project
+## Decision guide
 
-```bash
-bash scripts/build.sh
-```
-
-Focused validation:
-
-```bash
-bazel build //cyber
-bazel test //cyber/message/...
-```
-
-### 2a. Optional: offline vendor build mode
-
-The default release flow is unchanged. `--config=vendor` is an opt-in mode for air-gapped or reproducible offline builds. It keeps the standard build path intact while creating a vendored Bazel dependency snapshot for use with the repository source tree.
-
-```bash
-bazel build --config=vendor --nobuild //:wheelos_core
-bash scripts/release/build_vendor_bundle.sh --outdir artifacts/vendor
-```
-
-This bundle includes the repository snapshot plus the vendored external dependency cache under `vendor/bazel`; it is for offline rebuilds, not as a substitute for the normal `.deb` / wheel publishing flow.
-
-### 3. Use the source-tree runtime
-
-```bash
-source scripts/env/runtime.bash
-```
-
-This prepares `PATH`, `CYBER_PATH`, and repo-local logging paths.
-
-### 4. Install the native bundle
-
-```bash
-bazel build //:wheelos_core
-sudo apt install ./bazel-bin/wheelos_core_1.0.0_all.deb
-source /opt/wheelos_core/setup.bash
-```
-
-Verify:
-
-```bash
-cyber_launch --help
-mainboard --help
-cyber_monitor --help
-cyber_recorder --help
-```
-
-### 5. Run the example
-
-```bash
-bazel build //examples/common_component_example/...
-cyber_launch start examples/common_component_example/common.launch
-```
-
-Or:
-
-```bash
-mainboard -d examples/common_component_example/common.dag
-```
-
-Then run the writers in separate terminals:
-
-```bash
-bazel run //examples/common_component_example:channel_test_writer
-bazel run //examples/common_component_example:channel_prediction_writer
-```
-
-## Verify
-
-The component receives messages and logs output in the terminal running `cyber_launch` or `mainboard`.
+- Source build: you are modifying code in this repository or running examples directly from a checkout.
+- Package installation: you want a stable runtime bundle, a system-level environment, or deployment-like validation.
+- Downstream integration: if you are consuming `wheelos_core` from another Bazel project, use [Secondary development and integration](secondary-development.md) instead of re-reading the build commands here.
 
 ## Next
 
-- [Installation guide](../getting-started/installation.md)
+- [Installation and setup](../getting-started/installation.md)
 - [Quick start](../getting-started/quickstart.md)
 - [Component development](component-development.md)

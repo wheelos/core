@@ -11,7 +11,7 @@ orientated documentation instead:
 - [Documentation index](../../README.md)
 - [Installation and setup](../../getting-started/installation.md)
 - [Quick start](../../getting-started/quickstart.md)
-- [Build and run](../../guides/build-and-run.md)
+- [Deployment options](../../guides/build-and-run.md)
 
 ## Primary purpose of this section
 
