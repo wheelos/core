@@ -18,6 +18,7 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
+BAZEL_REGISTRY_URL="${BAZEL_REGISTRY_URL:-https://bcr.bazel.build}"
 REPO_ROOT=$(git rev-parse --show-toplevel)
 cd "$REPO_ROOT"
 
@@ -41,9 +42,9 @@ if [ "$MODE" = "check" ] && [ ! -f MODULE.bazel.lock ]; then
 fi
 
 if [ "$MODE" = "update" ]; then
-  bazel build --nobuild --config=ci --config=lockfile-update "${LOCKFILE_TARGETS[@]}" >/dev/null
+  bazel build --registry="$BAZEL_REGISTRY_URL" --nobuild --config=ci --config=lockfile-update "${LOCKFILE_TARGETS[@]}" >/dev/null
   echo "Updated MODULE.bazel.lock"
 else
-  bazel build --nobuild --config=ci --config=lockfile-check "${LOCKFILE_TARGETS[@]}" >/dev/null
+  bazel build --registry="$BAZEL_REGISTRY_URL" --nobuild --config=ci --config=lockfile-check "${LOCKFILE_TARGETS[@]}" >/dev/null
   echo "MODULE.bazel.lock is in sync"
 fi

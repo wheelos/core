@@ -3,6 +3,7 @@ set -euo pipefail
 
 OUTDIR="${OUTDIR:-artifacts/vendor}"
 DISTDIR="${DISTDIR:-/tmp/cache/}"
+BAZEL_REGISTRY_URL="${BAZEL_REGISTRY_URL:-https://bcr.bazel.build}"
 REPO_ROOT=$(git rev-parse --show-toplevel)
 VENDOR_DIR="${BAZEL_VENDOR_DIR:-$REPO_ROOT/vendor/bazel}"
 SKIP_BUILD=false
@@ -38,6 +39,7 @@ rm -rf "$OUTDIR"/*
 if [ "$SKIP_BUILD" = false ]; then
   echo "Refreshing the Bazel lockfile before vendoring..."
   bazel mod deps \
+    --registry="$BAZEL_REGISTRY_URL" \
     --config=ci \
     --lockfile_mode=update
 
@@ -45,6 +47,7 @@ if [ "$SKIP_BUILD" = false ]; then
   rm -rf "$VENDOR_DIR"
   mkdir -p "$VENDOR_DIR"
   bazel vendor \
+    --registry="$BAZEL_REGISTRY_URL" \
     --config=ci \
     --distdir="$DISTDIR" \
     --lockfile_mode=update \
@@ -53,6 +56,7 @@ if [ "$SKIP_BUILD" = false ]; then
 
   echo "Validating the vendor-mode Bazel configuration..."
   bazel build \
+    --registry="$BAZEL_REGISTRY_URL" \
     --config=ci \
     --distdir="$DISTDIR" \
     --lockfile_mode=error \
@@ -78,6 +82,7 @@ mkdir -p "$STAGING_DIR/repo/vendor/bazel"
 tar \
   -C "$REPO_ROOT" \
   --exclude=.git \
+  --exclude=.bazelrc.user \
   --exclude='bazel-*' \
   --exclude=artifacts \
   --exclude=vendor \
@@ -85,6 +90,7 @@ tar \
 
 cp -a "$VENDOR_DIR"/. "$STAGING_DIR/repo/vendor/bazel/"
 rm -rf "$STAGING_DIR/repo/vendor/bazel/bazel-external"
+rm -f "$STAGING_DIR/repo/.bazelrc.user"
 
 if [ "$SKIP_PACKAGE" = false ]; then
   ARCHIVE_NAME="wheelos_core_vendor_$(date -u +%Y%m%dT%H%M%SZ).tar.gz"

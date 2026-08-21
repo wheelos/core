@@ -1,7 +1,6 @@
 {
   "lockFileVersion": 13,
   "registryFileHashes": {
-    "https://bcr.bazel.build/modules/wheelos_fastdds/2.14.6.bcr.3/MODULE.bazel": "not found",
     "https://bcr.wheelos.cn/bazel_registry.json": "2c8b225533d6f87a0e107cb0c7de38ea2ba23b7c0eb32df03182a5ae2fb6ff0e",
     "https://bcr.wheelos.cn/modules/abseil-cpp/20210324.2/MODULE.bazel": "7cd0312e064fde87c8d1cd79ba06c876bd23630c83466e9500321be55c96ace2",
     "https://bcr.wheelos.cn/modules/abseil-cpp/20211102.0/MODULE.bazel": "70390338f7a5106231d20620712f7cccb659cd0e9d073d1991c038eb9fc57589",
@@ -197,7 +196,8 @@
     "https://bcr.wheelos.cn/modules/upb/0.0.0-20220602-e5f2601/source.json": "7c8b1669bdf046cbcd5301956b837142a39d817cc85b0c6f9da440416dcfe249",
     "https://bcr.wheelos.cn/modules/wheelos_fastcdr/2.2.7/MODULE.bazel": "cf5e9538133d65bc354cd8e543682d5c192169363feaebc573781b9ec435d1ca",
     "https://bcr.wheelos.cn/modules/wheelos_fastcdr/2.2.7/source.json": "2b08bca6aa626c1a2819e674f44a358823572001a7e99b57cc2e776eaeae9220",
-    "https://bcr.wheelos.cn/modules/wheelos_fastdds/2.14.6.bcr.3/MODULE.bazel": "not found",
+    "https://bcr.wheelos.cn/modules/wheelos_fastdds/2.14.6.bcr.3/MODULE.bazel": "51c71a5b458c7f2c08a7715a4eb58c703e4181f3c121d2b94fc91c09acf283c8",
+    "https://bcr.wheelos.cn/modules/wheelos_fastdds/2.14.6.bcr.3/source.json": "02a3d4cd1ce42f83c2c1179ba3de32ceaea63e1416505864575a2edf23c0887a",
     "https://bcr.wheelos.cn/modules/yaml-cpp/0.9.0/MODULE.bazel": "d0841e12e92973d7e4c97557198335788890dafa9487d6dc0f9b852053a6c5c0",
     "https://bcr.wheelos.cn/modules/yaml-cpp/0.9.0/source.json": "07a9973d6cee81c8bdb1902e8f90064a0ef9aa2262bffc4df2ed577956c08e1b",
     "https://bcr.wheelos.cn/modules/zlib/1.2.11/MODULE.bazel": "07b389abc85fdbca459b69e2ec656ae5622873af3f845e1c9d80fe179f3effa0",
