@@ -23,7 +23,7 @@ bazel --output_user_root=/tmp/out build \
 ```
 
 The build completed successfully with 3,394 actions and produced
-`bazel-bin/wheelos_core_1.0.3_all.deb`. The archive contains the Bazel 7.6.2
+`bazel-bin/wheelos_core_1.0.4_all.deb`. The archive contains the Bazel 7.6.2
 lockfile, vendored repositories, marker files, and `_registries`; it does not
 contain `bazel-external`, which Bazel creates at runtime.
 

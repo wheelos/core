@@ -72,7 +72,7 @@ pkg_deb(
     homepage = "https://github.com/wheelos/core",
     maintainer = "daohu527@gmail.com",
     package = "wheelos_core",
-    version = "1.0.3",
+    version = "1.0.4",
 )
 
 pkg_tar(
