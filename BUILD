@@ -63,6 +63,7 @@ pkg_files(
 
 pkg_deb(
     name = "wheelos_core",
+    architecture = "amd64",
     built_using = "unzip",
     data = ":wheelos_cyber_runtime",
     depends = [

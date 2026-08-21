@@ -75,4 +75,12 @@ fi
   find "$OUTDIR/pycyber" -maxdepth 1 -type f -printf '  %f\n' | sort
 } > "$OUTDIR/manifest.txt"
 
+# Keep checksums for every distributable artifact, including the native package.
+(
+  cd "$OUTDIR"
+  find core pycyber -type f ! -name 'SHA256SUMS' -print0 |
+    sort -z |
+    xargs -0 sha256sum
+) > "$OUTDIR/SHA256SUMS"
+
 echo "Release artifacts are available in $OUTDIR"

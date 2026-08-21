@@ -108,4 +108,13 @@ fi
   echo "archive_dir=$OUTDIR"
 } > "$OUTDIR/manifest.txt"
 
+if [ "$SKIP_PACKAGE" = false ]; then
+  (
+    cd "$OUTDIR"
+    find . -maxdepth 1 -type f -name '*.tar.gz' -print0 |
+      sort -z |
+      xargs -0 sha256sum
+  ) > "$OUTDIR/SHA256SUMS"
+fi
+
 exit 0
