@@ -34,6 +34,8 @@
 namespace apollo {
 namespace cyber {
 
+class ClientTestPeer;
+
 /**
  * @class Client
  * @brief Client get `Response` from a responding `Service` by sending a Request
@@ -71,7 +73,7 @@ class Client : public ClientBase {
    */
   Client() = delete;
 
-  virtual ~Client() {}
+  virtual ~Client() { Destroy(); }
 
   /**
    * @brief Init the Client
@@ -152,6 +154,12 @@ class Client : public ClientBase {
   void HandleResponse(const std::shared_ptr<Response>& response,
                       const transport::MessageInfo& request_info);
 
+  SharedFuture AsyncSendRequest(SharedRequest request, CallbackType&& cb,
+                                uint64_t* sequence_number,
+                                SharedPromise* call_promise);
+  bool ErasePendingRequest(uint64_t sequence_number,
+                           const SharedPromise& call_promise);
+
   bool IsInit(void) const { return response_receiver_ != nullptr; }
 
   std::string node_name_;
@@ -172,10 +180,27 @@ class Client : public ClientBase {
 
   transport::Identity writer_id_;
   uint64_t sequence_number_;
+
+  friend class ClientTestPeer;
 };
 
 template <typename Request, typename Response>
-void Client<Request, Response>::Destroy() {}
+void Client<Request, Response>::Destroy() {
+  response_receiver_.reset();
+  request_transmitter_.reset();
+
+  std::unordered_map<uint64_t,
+                     std::tuple<SharedPromise, CallbackType, SharedFuture>>
+      pending_requests;
+  {
+    std::lock_guard<std::mutex> lock(pending_requests_mutex_);
+    pending_requests.swap(pending_requests_);
+  }
+  for (auto& pending_request : pending_requests) {
+    auto& call_promise = std::get<0>(pending_request.second);
+    call_promise->set_value(nullptr);
+  }
+}
 
 template <typename Request, typename Response>
 bool Client<Request, Response>::Init() {
@@ -227,7 +252,10 @@ Client<Request, Response>::SendRequest(SharedRequest request,
   if (!IsInit()) {
     return nullptr;
   }
-  auto future = AsyncSendRequest(request);
+  uint64_t sequence_number = 0;
+  SharedPromise call_promise;
+  auto future = AsyncSendRequest(
+      request, [](SharedFuture) {}, &sequence_number, &call_promise);
   if (!future.valid()) {
     return nullptr;
   }
@@ -235,6 +263,7 @@ Client<Request, Response>::SendRequest(SharedRequest request,
   if (status == std::future_status::ready) {
     return future.get();
   } else {
+    ErasePendingRequest(sequence_number, call_promise);
     return nullptr;
   }
 }
@@ -267,19 +296,54 @@ template <typename Request, typename Response>
 typename Client<Request, Response>::SharedFuture
 Client<Request, Response>::AsyncSendRequest(SharedRequest request,
                                             CallbackType&& cb) {
+  return AsyncSendRequest(request, std::move(cb), nullptr, nullptr);
+}
+
+template <typename Request, typename Response>
+typename Client<Request, Response>::SharedFuture
+Client<Request, Response>::AsyncSendRequest(SharedRequest request,
+                                            CallbackType&& cb,
+                                            uint64_t* sequence_number,
+                                            SharedPromise* request_promise) {
   if (IsInit()) {
-    std::lock_guard<std::mutex> lock(pending_requests_mutex_);
-    sequence_number_++;
-    transport::MessageInfo info(writer_id_, sequence_number_, writer_id_);
-    request_transmitter_->Transmit(request, info);
+    transport::MessageInfo info;
     SharedPromise call_promise = std::make_shared<Promise>();
     SharedFuture f(call_promise->get_future());
-    pending_requests_[info.seq_num()] =
-        std::make_tuple(call_promise, std::forward<CallbackType>(cb), f);
+    {
+      std::lock_guard<std::mutex> lock(pending_requests_mutex_);
+      sequence_number_++;
+      info = transport::MessageInfo(writer_id_, sequence_number_, writer_id_);
+      pending_requests_[info.seq_num()] =
+          std::make_tuple(call_promise, std::forward<CallbackType>(cb), f);
+    }
+    if (sequence_number != nullptr) {
+      *sequence_number = info.seq_num();
+    }
+    if (request_promise != nullptr) {
+      *request_promise = call_promise;
+    }
+    if (!request_transmitter_->Transmit(request, info)) {
+      if (ErasePendingRequest(info.seq_num(), call_promise)) {
+        call_promise->set_value(nullptr);
+      }
+    }
     return f;
   } else {
     return std::shared_future<std::shared_ptr<Response>>();
   }
+}
+
+template <typename Request, typename Response>
+bool Client<Request, Response>::ErasePendingRequest(
+    uint64_t sequence_number, const SharedPromise& call_promise) {
+  std::lock_guard<std::mutex> lock(pending_requests_mutex_);
+  auto iter = pending_requests_.find(sequence_number);
+  if (iter == pending_requests_.end() ||
+      std::get<0>(iter->second) != call_promise) {
+    return false;
+  }
+  pending_requests_.erase(iter);
+  return true;
 }
 
 template <typename Request, typename Response>
@@ -292,19 +356,23 @@ void Client<Request, Response>::HandleResponse(
     const std::shared_ptr<Response>& response,
     const transport::MessageInfo& request_header) {
   ADEBUG << "client recv response.";
-  std::lock_guard<std::mutex> lock(pending_requests_mutex_);
-  if (request_header.spare_id() != writer_id_) {
-    return;
+  std::tuple<SharedPromise, CallbackType, SharedFuture> pending_request;
+  {
+    std::lock_guard<std::mutex> lock(pending_requests_mutex_);
+    if (request_header.spare_id() != writer_id_) {
+      return;
+    }
+    uint64_t sequence_number = request_header.seq_num();
+    auto iter = pending_requests_.find(sequence_number);
+    if (iter == pending_requests_.end()) {
+      return;
+    }
+    pending_request = std::move(iter->second);
+    pending_requests_.erase(iter);
   }
-  uint64_t sequence_number = request_header.seq_num();
-  if (this->pending_requests_.count(sequence_number) == 0) {
-    return;
-  }
-  auto tuple = this->pending_requests_[sequence_number];
-  auto call_promise = std::get<0>(tuple);
-  auto callback = std::get<1>(tuple);
-  auto future = std::get<2>(tuple);
-  this->pending_requests_.erase(sequence_number);
+  auto call_promise = std::get<0>(pending_request);
+  auto callback = std::get<1>(pending_request);
+  auto future = std::get<2>(pending_request);
   call_promise->set_value(response);
   callback(future);
 }

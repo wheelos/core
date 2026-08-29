@@ -17,9 +17,13 @@
 #ifndef CYBER_SERVICE_SERVICE_H_
 #define CYBER_SERVICE_SERVICE_H_
 
+#include <atomic>
+#include <condition_variable>
 #include <list>
 #include <memory>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <utility>
 
 #include "cyber/common/types.h"
@@ -97,7 +101,7 @@ class Service : public ServiceBase {
   void SendResponse(const transport::MessageInfo& message_info,
                     const std::shared_ptr<Response>& response);
 
-  bool IsInit(void) const { return request_receiver_ != nullptr; }
+  bool IsInit(void) const { return inited_.load(); }
 
   std::string node_name_;
   ServiceCallback service_callback_;
@@ -111,7 +115,7 @@ class Service : public ServiceBase {
   std::string response_channel_;
   std::mutex service_handle_request_mutex_;
 
-  volatile bool inited_ = false;
+  std::atomic<bool> inited_{false};
   void Enqueue(std::function<void()>&& task);
   void Process();
   std::thread thread_;
@@ -122,7 +126,8 @@ class Service : public ServiceBase {
 
 template <typename Request, typename Response>
 void Service<Request, Response>::destroy() {
-  inited_ = false;
+  request_receiver_.reset();
+  inited_.store(false);
   {
     std::lock_guard<std::mutex> lg(queue_mutex_);
     this->tasks_.clear();
@@ -131,6 +136,7 @@ void Service<Request, Response>::destroy() {
   if (thread_.joinable()) {
     thread_.join();
   }
+  response_transmitter_.reset();
 }
 
 template <typename Request, typename Response>
@@ -144,8 +150,9 @@ template <typename Request, typename Response>
 void Service<Request, Response>::Process() {
   while (!cyber::IsShutdown()) {
     std::unique_lock<std::mutex> ul(queue_mutex_);
-    condition_.wait(ul, [this]() { return !inited_ || !this->tasks_.empty(); });
-    if (!inited_) {
+    condition_.wait(
+        ul, [this]() { return !inited_.load() || !this->tasks_.empty(); });
+    if (!inited_.load()) {
       break;
     }
     if (!tasks_.empty()) {
@@ -196,13 +203,13 @@ bool Service<Request, Response>::Init() {
         Enqueue(std::move(task));
       },
       proto::OptionalMode::RTPS);
-  inited_ = true;
-  thread_ = std::thread(&Service<Request, Response>::Process, this);
   if (request_receiver_ == nullptr) {
     AERROR << " Create request sub failed." << request_channel_;
     response_transmitter_.reset();
     return false;
   }
+  inited_.store(true);
+  thread_ = std::thread(&Service<Request, Response>::Process, this);
   return true;
 }
 

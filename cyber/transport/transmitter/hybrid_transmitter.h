@@ -48,6 +48,8 @@ using apollo::cyber::proto::OptionalMode;
 using apollo::cyber::proto::QosDurabilityPolicy;
 using apollo::cyber::proto::RoleAttributes;
 
+class HybridTransmitterTestPeer;
+
 namespace {
 
 inline void NormalizeHybridTransmitterCommunicationMode(
@@ -122,19 +124,24 @@ class HybridTransmitter : public Transmitter<M> {
   void InitReceivers();
   void ClearReceivers();
   void TransmitHistoryMsg(const RoleAttributes& opposite_attr);
-  void ThreadFunc(const RoleAttributes& opposite_attr,
-                  const std::vector<typename History<M>::CachedMessage>& msgs);
+  static void ReplayHistoryMsg(
+      const RoleAttributes& transmitter_attr, const ParticipantPtr& participant,
+      const RoleAttributes& opposite_attr,
+      const std::vector<typename History<M>::CachedMessage>& msgs);
   Relation GetRelation(const RoleAttributes& opposite_attr);
 
   HistoryPtr history_;
   TransmitterMap transmitters_;
   ReceiverMap receivers_;
   std::mutex mutex_;
+  std::mutex enable_mutex_;
 
   CommunicationModePtr mode_;
   MappingTable mapping_table_;
 
   ParticipantPtr participant_;
+
+  friend class HybridTransmitterTestPeer;
 };
 
 template <typename M>
@@ -181,10 +188,34 @@ void HybridTransmitter<M>::Enable(const RoleAttributes& opposite_attr) {
   }
 
   uint64_t id = opposite_attr.id();
-  std::lock_guard<std::mutex> lock(mutex_);
-  receivers_[mapping_table_[relation]].insert(id);
-  transmitters_[mapping_table_[relation]]->Enable();
-  TransmitHistoryMsg(opposite_attr);
+  auto mode = mapping_table_[relation];
+  TransmitterPtr target_transmitter = nullptr;
+  bool receiver_inserted = false;
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    target_transmitter = transmitters_[mode];
+  }
+
+  if (target_transmitter != nullptr) {
+    {
+      std::lock_guard<std::mutex> enable_lock(enable_mutex_);
+      bool is_first_receiver = false;
+      {
+        std::lock_guard<std::mutex> lock(mutex_);
+        is_first_receiver = receivers_[mode].empty();
+      }
+      if (is_first_receiver) {
+        target_transmitter->Enable();
+      }
+      {
+        std::lock_guard<std::mutex> lock(mutex_);
+        receiver_inserted = receivers_[mode].insert(id).second;
+      }
+    }
+    if (receiver_inserted) {
+      TransmitHistoryMsg(opposite_attr);
+    }
+  }
 }
 
 template <typename M>
@@ -195,38 +226,39 @@ void HybridTransmitter<M>::Disable(const RoleAttributes& opposite_attr) {
   }
 
   uint64_t id = opposite_attr.id();
+  std::lock_guard<std::mutex> enable_lock(enable_mutex_);
   std::lock_guard<std::mutex> lock(mutex_);
   receivers_[mapping_table_[relation]].erase(id);
-  if (receivers_[mapping_table_[relation]].empty()) {
-    transmitters_[mapping_table_[relation]]->Disable();
-  }
 }
 
 template <typename M>
 bool HybridTransmitter<M>::Transmit(const MessagePtr& msg,
                                     const MessageInfo& msg_info) {
-  std::lock_guard<std::mutex> lock(mutex_);
-  history_->Add(msg, msg_info);
-  bool expected_delivery = false;
-  bool delivered = false;
-  for (auto& item : transmitters_) {
-    const auto mode = item.first;
-    const auto receiver_it = receivers_.find(mode);
-    const bool has_targets =
-        receiver_it != receivers_.end() && !receiver_it->second.empty();
-    if (!has_targets) {
-      continue;
+  std::vector<std::pair<OptionalMode, TransmitterPtr>> active_transmitters;
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    history_->Add(msg, msg_info);
+    for (auto& item : transmitters_) {
+      const auto mode = item.first;
+      const auto receiver_it = receivers_.find(mode);
+      if (receiver_it != receivers_.end() && !receiver_it->second.empty()) {
+        active_transmitters.emplace_back(mode, item.second);
+      }
     }
-    expected_delivery = true;
-    if (item.second->Transmit(msg, msg_info)) {
+  }
+
+  if (active_transmitters.empty()) {
+    return true;
+  }
+
+  bool delivered = false;
+  for (auto& [mode, transmitter] : active_transmitters) {
+    if (transmitter->Transmit(msg, msg_info)) {
       delivered = true;
     } else {
       AERROR << "hybrid transmit failed: channel=" << this->attr_.channel_name()
              << " mode=" << static_cast<int>(mode);
     }
-  }
-  if (!expected_delivery) {
-    return true;
   }
   return delivered;
 }
@@ -388,24 +420,34 @@ void HybridTransmitter<M>::TransmitHistoryMsg(
     return;
   }
 
-  auto attr = opposite_attr;
-  cyber::Async(&HybridTransmitter<M>::ThreadFunc, this, attr, unsent_msgs);
+  auto transmitter_attr = this->attr_;
+  auto participant = participant_;
+  auto receiver_attr = opposite_attr;
+  auto replay = cyber::Async([transmitter_attr, participant, receiver_attr,
+                              msgs = std::move(unsent_msgs)]() {
+    ReplayHistoryMsg(transmitter_attr, participant, receiver_attr, msgs);
+  });
+  if (!replay.valid()) {
+    AERROR << "failed to enqueue history replay: channel="
+           << this->attr_.channel_name()
+           << " receiver_id=" << opposite_attr.id();
+  }
 }
 
 template <typename M>
-void HybridTransmitter<M>::ThreadFunc(
+void HybridTransmitter<M>::ReplayHistoryMsg(
+    const RoleAttributes& transmitter_attr, const ParticipantPtr& participant,
     const RoleAttributes& opposite_attr,
     const std::vector<typename History<M>::CachedMessage>& msgs) {
-  // create transmitter to transmit msgs
   RoleAttributes new_attr;
-  new_attr.CopyFrom(this->attr_);
-  std::string new_channel_name =
-      std::to_string(this->attr_.id()) + std::to_string(opposite_attr.id());
+  new_attr.CopyFrom(transmitter_attr);
+  std::string new_channel_name = std::to_string(transmitter_attr.id()) +
+                                 std::to_string(opposite_attr.id());
   uint64_t channel_id = common::GlobalData::RegisterChannel(new_channel_name);
   new_attr.set_channel_name(new_channel_name);
   new_attr.set_channel_id(channel_id);
   auto new_transmitter =
-      std::make_shared<RtpsTransmitter<M>>(new_attr, participant_);
+      std::make_shared<RtpsTransmitter<M>>(new_attr, participant);
   new_transmitter->Enable();
 
   for (auto& item : msgs) {
@@ -413,7 +455,7 @@ void HybridTransmitter<M>::ThreadFunc(
     cyber::USleep(1000);
   }
   new_transmitter->Disable();
-  ADEBUG << "trans threadfunc exit.";
+  ADEBUG << "history replay exit.";
 }
 
 template <typename M>

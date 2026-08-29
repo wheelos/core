@@ -14,6 +14,8 @@
  * limitations under the License.
  *****************************************************************************/
 
+#include <condition_variable>
+#include <future>
 #include <memory>
 #include <string>
 #include <thread>
@@ -32,6 +34,70 @@
 namespace apollo {
 namespace cyber {
 namespace transport {
+
+class HybridTransmitterTestPeer {
+ public:
+  template <typename M>
+  static void SetTransmitter(HybridTransmitter<M>* hybrid,
+                             const RoleAttributes& opposite_attr,
+                             const std::shared_ptr<Transmitter<M>>&
+                                 transmitter) {
+    auto relation = hybrid->GetRelation(opposite_attr);
+    auto mode = hybrid->mapping_table_[relation];
+    std::lock_guard<std::mutex> lock(hybrid->mutex_);
+    hybrid->transmitters_[mode] = transmitter;
+  }
+
+  template <typename M>
+  static bool HasReceiver(HybridTransmitter<M>* hybrid, uint64_t id) {
+    std::lock_guard<std::mutex> lock(hybrid->mutex_);
+    for (const auto& item : hybrid->receivers_) {
+      if (item.second.count(id) != 0) {
+        return true;
+      }
+    }
+    return false;
+  }
+};
+
+class BlockingEnableTransmitter : public Transmitter<proto::UnitTest> {
+ public:
+  explicit BlockingEnableTransmitter(const RoleAttributes& attr)
+      : Transmitter<proto::UnitTest>(attr) {}
+
+  void Enable() override {
+    std::unique_lock<std::mutex> lock(mutex_);
+    enable_entered_ = true;
+    condition_.notify_all();
+    condition_.wait(lock, [this]() { return release_enable_; });
+  }
+
+  void Disable() override {}
+
+  bool Transmit(const MessagePtr& msg,
+                const MessageInfo& msg_info) override {
+    (void)msg;
+    (void)msg_info;
+    return true;
+  }
+
+  void WaitUntilEnableBlocked() {
+    std::unique_lock<std::mutex> lock(mutex_);
+    condition_.wait(lock, [this]() { return enable_entered_; });
+  }
+
+  void ReleaseEnable() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    release_enable_ = true;
+    condition_.notify_all();
+  }
+
+ private:
+  std::mutex mutex_;
+  std::condition_variable condition_;
+  bool enable_entered_ = false;
+  bool release_enable_ = false;
+};
 
 class HybridTransceiverTest : public ::testing::Test {
  protected:
@@ -206,6 +272,155 @@ TEST_F(HybridTransceiverTest, enable_and_disable_with_param_same_process) {
   std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
   EXPECT_EQ(msgs.size(), 0);
+}
+
+TEST_F(HybridTransceiverTest,
+       departed_writer_is_disconnected_while_same_mode_writer_survives) {
+  RoleAttributes attr;
+  attr.set_host_name(common::GlobalData::Instance()->HostName());
+  attr.set_host_ip(common::GlobalData::Instance()->HostIp());
+  attr.set_process_id(common::GlobalData::Instance()->ProcessId());
+  attr.mutable_qos_profile()->CopyFrom(QosProfileConf::QOS_PROFILE_DEFAULT);
+  attr.set_channel_name("departed_writer_listener");
+  attr.set_channel_id(common::Hash("departed_writer_listener"));
+
+  auto writer1 = std::make_shared<HybridTransmitter<proto::UnitTest>>(
+      attr, Transport::Instance()->participant());
+  auto writer2 = std::make_shared<HybridTransmitter<proto::UnitTest>>(
+      attr, Transport::Instance()->participant());
+  auto writer1_endpoint =
+      std::static_pointer_cast<Transmitter<proto::UnitTest>>(writer1);
+  auto writer2_endpoint =
+      std::static_pointer_cast<Transmitter<proto::UnitTest>>(writer2);
+
+  std::vector<std::string> received;
+  auto receiver = std::make_shared<HybridReceiver<proto::UnitTest>>(
+      attr,
+      [&](const std::shared_ptr<proto::UnitTest>& msg,
+          const MessageInfo& msg_info, const RoleAttributes& receiver_attr) {
+        (void)msg_info;
+        (void)receiver_attr;
+        received.emplace_back(msg->case_name());
+      },
+      Transport::Instance()->participant());
+
+  writer1->Enable(receiver->attributes());
+  writer2->Enable(receiver->attributes());
+  receiver->Enable(writer1->attributes());
+  receiver->Enable(writer2->attributes());
+
+  auto msg = std::make_shared<proto::UnitTest>();
+  msg->set_case_name("writer1-before-leave");
+  ASSERT_TRUE(writer1_endpoint->Transmit(msg));
+  msg->set_case_name("writer2-before-leave");
+  ASSERT_TRUE(writer2_endpoint->Transmit(msg));
+  ASSERT_EQ(received.size(), 2);
+
+  receiver->Disable(writer1->attributes());
+
+  msg->set_case_name("writer1-after-leave");
+  ASSERT_TRUE(writer1_endpoint->Transmit(msg));
+  msg->set_case_name("writer2-survives");
+  ASSERT_TRUE(writer2_endpoint->Transmit(msg));
+  ASSERT_EQ(received.size(), 3);
+  EXPECT_EQ(received.back(), "writer2-survives");
+
+  receiver->Disable(writer2->attributes());
+
+  msg->set_case_name("writer1-stale-listener");
+  ASSERT_TRUE(writer1_endpoint->Transmit(msg));
+  msg->set_case_name("writer2-after-leave");
+  ASSERT_TRUE(writer2_endpoint->Transmit(msg));
+  EXPECT_EQ(received.size(), 3);
+}
+
+TEST_F(HybridTransceiverTest,
+       disable_cannot_overtake_first_receiver_enable) {
+  RoleAttributes transmitter_attr;
+  transmitter_attr.set_id(1001);
+  transmitter_attr.set_host_name(common::GlobalData::Instance()->HostName());
+  transmitter_attr.set_host_ip(common::GlobalData::Instance()->HostIp());
+  transmitter_attr.set_process_id(common::GlobalData::Instance()->ProcessId());
+  transmitter_attr.set_channel_name(channel_name_);
+  transmitter_attr.set_channel_id(common::Hash(channel_name_));
+  transmitter_attr.mutable_qos_profile()->CopyFrom(
+      QosProfileConf::QOS_PROFILE_DEFAULT);
+
+  auto transmitter = std::make_shared<HybridTransmitter<proto::UnitTest>>(
+      transmitter_attr, Transport::Instance()->participant());
+  RoleAttributes receiver_attr = transmitter_attr;
+  receiver_attr.set_id(1002);
+
+  auto blocking_transmitter =
+      std::make_shared<BlockingEnableTransmitter>(transmitter_attr);
+  HybridTransmitterTestPeer::SetTransmitter(
+      transmitter.get(), receiver_attr,
+      std::static_pointer_cast<Transmitter<proto::UnitTest>>(
+          blocking_transmitter));
+
+  std::thread enable_thread(
+      [&]() { transmitter->Enable(receiver_attr); });
+  blocking_transmitter->WaitUntilEnableBlocked();
+
+  std::promise<void> disable_started;
+  std::promise<void> disable_finished;
+  auto disable_started_future = disable_started.get_future();
+  auto disable_finished_future = disable_finished.get_future();
+  std::thread disable_thread([&]() {
+    disable_started.set_value();
+    transmitter->Disable(receiver_attr);
+    disable_finished.set_value();
+  });
+
+  disable_started_future.wait();
+  // Enable has released the state mutex but has not inserted the receiver yet.
+  // Disable must wait for that JOIN transition instead of erasing too early.
+  EXPECT_EQ(disable_finished_future.wait_for(std::chrono::milliseconds(50)),
+            std::future_status::timeout);
+
+  blocking_transmitter->ReleaseEnable();
+  enable_thread.join();
+  disable_thread.join();
+
+  EXPECT_FALSE(HybridTransmitterTestPeer::HasReceiver(
+      transmitter.get(), receiver_attr.id()));
+}
+
+TEST_F(HybridTransceiverTest,
+       transient_history_replay_outlives_hybrid_endpoints) {
+  RoleAttributes writer_attr;
+  writer_attr.set_host_name(common::GlobalData::Instance()->HostName());
+  writer_attr.set_host_ip(common::GlobalData::Instance()->HostIp());
+  writer_attr.set_process_id(common::GlobalData::Instance()->ProcessId());
+  writer_attr.set_channel_name("transient_history_lifetime");
+  writer_attr.set_channel_id(common::Hash("transient_history_lifetime"));
+  writer_attr.mutable_qos_profile()->CopyFrom(
+      QosProfileConf::QOS_PROFILE_DEFAULT);
+  writer_attr.mutable_qos_profile()->set_durability(
+      proto::QosDurabilityPolicy::DURABILITY_TRANSIENT_LOCAL);
+
+  RoleAttributes reader_attr(writer_attr);
+  reader_attr.set_process_id(writer_attr.process_id() + 1);
+
+  auto writer = std::make_shared<HybridTransmitter<proto::UnitTest>>(
+      writer_attr, Transport::Instance()->participant());
+  auto reader = std::make_shared<HybridReceiver<proto::UnitTest>>(
+      reader_attr,
+      [](const std::shared_ptr<proto::UnitTest>&, const MessageInfo&,
+         const RoleAttributes&) {},
+      Transport::Instance()->participant());
+
+  auto writer_endpoint =
+      std::static_pointer_cast<Transmitter<proto::UnitTest>>(writer);
+  auto message = std::make_shared<proto::UnitTest>();
+  ASSERT_TRUE(writer_endpoint->Transmit(message));
+
+  reader->Enable(writer->attributes());
+  writer->Enable(reader->attributes());
+  reader.reset();
+  writer.reset();
+
+  std::this_thread::sleep_for(std::chrono::milliseconds(1200));
 }
 
 TEST_F(HybridTransceiverTest,

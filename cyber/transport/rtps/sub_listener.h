@@ -47,6 +47,7 @@ class SubListener : public eprosima::fastrtps::SubscriberListener {
   explicit SubListener(const NewMsgCallback& callback);
   virtual ~SubListener();
 
+  void Shutdown();
   void onNewDataMessage(eprosima::fastrtps::Subscriber* sub);
   void onSubscriptionMatched(eprosima::fastrtps::Subscriber* sub,
                              eprosima::fastrtps::rtps::MatchingInfo& info);  // NOLINT
@@ -54,7 +55,7 @@ class SubListener : public eprosima::fastrtps::SubscriberListener {
  private:
   NewMsgCallback callback_;
   MessageInfo msg_info_;
-  std::mutex mutex_;
+  std::recursive_mutex mutex_;
 };
 
 }  // namespace transport

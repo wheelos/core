@@ -16,9 +16,23 @@
 
 #include "cyber/transport/dispatcher/rtps_dispatcher.h"
 
+#include <utility>
+#include <vector>
+
 namespace apollo {
 namespace cyber {
 namespace transport {
+
+namespace {
+
+void RetainSubListener(SubListenerPtr listener) {
+  static auto* retained_mutex = new std::mutex;
+  static auto* retained_listeners = new std::vector<SubListenerPtr>;
+  std::lock_guard<std::mutex> lock(*retained_mutex);
+  retained_listeners->emplace_back(std::move(listener));
+}
+
+}  // namespace
 
 RtpsDispatcher::RtpsDispatcher() : participant_(nullptr) {}
 
@@ -33,7 +47,10 @@ void RtpsDispatcher::Shutdown() {
     std::lock_guard<std::mutex> lock(subs_mutex_);
     for (auto& item : subs_) {
       item.second.sub = nullptr;
-      item.second.sub_listener = nullptr;
+      if (item.second.sub_listener != nullptr) {
+        item.second.sub_listener->Shutdown();
+        RetainSubListener(std::move(item.second.sub_listener));
+      }
     }
     subs_.clear();
   }
@@ -42,6 +59,9 @@ void RtpsDispatcher::Shutdown() {
 }
 
 void RtpsDispatcher::AddSubscriber(const RoleAttributes& self_attr) {
+  if (is_shutdown_.load()) {
+    return;
+  }
   if (participant_ == nullptr) {
     AWARN << "please set participant firstly.";
     return;
@@ -49,6 +69,9 @@ void RtpsDispatcher::AddSubscriber(const RoleAttributes& self_attr) {
 
   uint64_t channel_id = self_attr.channel_id();
   std::lock_guard<std::mutex> lock(subs_mutex_);
+  if (is_shutdown_.load()) {
+    return;
+  }
   if (subs_.count(channel_id) > 0) {
     return;
   }

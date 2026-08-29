@@ -26,16 +26,17 @@ ParticipantListener::ParticipantListener(const ChangeFunc& callback)
     : callback_(callback) {}
 
 ParticipantListener::~ParticipantListener() {
-  std::lock_guard<std::mutex> lck(mutex_);
+  std::lock_guard<std::recursive_mutex> lck(mutex_);
   callback_ = nullptr;
 }
 
 void ParticipantListener::onParticipantDiscovery(
     eprosima::fastrtps::Participant* p,
     eprosima::fastrtps::rtps::ParticipantDiscoveryInfo&& info) {
-  RETURN_IF_NULL(callback_);
   (void)p;
-  std::lock_guard<std::mutex> lock(mutex_);
+  std::lock_guard<std::recursive_mutex> lock(mutex_);
+  RETURN_IF_NULL(callback_);
+
   callback_(info);
 }
 

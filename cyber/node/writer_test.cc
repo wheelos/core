@@ -16,6 +16,13 @@
 
 #include "cyber/node/writer.h"
 
+#include <condition_variable>
+#include <memory>
+#include <mutex>
+#include <string>
+#include <thread>
+#include <utility>
+
 #include "gtest/gtest.h"
 
 #include "cyber/proto/unit_test.pb.h"
@@ -25,9 +32,121 @@
 
 namespace apollo {
 namespace cyber {
+
+class WriterTestPeer {
+ public:
+  template <typename MessageT>
+  static void SetTransmitter(
+      Writer<MessageT>* writer,
+      const std::shared_ptr<transport::Transmitter<MessageT>>& transmitter) {
+    std::lock_guard<std::mutex> lock(writer->lock_);
+    writer->transmitter_ = transmitter;
+  }
+};
+
 namespace writer {
 
 using proto::Chatter;
+
+class BlockingTransmitState {
+ public:
+  void WaitUntilEntered() {
+    std::unique_lock<std::mutex> lock(mutex_);
+    condition_.wait(lock, [this]() { return entered_; });
+  }
+
+  void EnterAndWait() {
+    std::unique_lock<std::mutex> lock(mutex_);
+    entered_ = true;
+    condition_.notify_all();
+    condition_.wait(lock, [this]() { return released_; });
+  }
+
+  void Release() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    released_ = true;
+    condition_.notify_all();
+  }
+
+ private:
+  std::mutex mutex_;
+  std::condition_variable condition_;
+  bool entered_ = false;
+  bool released_ = false;
+};
+
+class BlockingTransmitter : public transport::Transmitter<Chatter> {
+ public:
+  BlockingTransmitter(const proto::RoleAttributes& role,
+                      const std::shared_ptr<BlockingTransmitState>& state)
+      : transport::Transmitter<Chatter>(role), state_(state) {}
+
+  void Enable() override {}
+  void Disable() override {}
+
+  bool Transmit(const MessagePtr& msg,
+                const transport::MessageInfo& msg_info) override {
+    (void)msg;
+    (void)msg_info;
+    Block();
+    return true;
+  }
+
+  bool Loan(std::size_t size,
+            transport::LoanedMessage<Chatter>* loaned_msg) override {
+    (void)size;
+    (void)loaned_msg;
+    Block();
+    return true;
+  }
+
+  bool Publish(transport::LoanedMessage<Chatter>&& loaned_msg) override {
+    (void)loaned_msg;
+    Block();
+    return true;
+  }
+
+ private:
+  void Block() {
+    auto state = state_;
+    state->EnterAndWait();
+  }
+
+  std::shared_ptr<BlockingTransmitState> state_;
+};
+
+template <typename Operation>
+void VerifyShutdownKeepsInFlightTransmitterAlive(
+    const std::string& channel_name, Operation operation) {
+  proto::RoleAttributes role;
+  role.set_channel_name(channel_name);
+  role.set_node_name("writer_shutdown_race_node");
+
+  Writer<Chatter> writer(role);
+  ASSERT_TRUE(writer.Init());
+
+  auto state = std::make_shared<BlockingTransmitState>();
+  auto transmitter = std::make_shared<BlockingTransmitter>(role, state);
+  std::weak_ptr<BlockingTransmitter> weak_transmitter = transmitter;
+  WriterTestPeer::SetTransmitter(
+      &writer,
+      std::static_pointer_cast<transport::Transmitter<Chatter>>(transmitter));
+  transmitter.reset();
+
+  bool operation_result = false;
+  std::thread operation_thread(
+      [&]() { operation_result = operation(&writer); });
+  state->WaitUntilEntered();
+
+  writer.Shutdown();
+  EXPECT_FALSE(weak_transmitter.expired());
+
+  state->Release();
+  operation_thread.join();
+
+  EXPECT_TRUE(operation_result);
+  EXPECT_TRUE(weak_transmitter.expired());
+}
 
 TEST(WriterTest, test1) {
   proto::RoleAttributes role;
@@ -71,6 +190,36 @@ TEST(WriterTest, test2) {
   c->set_seq(3);
   c->set_content("ChatterMsg");
   EXPECT_FALSE(w.Write(c));
+}
+
+TEST(WriterTest, ShutdownKeepsInFlightSharedWriteTransmitterAlive) {
+  auto message = std::make_shared<Chatter>();
+  VerifyShutdownKeepsInFlightTransmitterAlive(
+      "/writer_shutdown_write_race",
+      [&](Writer<Chatter>* writer) { return writer->Write(message); });
+}
+
+TEST(WriterTest, ShutdownKeepsInFlightValueWriteTransmitterAlive) {
+  Chatter message;
+  VerifyShutdownKeepsInFlightTransmitterAlive(
+      "/writer_shutdown_value_write_race",
+      [&](Writer<Chatter>* writer) { return writer->Write(message); });
+}
+
+TEST(WriterTest, ShutdownKeepsInFlightLoanTransmitterAlive) {
+  transport::LoanedMessage<Chatter> loaned_message;
+  VerifyShutdownKeepsInFlightTransmitterAlive(
+      "/writer_shutdown_loan_race", [&](Writer<Chatter>* writer) {
+        return writer->Loan(1, &loaned_message);
+      });
+}
+
+TEST(WriterTest, ShutdownKeepsInFlightPublishTransmitterAlive) {
+  transport::LoanedMessage<Chatter> loaned_message;
+  VerifyShutdownKeepsInFlightTransmitterAlive(
+      "/writer_shutdown_publish_race", [&](Writer<Chatter>* writer) {
+        return writer->Publish(std::move(loaned_message));
+      });
 }
 
 }  // namespace writer

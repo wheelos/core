@@ -43,7 +43,7 @@ class SubscriberListener : public eprosima::fastrtps::SubscriberListener {
 
  private:
   NewMsgCallback callback_;
-  std::mutex mutex_;
+  std::recursive_mutex mutex_;
 };
 
 }  // namespace service_discovery

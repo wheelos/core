@@ -200,7 +200,6 @@ class ChannelManager : public Manager {
   void DisposeLeave(const ChangeMsg& msg);
 
   void ScanMessageType(const ChangeMsg& msg);
-
   ExemptedMessageTypes exempted_msg_types_;
 
   Graph node_graph_;

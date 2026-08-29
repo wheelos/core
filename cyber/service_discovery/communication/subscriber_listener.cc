@@ -28,14 +28,14 @@ SubscriberListener::SubscriberListener(const NewMsgCallback& callback)
     : callback_(callback) {}
 
 SubscriberListener::~SubscriberListener() {
-  std::lock_guard<std::mutex> lck(mutex_);
+  std::lock_guard<std::recursive_mutex> lock(mutex_);
   callback_ = nullptr;
 }
 
 void SubscriberListener::onNewDataMessage(eprosima::fastrtps::Subscriber* sub) {
+  std::lock_guard<std::recursive_mutex> lock(mutex_);
   RETURN_IF_NULL(callback_);
 
-  std::lock_guard<std::mutex> lock(mutex_);
   eprosima::fastrtps::SampleInfo_t m_info;
   cyber::transport::UnderlayMessage m;
   RETURN_IF(!sub->takeNextData(reinterpret_cast<void*>(&m), &m_info));

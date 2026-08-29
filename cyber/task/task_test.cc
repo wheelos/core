@@ -98,6 +98,30 @@ TEST(AsyncTest, run_member_function) {
   foo.RunOnce();
 }
 
+TEST(TaskManagerLifecycleTest, CancelsAcceptedUnexecutedTaskOnShutdown) {
+  base::BoundedQueue<std::function<void()>> task_queue;
+  ASSERT_TRUE(task_queue.Init(1));
+  task_internal::TaskManagerLifecycle lifecycle;
+  auto task = std::make_shared<task_internal::TaskState<uint64_t>>(
+      std::packaged_task<uint64_t()>([]() { return 1; }));
+  auto result = task->GetFuture();
+
+  ASSERT_EQ(task_internal::EnqueueResult::kAccepted,
+            lifecycle.Enqueue(task, &task_queue, [&lifecycle, task]() {
+              task->Run();
+              lifecycle.Complete(task.get());
+            }));
+
+  EXPECT_FALSE(lifecycle.exchange(true));
+  EXPECT_EQ(std::future_status::ready,
+            result.wait_for(std::chrono::milliseconds(0)));
+  EXPECT_THROW(result.get(), std::future_error);
+
+  std::function<void()> queued_work;
+  ASSERT_TRUE(task_queue.Dequeue(&queued_work));
+  queued_work();
+}
+
 }  // namespace scheduler
 }  // namespace cyber
 }  // namespace apollo

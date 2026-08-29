@@ -1,4 +1,4 @@
-load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -7,6 +7,9 @@ cc_library(
     hdrs = ["client.h"],
     deps = [
         ":client_base",
+        "//cyber/common:log",
+        "//cyber/common:types",
+        "//cyber/node:node_channel_impl",
     ],
 )
 
@@ -27,4 +30,14 @@ cc_library(
 cc_library(
     name = "service_base",
     hdrs = ["service_base.h"],
+)
+
+cc_test(
+    name = "client_test",
+    size = "small",
+    srcs = ["client_test.cc"],
+    deps = [
+        ":client",
+        "@com_google_googletest//:gtest_main",
+    ],
 )

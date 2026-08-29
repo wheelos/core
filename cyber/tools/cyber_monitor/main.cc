@@ -91,39 +91,45 @@ int main(int argc, char *argv[]) {
   FLAGS_alsologtostderr = 0;
   FLAGS_colorlogtostderr = 0;
 
-  CyberTopologyMessage topology_msg(val);
+  {
+    CyberTopologyMessage topology_msg(val);
 
-  auto topology_callback =
-      [&topology_msg](const apollo::cyber::proto::ChangeMsg &change_msg) {
-        topology_msg.TopologyChanged(change_msg);
-      };
+    auto topology_callback =
+        [&topology_msg](const apollo::cyber::proto::ChangeMsg &change_msg) {
+          topology_msg.TopologyChanged(change_msg);
+        };
 
-  auto channel_manager =
-      apollo::cyber::service_discovery::TopologyManager::Instance()
-          ->channel_manager();
-  channel_manager->AddChangeListener(topology_callback);
+    auto channel_manager =
+        apollo::cyber::service_discovery::TopologyManager::Instance()
+            ->channel_manager();
+    auto conn = channel_manager->AddChangeListener(topology_callback);
 
-  std::vector<apollo::cyber::proto::RoleAttributes> role_vec;
-  channel_manager->GetWriters(&role_vec);
-  for (auto &role : role_vec) {
-    topology_msg.AddReaderWriter(role, true);
+    std::vector<apollo::cyber::proto::RoleAttributes> role_vec;
+    channel_manager->GetWriters(&role_vec);
+    for (auto &role : role_vec) {
+      topology_msg.AddReaderWriter(role, true);
+    }
+
+    role_vec.clear();
+    channel_manager->GetReaders(&role_vec);
+    for (auto &role : role_vec) {
+      topology_msg.AddReaderWriter(role, false);
+    }
+
+    Screen *s = Screen::Instance();
+
+    signal(SIGWINCH, SigResizeHandle);
+    signal(SIGINT, SigCtrlCHandle);
+
+    s->SetCurrentRenderMessage(&topology_msg);
+
+    s->Init();
+    s->Run();
+
+    channel_manager->RemoveChangeListener(conn);
+    apollo::cyber::SetState(apollo::cyber::STATE_SHUTTING_DOWN);
   }
-
-  role_vec.clear();
-  channel_manager->GetReaders(&role_vec);
-  for (auto &role : role_vec) {
-    topology_msg.AddReaderWriter(role, false);
-  }
-
-  Screen *s = Screen::Instance();
-
-  signal(SIGWINCH, SigResizeHandle);
-  signal(SIGINT, SigCtrlCHandle);
-
-  s->SetCurrentRenderMessage(&topology_msg);
-
-  s->Init();
-  s->Run();
+  apollo::cyber::Clear();
 
   return 0;
 }

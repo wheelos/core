@@ -33,6 +33,8 @@
 namespace apollo {
 namespace cyber {
 
+class WriterTestPeer;
+
 /**
  * @class Writer<MessageT>
  * @brief The Channel Writer has only one function: publish message through the
@@ -47,6 +49,7 @@ class Writer : public WriterBase {
   using TransmitterPtr = std::shared_ptr<transport::Transmitter<MessageT>>;
   using ChangeConnection =
       typename service_discovery::Manager::ChangeConnection;
+  using ChannelManagerPtr = service_discovery::ChannelManagerPtr;
 
   /**
    * @brief Construct a new Writer object
@@ -106,6 +109,8 @@ class Writer : public WriterBase {
   void GetReaders(std::vector<proto::RoleAttributes>* readers) override;
 
  private:
+  TransmitterPtr SnapshotTransmitter();
+  ChannelManagerPtr SnapshotChannelManager();
   void JoinTheTopology();
   void LeaveTheTopology();
   void OnChannelChange(const proto::ChangeMsg& change_msg);
@@ -114,6 +119,8 @@ class Writer : public WriterBase {
 
   ChangeConnection change_conn_;
   service_discovery::ChannelManagerPtr channel_manager_;
+
+  friend class WriterTestPeer;
 };
 
 template <typename MessageT>
@@ -157,33 +164,60 @@ void Writer<MessageT>::Shutdown() {
     init_ = false;
   }
   LeaveTheTopology();
-  transmitter_ = nullptr;
-  channel_manager_ = nullptr;
+  {
+    std::lock_guard<std::mutex> g(lock_);
+    transmitter_ = nullptr;
+    channel_manager_ = nullptr;
+  }
+}
+
+template <typename MessageT>
+typename Writer<MessageT>::TransmitterPtr
+Writer<MessageT>::SnapshotTransmitter() {
+  std::lock_guard<std::mutex> g(lock_);
+  if (!init_) {
+    return nullptr;
+  }
+  return transmitter_;
+}
+
+template <typename MessageT>
+typename Writer<MessageT>::ChannelManagerPtr
+Writer<MessageT>::SnapshotChannelManager() {
+  std::lock_guard<std::mutex> g(lock_);
+  if (!init_) {
+    return nullptr;
+  }
+  return channel_manager_;
 }
 
 template <typename MessageT>
 bool Writer<MessageT>::Write(const MessageT& msg) {
-  RETURN_VAL_IF(!WriterBase::IsInit(), false);
+  auto transmitter = SnapshotTransmitter();
+  RETURN_VAL_IF(transmitter == nullptr, false);
   auto msg_ptr = std::make_shared<MessageT>(msg);
-  return Write(msg_ptr);
+  return transmitter->Transmit(msg_ptr);
 }
 
 template <typename MessageT>
 bool Writer<MessageT>::Write(const std::shared_ptr<MessageT>& msg_ptr) {
-  RETURN_VAL_IF(!WriterBase::IsInit(), false);
-  return transmitter_->Transmit(msg_ptr);
+  auto transmitter = SnapshotTransmitter();
+  RETURN_VAL_IF(transmitter == nullptr, false);
+  return transmitter->Transmit(msg_ptr);
 }
 
 template <typename MessageT>
 bool Writer<MessageT>::Loan(std::size_t size, LoanedMessage* loaned_msg) {
-  RETURN_VAL_IF(!WriterBase::IsInit(), false);
-  return transmitter_->Loan(size, loaned_msg);
+  auto transmitter = SnapshotTransmitter();
+  RETURN_VAL_IF(transmitter == nullptr, false);
+  return transmitter->Loan(size, loaned_msg);
 }
 
 template <typename MessageT>
 bool Writer<MessageT>::Publish(LoanedMessage&& loaned_msg) {
-  RETURN_VAL_IF(!WriterBase::IsInit(), false);
-  return transmitter_->Publish(std::move(loaned_msg));
+  auto transmitter = SnapshotTransmitter();
+  RETURN_VAL_IF(transmitter == nullptr, false);
+  return transmitter->Publish(std::move(loaned_msg));
 }
 
 template <typename MessageT>
@@ -231,8 +265,9 @@ void Writer<MessageT>::OnChannelChange(const proto::ChangeMsg& change_msg) {
 
 template <typename MessageT>
 bool Writer<MessageT>::HasReader() {
-  RETURN_VAL_IF(!WriterBase::IsInit(), false);
-  return channel_manager_->HasReader(role_attr_.channel_name());
+  auto channel_manager = SnapshotChannelManager();
+  RETURN_VAL_IF(channel_manager == nullptr, false);
+  return channel_manager->HasReader(role_attr_.channel_name());
 }
 
 template <typename MessageT>
@@ -241,11 +276,9 @@ void Writer<MessageT>::GetReaders(std::vector<proto::RoleAttributes>* readers) {
     return;
   }
 
-  if (!WriterBase::IsInit()) {
-    return;
-  }
-
-  channel_manager_->GetReadersOfChannel(role_attr_.channel_name(), readers);
+  auto channel_manager = SnapshotChannelManager();
+  RETURN_IF(channel_manager == nullptr);
+  channel_manager->GetReadersOfChannel(role_attr_.channel_name(), readers);
 }
 
 }  // namespace cyber

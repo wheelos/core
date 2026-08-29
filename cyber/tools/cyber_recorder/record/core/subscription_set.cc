@@ -38,8 +38,16 @@ bool SubscriptionSet::EnsureSubscribed(const std::string& topic,
 }
 
 void SubscriptionSet::Unsubscribe(const std::string& topic) {
-  std::lock_guard<std::mutex> lock(mutex_);
-  readers_.erase(topic);
+  std::shared_ptr<ReaderBase> reader;
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto iter = readers_.find(topic);
+    if (iter == readers_.end()) {
+      return;
+    }
+    reader = std::move(iter->second);
+    readers_.erase(iter);
+  }
 }
 
 bool SubscriptionSet::Contains(const std::string& topic) const {
@@ -48,8 +56,11 @@ bool SubscriptionSet::Contains(const std::string& topic) const {
 }
 
 void SubscriptionSet::Clear() {
-  std::lock_guard<std::mutex> lock(mutex_);
-  readers_.clear();
+  std::unordered_map<std::string, std::shared_ptr<ReaderBase>> readers;
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    readers.swap(readers_);
+  }
 }
 
 size_t SubscriptionSet::Size() const {

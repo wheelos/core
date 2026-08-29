@@ -17,13 +17,18 @@
 #ifndef TOOLS_CVT_MONITOR_CYBER_TOPOLOGY_MESSAGE_H_
 #define TOOLS_CVT_MONITOR_CYBER_TOPOLOGY_MESSAGE_H_
 
+#include <deque>
 #include <map>
+#include <memory>
+#include <mutex>
 #include <string>
+#include <unordered_set>
 
 #include "cyber/tools/cyber_monitor/renderable_message.h"
 
 namespace apollo {
 namespace cyber {
+class Node;
 namespace proto {
 class ChangeMsg;
 class RoleAttributes;
@@ -51,7 +56,10 @@ class CyberTopologyMessage : public RenderableMessage {
   CyberTopologyMessage& operator=(const CyberTopologyMessage&) = delete;
 
   void ChangeState(const Screen* s, int key);
+  void ToggleChannel();
   bool IsFromHere(const std::string& node_name);
+  void EnqueueChannel(const std::string& channel_name);
+  void OpenPendingChannels();
 
   std::map<std::string, GeneralChannelMessage*>::const_iterator FindChild(
       int index) const;
@@ -62,7 +70,12 @@ class CyberTopologyMessage : public RenderableMessage {
   int pid_;
   int col1_width_;
   const std::string& specified_channel_;
+  std::unique_ptr<apollo::cyber::Node> monitor_node_;
   std::map<std::string, GeneralChannelMessage*> all_channels_map_;
+  std::deque<std::string> pending_channels_;
+  std::unordered_set<std::string> queued_channels_;
+  std::unordered_set<std::string> manually_closed_channels_;
+  mutable std::recursive_mutex mutex_;
 };
 
 #endif  // TOOLS_CVT_MONITOR_CYBER_TOPOLOGY_MESSAGE_H_

@@ -23,6 +23,27 @@ import time
 from cyber.python.cyber_py3 import cyber_time
 from cyber.python.cyber_py3 import cyber
 
+
+def _listener_node_name(command):
+    return "listener_node_{}_{}".format(command, os.getpid())
+
+
+def _wait_for_discovery(get_snapshot, timeout_sec=3.0, settle_sec=0.3):
+    deadline = time.monotonic() + timeout_sec
+    snapshot = get_snapshot()
+    last_change = time.monotonic()
+    while time.monotonic() < deadline:
+        current = get_snapshot()
+        now = time.monotonic()
+        if current != snapshot:
+            snapshot = current
+            last_change = now
+        elif snapshot and now - last_change >= settle_sec:
+            break
+        time.sleep(0.05)
+    return snapshot
+
+
 def print_channel_type(channel_name):
     msgtype = cyber.ChannelUtils.get_msgtype(channel_name)
     print(channel_name, " type is [", msgtype, "]")
@@ -98,7 +119,7 @@ class CyberChannelBw(object):
 
 def channel_bw(channel_name, window_size):
     rt = CyberChannelBw(window_size)
-    node_bw = cyber.Node("listener_node_bw")
+    node_bw = cyber.Node(_listener_node_name("bw"))
     node_bw.create_rawdata_reader(channel_name, rt.callback_bw)
     print("reader to [%s]" % channel_name)
     while not cyber.is_shutdown():
@@ -204,7 +225,7 @@ class CyberChannelHz(object):
 
 def channel_hz(channel_name, window_size):
     rt = CyberChannelHz(window_size)
-    node_hz = cyber.Node("listener_node_hz")
+    node_hz = cyber.Node(_listener_node_name("hz"))
     node_hz.create_rawdata_reader(channel_name, rt.callback_hz)
     print("reader to [%s]" % channel_name)
     while not cyber.is_shutdown():
@@ -262,8 +283,8 @@ def print_role(rolsattr_rawdata):
 
 
 def channel_info(channel_name):
-    channlesinfo_dict = cyber.ChannelUtils.get_channels_info()
-    time.sleep(1)
+    channlesinfo_dict = _wait_for_discovery(
+        cyber.ChannelUtils.get_channels_info)
     if len(channlesinfo_dict) == 0:
         print("channelsinfo dict is null")
         return
@@ -308,7 +329,7 @@ def _channel_cmd_info(argv):
 
 
 def print_channel_list():
-    channels = sorted(cyber.ChannelUtils.get_channels())
+    channels = sorted(_wait_for_discovery(cyber.ChannelUtils.get_channels))
     print("The number of channels is: ", len(channels))
     for channel in channels:
         print(channel)
@@ -345,7 +366,7 @@ def channel_echo(channel_name):
     """
     Reader message.
     """
-    node_echo = cyber.Node("listener_node_echo")
+    node_echo = cyber.Node(_listener_node_name("echo"))
     echo_cb = CyberChannelecho(channel_name)
     node_echo.create_rawdata_reader(channel_name, echo_cb.callback)
     while not cyber.is_shutdown():

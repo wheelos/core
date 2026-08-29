@@ -16,11 +16,13 @@
 
 #include "cyber/tools/cyber_monitor/general_channel_message.h"
 
+#include <cstddef>
 #include <iomanip>
 #include <sstream>
 #include <string>
 #include <vector>
 
+#include "cyber/proto/role_attributes.pb.h"
 #include "cyber/record/record_message.h"
 #include "cyber/tools/cyber_monitor/general_message.h"
 #include "cyber/tools/cyber_monitor/screen.h"
@@ -31,6 +33,94 @@ using apollo::cyber::record::kGB;
 using apollo::cyber::record::kKB;
 using apollo::cyber::record::kMB;
 }  // namespace
+
+struct GeneralChannelMessage::CallbackState {
+  class CallbackLease {
+   public:
+    explicit CallbackLease(CallbackState* state) : state_(state) {}
+    ~CallbackLease() { state_->Release(); }
+
+    CallbackLease(const CallbackLease&) = delete;
+    CallbackLease& operator=(const CallbackLease&) = delete;
+
+   private:
+    CallbackState* state_;
+  };
+
+  explicit CallbackState(GeneralChannelMessage* message) : message(message) {}
+
+  GeneralChannelMessage* Acquire() {
+    std::lock_guard<std::mutex> lock(mutex);
+    if (message == nullptr) {
+      return nullptr;
+    }
+    ++active_callbacks;
+    return message;
+  }
+
+  void Release() {
+    std::lock_guard<std::mutex> lock(mutex);
+    if (--active_callbacks == 0) {
+      callbacks_done.notify_all();
+    }
+  }
+
+  void Disable() {
+    std::lock_guard<std::mutex> lock(mutex);
+    message = nullptr;
+  }
+
+  void WaitForCallbacks() {
+    std::unique_lock<std::mutex> lock(mutex);
+    callbacks_done.wait(lock, [this] { return active_callbacks == 0; });
+  }
+
+  std::mutex mutex;
+  std::condition_variable callbacks_done;
+  GeneralChannelMessage* message;
+  std::size_t active_callbacks = 0;
+};
+
+GeneralChannelMessage::~GeneralChannelMessage() {
+  CloseChannel();
+  channel_message_.reset();
+  if (raw_msg_class_) {
+    delete raw_msg_class_;
+    raw_msg_class_ = nullptr;
+  }
+}
+
+void GeneralChannelMessage::CloseChannel() {
+  decltype(channel_reader_) channel_reader;
+  decltype(callback_state_) callback_state;
+  std::string channel_name;
+  {
+    std::unique_lock<std::mutex> lock(lifecycle_lock_);
+    lifecycle_cv_.wait(lock, [this] {
+      return lifecycle_state_ != ChannelLifecycle::Opening &&
+             lifecycle_state_ != ChannelLifecycle::Closing;
+    });
+    if (lifecycle_state_ == ChannelLifecycle::Closed) {
+      return;
+    }
+
+    lifecycle_state_ = ChannelLifecycle::Closing;
+    channel_reader = std::move(channel_reader_);
+    callback_state = std::move(callback_state_);
+    channel_name = channel_name_;
+  }
+
+  callback_state->Disable();
+  channel_reader.reset();
+  channel_node_->DeleteReader(channel_name);
+  callback_state->WaitForCallbacks();
+
+  {
+    std::lock_guard<std::mutex> lock(lifecycle_lock_);
+    lifecycle_state_ = ChannelLifecycle::Closed;
+  }
+  lifecycle_cv_.notify_all();
+}
 
 const char* GeneralChannelMessage::ErrCode2Str(
     GeneralChannelMessage::ErrorCode errCode) {
@@ -111,28 +201,67 @@ GeneralChannelMessage* GeneralChannelMessage::OpenChannel(
   if (channel_name.empty() || node_name_.empty()) {
     return CastErrorCode2Ptr(ErrorCode::ChannelNameOrNodeNameIsEmpty);
   }
-  if (channel_node_ != nullptr || channel_reader_ != nullptr) {
-    return CastErrorCode2Ptr(ErrorCode::NoCloseChannel);
-  }
-
-  channel_node_ = apollo::cyber::CreateNode(node_name_);
   if (channel_node_ == nullptr) {
     return CastErrorCode2Ptr(ErrorCode::CreateNodeFailed);
   }
 
-  auto callback =
-      [this](
-          const std::shared_ptr<apollo::cyber::message::RawMessage>& raw_msg) {
-        UpdateRawMessage(raw_msg);
-      };
+  {
+    std::lock_guard<std::mutex> lock(lifecycle_lock_);
+    if (lifecycle_state_ != ChannelLifecycle::Closed) {
+      return CastErrorCode2Ptr(ErrorCode::NoCloseChannel);
+    }
+    lifecycle_state_ = ChannelLifecycle::Opening;
+  }
 
-  channel_reader_ =
+  auto callback_state = std::make_shared<CallbackState>(this);
+  auto callback = [callback_state](
+                      const std::shared_ptr<
+                          apollo::cyber::message::RawMessage>& raw_msg) {
+    auto* message = callback_state->Acquire();
+    if (message == nullptr) {
+      return;
+    }
+    CallbackState::CallbackLease callback_lease(callback_state.get());
+    message->UpdateRawMessage(raw_msg);
+  };
+
+  apollo::cyber::proto::RoleAttributes role_attr;
+  role_attr.set_channel_name(channel_name);
+  {
+    std::lock_guard<std::mutex> lock(metadata_lock_);
+    if (!message_type_.empty()) {
+      role_attr.set_message_type(message_type_);
+    }
+    if (!proto_desc_.empty()) {
+      role_attr.set_proto_desc(proto_desc_);
+    }
+    if (has_qos_profile_) {
+      role_attr.mutable_qos_profile()->CopyFrom(qos_profile_);
+    }
+  }
+
+  auto channel_reader =
       channel_node_->CreateReader<apollo::cyber::message::RawMessage>(
-          channel_name, callback);
-  if (channel_reader_ == nullptr) {
-    channel_node_.reset();
+          role_attr, callback);
+  if (channel_reader == nullptr) {
+    callback_state->Disable();
+    callback_state->WaitForCallbacks();
+    {
+      std::lock_guard<std::mutex> lock(lifecycle_lock_);
+      lifecycle_state_ = ChannelLifecycle::Closed;
+    }
+    lifecycle_cv_.notify_all();
     return CastErrorCode2Ptr(ErrorCode::CreateReaderFailed);
   }
+
+  {
+    std::lock_guard<std::mutex> lock(lifecycle_lock_);
+    channel_reader_ = std::move(channel_reader);
+    callback_state_ = std::move(callback_state);
+    channel_name_ = channel_name;
+    lifecycle_state_ = ChannelLifecycle::Open;
+  }
+  lifecycle_cv_.notify_all();
   return this;
 }
 
@@ -158,7 +287,7 @@ int GeneralChannelMessage::Render(const Screen* s, int key) {
 
   s->SetCurrentColor(Screen::WHITE_BLACK);
   s->AddStr(0, line_no++, "ChannelName: ");
-  s->AddStr(channel_reader_->GetChannelName().c_str());
+  s->AddStr(GetChannelName().c_str());
 
   s->AddStr(0, line_no++, "MessageType: ");
   s->AddStr(message_type().c_str());

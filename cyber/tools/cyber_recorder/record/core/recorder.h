@@ -18,6 +18,7 @@
 #define CYBER_TOOLS_CYBER_RECORDER_RECORDER_H_
 
 #include <atomic>
+#include <condition_variable>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -106,6 +107,12 @@ class Recorder : public std::enable_shared_from_this<Recorder> {
   std::atomic<uint64_t> message_time_{0};
   std::atomic<uint64_t> dropped_message_count_{0};
   std::atomic<uint64_t> throttled_message_count_{0};
+  std::mutex topology_task_mutex_;
+  std::condition_variable topology_task_condition_;
+  size_t pending_topology_tasks_ = 0;
+  std::mutex reader_callback_mutex_;
+  std::condition_variable reader_callback_condition_;
+  size_t active_reader_callbacks_ = 0;
 
   bool InitReadersImpl();
 
@@ -115,9 +122,14 @@ class Recorder : public std::enable_shared_from_this<Recorder> {
                                 const std::string& message_type);
 
   void TopologyCallback(const ChangeMsg& msg);
+  void CompleteTopologyTask();
 
   void ReaderCallback(const std::shared_ptr<RawMessage>& message,
                       const std::string& channel_name);
+  void ReaderCallbackImpl(const std::shared_ptr<RawMessage>& message,
+                          const std::string& channel_name);
+  void CompleteReaderCallback();
+  void WaitForReaderCallbacks();
 
   void FindNewChannel(const RoleAttributes& role_attr);
 

@@ -42,7 +42,7 @@ class ParticipantListener : public eprosima::fastrtps::ParticipantListener {
 
  private:
   ChangeFunc callback_;
-  std::mutex mutex_;
+  std::recursive_mutex mutex_;
 };
 
 }  // namespace service_discovery

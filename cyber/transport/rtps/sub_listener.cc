@@ -26,15 +26,22 @@ namespace transport {
 SubListener::SubListener(const NewMsgCallback& callback)
     : callback_(callback) {}
 
-SubListener::~SubListener() {}
+SubListener::~SubListener() { Shutdown(); }
+
+void SubListener::Shutdown() {
+  std::lock_guard<std::recursive_mutex> lock(mutex_);
+  callback_ = nullptr;
+}
 
 void SubListener::onNewDataMessage(eprosima::fastrtps::Subscriber* sub) {
   RETURN_IF_NULL(sub);
-  RETURN_IF_NULL(callback_);
-  std::lock_guard<std::mutex> lock(mutex_);
+  std::lock_guard<std::recursive_mutex> lock(mutex_);
+  const auto callback = callback_;
+  RETURN_IF_NULL(callback);
 
   // fetch channel name
-  auto channel_id = common::Hash(sub->getAttributes().topic.getTopicName().to_string());
+  auto channel_id =
+      common::Hash(sub->getAttributes().topic.getTopicName().to_string());
   eprosima::fastrtps::SampleInfo_t m_info;
   UnderlayMessage m;
 
@@ -62,7 +69,7 @@ void SubListener::onNewDataMessage(eprosima::fastrtps::Subscriber* sub) {
       std::make_shared<std::string>(m.data());
 
   // callback
-  callback_(channel_id, msg_str, msg_info_);
+  callback(channel_id, msg_str, msg_info_);
 }
 
 void SubListener::onSubscriptionMatched(

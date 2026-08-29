@@ -15,6 +15,7 @@
 # limitations under the License.
 
 import os
+import pty
 import select
 import shutil
 import signal
@@ -126,6 +127,42 @@ def _wait_for_output(command, expected, timeout=10):
         process.stderr.close()
 
 
+def _stop_with_sigint(process, timeout):
+    if process.poll() is None:
+        try:
+            process.send_signal(signal.SIGINT)
+        except ProcessLookupError:
+            pass
+    try:
+        return process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        try:
+            process.kill()
+        except ProcessLookupError:
+            pass
+        stdout, stderr = process.communicate()
+        raise AssertionError(
+            "process {} did not exit within {} seconds after SIGINT; "
+            "killed exact PID and drained output; stdout={!r}, stderr={!r}".format(
+                process.pid, timeout, stdout, stderr
+            )
+        )
+
+
+def _terminate_process(process, timeout=5):
+    if process.poll() is None:
+        process.terminate()
+    try:
+        process.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait()
+    if process.stdout is not None:
+        process.stdout.close()
+    if process.stderr is not None:
+        process.stderr.close()
+
+
 def _run_until_contains(command, expected, timeout=15):
     deadline = time.monotonic() + timeout
     last_result = None
@@ -147,6 +184,58 @@ def _run_until_contains(command, expected, timeout=15):
             last_result.stderr,
         )
     )
+
+
+def _run_until_missing(command, unexpected, timeout=15):
+    deadline = time.monotonic() + timeout
+    last_result = None
+    while time.monotonic() < deadline:
+        last_result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if unexpected not in last_result.stdout:
+            return last_result.stdout
+        time.sleep(0.2)
+    raise AssertionError(
+        "unexpected {!r} remained in output {!r}; returncode={!r}; "
+        "stderr={!r}".format(
+            unexpected,
+            last_result.stdout,
+            last_result.returncode,
+            last_result.stderr,
+        )
+    )
+
+
+def _assert_output_missing(command, unexpected, duration=2):
+    deadline = time.monotonic() + duration
+    while time.monotonic() < deadline:
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if unexpected in result.stdout:
+            raise AssertionError(
+                "unexpected {!r} found in output {!r}; stderr={!r}".format(
+                    unexpected, result.stdout, result.stderr
+                )
+            )
+        time.sleep(0.2)
+
+
+def _drain_pty(master_fd):
+    while True:
+        try:
+            ready, _, _ = select.select([master_fd], [], [], 0.2)
+            if ready and not os.read(master_fd, 4096):
+                return
+        except OSError:
+            return
 
 
 class CyberToolsDiscoveryTest(unittest.TestCase):
@@ -429,6 +518,123 @@ class CyberToolsDiscoveryTest(unittest.TestCase):
             timeout=10,
         )
         self.assertIn("Usage:", monitor.stdout)
+
+        suffix = str(os.getpid())
+        node_name = "tools_monitor_writer_" + suffix
+        channel_name = "/tests/tools/monitor_" + suffix
+        service_name = "tools_monitor_service_" + suffix
+        publisher = subprocess.Popen(
+            [
+                sys.executable,
+                os.path.abspath(__file__),
+                "--publisher",
+                node_name,
+                channel_name,
+                service_name,
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        try:
+            ready, _, _ = select.select([publisher.stdout], [], [], 10)
+            self.assertTrue(ready, "publisher did not become ready")
+            self.assertEqual("READY", publisher.stdout.readline().strip())
+
+            master_fd, slave_fd = pty.openpty()
+            monitor_proc = subprocess.Popen(
+                [_tool_path("cyber_monitor", "cyber_monitor"), "-c", channel_name],
+                env={
+                    **os.environ,
+                    "TERM": "xterm",
+                    "TERMINFO": "/lib/terminfo/",
+                },
+                stdin=slave_fd,
+                stdout=slave_fd,
+                stderr=slave_fd,
+                close_fds=True,
+            )
+            os.close(slave_fd)
+            drain_thread = threading.Thread(
+                target=_drain_pty, args=(master_fd,), daemon=True
+            )
+            drain_thread.start()
+            monitor_reader = "MonitorReader{}".format(monitor_proc.pid)
+            channel_info_command = [
+                _tool_path("cyber_channel", "cyber_channel"),
+                "info",
+                channel_name,
+            ]
+            second_publisher = None
+            try:
+                _run_until_contains(
+                    channel_info_command,
+                    monitor_reader,
+                )
+
+                # Close the selected channel, then try to enter it while closed.
+                os.write(master_fd, b" \n")
+                _run_until_missing(
+                    channel_info_command,
+                    monitor_reader,
+                )
+                _assert_output_missing(
+                    channel_info_command,
+                    monitor_reader,
+                    duration=15,
+                )
+
+                second_node_name = node_name + "_joined"
+                second_publisher = subprocess.Popen(
+                    [
+                        sys.executable,
+                        os.path.abspath(__file__),
+                        "--publisher",
+                        second_node_name,
+                        channel_name,
+                        service_name + "_joined",
+                    ],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                )
+                ready, _, _ = select.select([second_publisher.stdout], [], [], 10)
+                self.assertTrue(ready, "second publisher did not become ready")
+                self.assertEqual(
+                    "READY", second_publisher.stdout.readline().strip()
+                )
+                _run_until_contains(
+                    channel_info_command,
+                    second_node_name,
+                )
+                _assert_output_missing(
+                    channel_info_command,
+                    monitor_reader,
+                )
+
+                # A later manual toggle must re-enable and enter the channel.
+                os.write(master_fd, b" \n")
+                _run_until_contains(
+                    channel_info_command,
+                    monitor_reader,
+                )
+            finally:
+                try:
+                    if second_publisher is not None:
+                        _terminate_process(second_publisher)
+                finally:
+                    try:
+                        _stop_with_sigint(monitor_proc, timeout=10)
+                    finally:
+                        os.close(master_fd)
+                        drain_thread.join(timeout=1)
+            self.assertEqual(
+                0,
+                monitor_proc.returncode,
+                "cyber_monitor failed on SIGINT",
+            )
+        finally:
+            _terminate_process(publisher)
 
         launch_dir = tempfile.mkdtemp(prefix="cyber_launch_e2e_")
         launch_file = os.path.join(launch_dir, "tools.launch")

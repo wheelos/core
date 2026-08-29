@@ -22,18 +22,20 @@
 #include <mutex>
 #include <string>
 
-#include "cyber/transport/rtps/underlay_message_type.h"
 #include "fastrtps/Domain.h"
 #include "fastrtps/attributes/ParticipantAttributes.h"
 #include "fastrtps/participant/Participant.h"
 #include "fastrtps/participant/ParticipantListener.h"
 #include "fastrtps/rtps/common/Locator.h"
 
+#include "cyber/transport/rtps/underlay_message_type.h"
+
 namespace apollo {
 namespace cyber {
 namespace transport {
 
 class Participant;
+class ParticipantTestPeer;
 using ParticipantPtr = std::shared_ptr<Participant>;
 
 class Participant {
@@ -59,7 +61,10 @@ class Participant {
   eprosima::fastrtps::ParticipantListener* listener_;
   UnderlayMessageType type_;
   eprosima::fastrtps::Participant* fastrtps_participant_;
+  int participant_lock_fd_;
   std::mutex mutex_;
+
+  friend class ParticipantTestPeer;
 };
 
 }  // namespace transport

@@ -131,11 +131,10 @@ bool Recorder::Stop() {
     AERROR << " _free_readers error.";
     return false;
   }
+  subscription_set_.Clear();
+  WaitForReaderCallbacks();
   writer_->Close();
   node_.reset();
-  {
-    subscription_set_.Clear();
-  }
   if (display_thread_ && display_thread_->joinable()) {
     display_thread_->join();
     display_thread_ = nullptr;
@@ -153,14 +152,39 @@ void Recorder::TopologyCallback(const ChangeMsg& change_message) {
     return;
   }
   const RoleAttributes role_attr = change_message.role_attr();
-  std::weak_ptr<Recorder> weak_this = shared_from_this();
-  cyber::Async([weak_this, role_attr]() {
-    auto self = weak_this.lock();
-    if (!self) {
+  auto self = shared_from_this();
+  {
+    std::lock_guard<std::mutex> lock(topology_task_mutex_);
+    if (is_stopping_.load()) {
       return;
     }
-    self->FindNewChannel(role_attr);
-  });
+    ++pending_topology_tasks_;
+  }
+  auto completion = std::shared_ptr<void>(
+      nullptr, [self](void*) { self->CompleteTopologyTask(); });
+  std::future<void> task;
+  try {
+    task = cyber::Async([self, role_attr, completion]() {
+      self->FindNewChannel(role_attr);
+    });
+  } catch (const std::exception& e) {
+    AERROR << "Failed to enqueue recorder topology task: " << e.what();
+    return;
+  } catch (...) {
+    AERROR << "Failed to enqueue recorder topology task.";
+    return;
+  }
+  if (!task.valid()) {
+    AERROR << "Failed to enqueue recorder topology task.";
+  }
+}
+
+void Recorder::CompleteTopologyTask() {
+  {
+    std::lock_guard<std::mutex> lock(topology_task_mutex_);
+    --pending_topology_tasks_;
+  }
+  topology_task_condition_.notify_all();
 }
 
 void Recorder::FindNewChannel(const RoleAttributes& role_attr) {
@@ -228,6 +252,9 @@ bool Recorder::FreeReadersImpl() {
       TopologyManager::Instance()->channel_manager();
 
   channel_manager->RemoveChangeListener(change_conn_);
+  std::unique_lock<std::mutex> lock(topology_task_mutex_);
+  topology_task_condition_.wait(
+      lock, [this]() { return pending_topology_tasks_ == 0; });
 
   return true;
 }
@@ -265,11 +292,27 @@ bool Recorder::EnsureSubscriptionReader(const std::string& channel_name,
 
 void Recorder::ReaderCallback(const std::shared_ptr<RawMessage>& message,
                               const std::string& channel_name) {
-  if (!is_started_.load() || is_stopping_.load()) {
-    AERROR << "record procedure is not started or stopping.";
-    return;
+  {
+    std::lock_guard<std::mutex> lock(reader_callback_mutex_);
+    if (!is_started_.load() || is_stopping_.load()) {
+      AERROR << "record procedure is not started or stopping.";
+      return;
+    }
+    ++active_reader_callbacks_;
   }
 
+  try {
+    ReaderCallbackImpl(message, channel_name);
+  } catch (...) {
+    CompleteReaderCallback();
+    throw;
+  }
+  CompleteReaderCallback();
+}
+
+void Recorder::ReaderCallbackImpl(
+    const std::shared_ptr<RawMessage>& message,
+    const std::string& channel_name) {
   if (message == nullptr) {
     AERROR << "message is nullptr, channel: " << channel_name;
     return;
@@ -310,6 +353,20 @@ void Recorder::ReaderCallback(const std::shared_ptr<RawMessage>& message,
   }
 
   message_count_.fetch_add(1);
+}
+
+void Recorder::CompleteReaderCallback() {
+  {
+    std::lock_guard<std::mutex> lock(reader_callback_mutex_);
+    --active_reader_callbacks_;
+  }
+  reader_callback_condition_.notify_all();
+}
+
+void Recorder::WaitForReaderCallbacks() {
+  std::unique_lock<std::mutex> lock(reader_callback_mutex_);
+  reader_callback_condition_.wait(
+      lock, [this]() { return active_reader_callbacks_ == 0; });
 }
 
 void Recorder::ShowProgress() {

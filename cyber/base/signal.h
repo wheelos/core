@@ -18,14 +18,36 @@
 #define CYBER_BASE_SIGNAL_H_
 
 #include <algorithm>
+#include <condition_variable>
 #include <functional>
 #include <list>
 #include <memory>
 #include <mutex>
+#include <vector>
 
 namespace apollo {
 namespace cyber {
 namespace base {
+
+class SlotCallbackScope {
+ public:
+  explicit SlotCallbackScope(const void* slot) {
+    InvocationStack().push_back(slot);
+  }
+  ~SlotCallbackScope() { InvocationStack().pop_back(); }
+
+  static size_t InvocationCount(const void* slot) {
+    return std::count(InvocationStack().begin(), InvocationStack().end(), slot);
+  }
+
+  static bool InCallback() { return !InvocationStack().empty(); }
+
+ private:
+  static std::vector<const void*>& InvocationStack() {
+    static thread_local std::vector<const void*> invocation_stack;
+    return invocation_stack;
+  }
+};
 
 template <typename... Args>
 class Slot;
@@ -73,29 +95,24 @@ class Signal {
   }
 
   bool Disconnect(const ConnectionType& conn) {
-    bool find = false;
-    {
-      std::lock_guard<std::mutex> lock(mutex_);
-      for (auto& slot : slots_) {
-        if (conn.HasSlot(slot)) {
-          find = true;
-          slot->Disconnect();
-        }
-      }
-    }
-
-    if (find) {
+    SlotPtr slot = conn.GetSlot(this);
+    if (slot) {
+      slot->Disconnect();
       ClearDisconnectedSlots();
+      return true;
     }
-    return find;
+    return false;
   }
 
   void DisconnectAllSlots() {
-    std::lock_guard<std::mutex> lock(mutex_);
-    for (auto& slot : slots_) {
+    SlotList local;
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      local.swap(slots_);
+    }
+    for (auto& slot : local) {
       slot->Disconnect();
     }
-    slots_.clear();
   }
 
  private:
@@ -158,6 +175,12 @@ class Connection {
   }
 
  private:
+  friend class Signal<Args...>;
+
+  SlotPtr GetSlot(const SignalPtr signal) const {
+    return signal_ == signal ? slot_ : nullptr;
+  }
+
   SlotPtr slot_;
   SignalPtr signal_;
 };
@@ -166,23 +189,72 @@ template <typename... Args>
 class Slot {
  public:
   using Callback = std::function<void(Args...)>;
-  Slot(const Slot& another)
-      : cb_(another.cb_), connected_(another.connected_) {}
+  Slot(const Slot& another) {
+    std::lock_guard<std::mutex> lock(another.mutex_);
+    cb_ = another.cb_;
+    connected_ = another.connected_;
+  }
   explicit Slot(const Callback& cb, bool connected = true)
       : cb_(cb), connected_(connected) {}
-  virtual ~Slot() {}
+  virtual ~Slot() { Disconnect(); }
 
   void operator()(Args... args) {
-    if (connected_ && cb_) {
-      cb_(args...);
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      if (!connected_ || !cb_) {
+        return;
+      }
+      ++active_callbacks_;
     }
+    try {
+      SlotCallbackScope callback_scope(this);
+      cb_(args...);
+    } catch (...) {
+      {
+        std::lock_guard<std::mutex> lock(mutex_);
+        --active_callbacks_;
+      }
+      condition_.notify_all();
+      throw;
+    }
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      --active_callbacks_;
+    }
+    condition_.notify_all();
   }
 
-  void Disconnect() { connected_ = false; }
-  bool connected() const { return connected_; }
+  void Disconnect() {
+    std::unique_lock<std::mutex> lock(mutex_);
+    connected_ = false;
+    const size_t current_thread_invocations =
+        SlotCallbackScope::InvocationCount(this);
+    if (current_thread_invocations == 0) {
+      if (SlotCallbackScope::InCallback()) {
+        return;
+      }
+      condition_.wait(lock, [this]() { return active_callbacks_ == 0; });
+      return;
+    }
+    callback_disconnect_waiters_ += current_thread_invocations;
+    condition_.notify_all();
+    condition_.wait(lock, [this]() {
+      return active_callbacks_ <= callback_disconnect_waiters_;
+    });
+    callback_disconnect_waiters_ -= current_thread_invocations;
+    condition_.notify_all();
+  }
+  bool connected() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return connected_;
+  }
 
  private:
   Callback cb_;
+  mutable std::mutex mutex_;
+  std::condition_variable condition_;
+  size_t active_callbacks_ = 0;
+  size_t callback_disconnect_waiters_ = 0;
   bool connected_ = true;
 };
 

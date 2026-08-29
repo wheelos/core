@@ -14,15 +14,20 @@
  * limitations under the License.
  *****************************************************************************/
 
+#include <fcntl.h>
+#include <unistd.h>
+
 #include <string>
 #include <utility>
 
+#include "gtest/gtest.h"
+
 #include "fastcdr/Cdr.h"
 #include "fastcdr/exceptions/BadParamException.h"
-#include "gtest/gtest.h"
 
 #include "cyber/common/global_data.h"
 #include "cyber/common/log.h"
+#include "cyber/state.h"
 #include "cyber/transport/qos/qos_profile_conf.h"
 #include "cyber/transport/rtps/attributes_filler.h"
 #include "cyber/transport/rtps/participant.h"
@@ -32,6 +37,17 @@
 namespace apollo {
 namespace cyber {
 namespace transport {
+
+class ParticipantTestPeer {
+ public:
+  static void SetLockFd(Participant* participant, int fd) {
+    participant->participant_lock_fd_ = fd;
+  }
+
+  static void ClearLockFd(Participant* participant) {
+    participant->participant_lock_fd_ = -1;
+  }
+};
 
 TEST(AttributesFillerTest, fill_in_pub_attr_test) {
   QosProfile qos;
@@ -139,6 +155,54 @@ TEST(AttributesFillerTest, fill_in_sub_attr_test) {
 TEST(ParticipantTest, participant_test) {
   eprosima::fastrtps::ParticipantListener listener;
   eprosima::fastrtps::ParticipantListener listener1;
+}
+
+TEST(ParticipantTest, retained_data_participant_keeps_slot_lock) {
+  int fds[2];
+  ASSERT_EQ(pipe(fds), 0);
+  const State original_state = GetState();
+  SetState(STATE_SHUTTING_DOWN);
+  Participant participant("retained_data_participant", 11512);
+  ParticipantTestPeer::SetLockFd(&participant, fds[0]);
+
+  participant.Shutdown();
+
+  EXPECT_NE(fcntl(fds[0], F_GETFD), -1);
+  close(fds[0]);
+  close(fds[1]);
+  ParticipantTestPeer::ClearLockFd(&participant);
+  SetState(original_state);
+}
+
+TEST(ParticipantTest, non_retained_participant_releases_slot_lock) {
+  int fds[2];
+  ASSERT_EQ(pipe(fds), 0);
+  const State original_state = GetState();
+  SetState(STATE_INITIALIZED);
+  Participant participant("non_retained_participant", 11512);
+  ParticipantTestPeer::SetLockFd(&participant, fds[0]);
+
+  participant.Shutdown();
+
+  EXPECT_EQ(fcntl(fds[0], F_GETFD), -1);
+  close(fds[1]);
+  SetState(original_state);
+}
+
+TEST(ParticipantTest, topology_participant_releases_slot_lock_on_shutdown) {
+  int fds[2];
+  ASSERT_EQ(pipe(fds), 0);
+  const State original_state = GetState();
+  SetState(STATE_SHUTTING_DOWN);
+  eprosima::fastrtps::ParticipantListener listener;
+  Participant participant("topology_participant", 11511, &listener);
+  ParticipantTestPeer::SetLockFd(&participant, fds[0]);
+
+  participant.Shutdown();
+
+  EXPECT_EQ(fcntl(fds[0], F_GETFD), -1);
+  close(fds[1]);
+  SetState(original_state);
 }
 
 TEST(UnderlayMessageTest, underlay_message_test) {

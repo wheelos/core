@@ -18,6 +18,7 @@
 #define TOOLS_CVT_MONITOR_GENERAL_CHANNEL_MESSAGE_H_
 
 #include <atomic>
+#include <condition_variable>
 #include <memory>
 #include <string>
 #include <vector>
@@ -52,26 +53,33 @@ class GeneralChannelMessage : public GeneralMessageBase {
         static_cast<intptr_t>(errCode));
   }
 
-  ~GeneralChannelMessage() {
-    channel_node_.reset();
-    channel_reader_.reset();
-    channel_message_.reset();
-    if (raw_msg_class_) {
-      delete raw_msg_class_;
-      raw_msg_class_ = nullptr;
-    }
-  }
+  ~GeneralChannelMessage();
 
   std::string GetChannelName(void) const {
-    return channel_reader_->GetChannelName();
+    std::lock_guard<std::mutex> lock(lifecycle_lock_);
+    return channel_name_;
   }
 
   void set_message_type(const std::string& msgTypeName) {
+    std::lock_guard<std::mutex> lock(metadata_lock_);
     message_type_ = msgTypeName;
   }
   const std::string& message_type(void) const { return message_type_; }
+  void set_proto_desc(const std::string& proto_desc) {
+    std::lock_guard<std::mutex> lock(metadata_lock_);
+    proto_desc_ = proto_desc;
+  }
+  void set_qos_profile(
+      const apollo::cyber::proto::QosProfile& qos_profile) {
+    std::lock_guard<std::mutex> lock(metadata_lock_);
+    qos_profile_.CopyFrom(qos_profile);
+    has_qos_profile_ = true;
+  }
 
-  bool is_enabled(void) const { return channel_reader_ != nullptr; }
+  bool is_enabled(void) const {
+    std::lock_guard<std::mutex> lock(lifecycle_lock_);
+    return channel_reader_ != nullptr;
+  }
   bool has_message_come(void) const { return has_message_come_; }
 
   double frame_ratio(void) override;
@@ -91,32 +99,36 @@ class GeneralChannelMessage : public GeneralMessageBase {
 
   int Render(const Screen* s, int key) override;
 
-  void CloseChannel(void) {
-    if (channel_reader_ != nullptr) {
-      channel_reader_.reset();
-    }
-
-    if (channel_node_ != nullptr) {
-      channel_node_.reset();
-    }
-  }
+  void CloseChannel(void);
 
  private:
-  explicit GeneralChannelMessage(const std::string& node_name,
+  struct CallbackState;
+  enum class ChannelLifecycle { Closed, Opening, Open, Closing };
+
+  explicit GeneralChannelMessage(apollo::cyber::Node* channel_node,
+                                 const std::string& node_name,
                                  RenderableMessage* parent = nullptr)
       : GeneralMessageBase(parent),
         current_state_(State::ShowDebugString),
         has_message_come_(false),
         message_type_(),
+        proto_desc_(),
+        has_qos_profile_(false),
         frame_counter_(0),
         last_time_(apollo::cyber::Time::MonoTime()),
         msg_time_(last_time_.ToNanosecond() + 1),
-        channel_node_(nullptr),
+        channel_node_(channel_node),
         node_name_(node_name),
+        channel_name_(),
         readers_(),
         writers_(),
         channel_message_(nullptr),
         channel_reader_(nullptr),
+        callback_state_(nullptr),
+        lifecycle_lock_(),
+        lifecycle_cv_(),
+        lifecycle_state_(ChannelLifecycle::Closed),
+        metadata_lock_(),
         inner_lock_(),
         raw_msg_class_(nullptr) {}
 
@@ -172,14 +184,18 @@ class GeneralChannelMessage : public GeneralMessageBase {
 
   bool has_message_come_;
   std::string message_type_;
+  std::string proto_desc_;
+  apollo::cyber::proto::QosProfile qos_profile_;
+  bool has_qos_profile_;
   std::atomic<int> frame_counter_;
   apollo::cyber::Time last_time_;
   apollo::cyber::Time msg_time_;
   apollo::cyber::Time time_last_calc_ = apollo::cyber::Time::MonoTime();
 
-  std::unique_ptr<apollo::cyber::Node> channel_node_;
+  apollo::cyber::Node* channel_node_;
 
   std::string node_name_;
+  std::string channel_name_;
 
   std::vector<std::string> readers_;
   std::vector<std::string> writers_;
@@ -187,6 +203,11 @@ class GeneralChannelMessage : public GeneralMessageBase {
   std::shared_ptr<apollo::cyber::message::RawMessage> channel_message_;
   std::shared_ptr<apollo::cyber::Reader<apollo::cyber::message::RawMessage>>
       channel_reader_;
+  std::shared_ptr<CallbackState> callback_state_;
+  mutable std::mutex lifecycle_lock_;
+  std::condition_variable lifecycle_cv_;
+  ChannelLifecycle lifecycle_state_;
+  mutable std::mutex metadata_lock_;
   mutable std::mutex inner_lock_;
 
   google::protobuf::Message* raw_msg_class_;

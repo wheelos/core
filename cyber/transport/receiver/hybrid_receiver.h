@@ -17,6 +17,7 @@
 #ifndef CYBER_TRANSPORT_RECEIVER_HYBRID_RECEIVER_H_
 #define CYBER_TRANSPORT_RECEIVER_HYBRID_RECEIVER_H_
 
+#include <atomic>
 #include <map>
 #include <memory>
 #include <set>
@@ -118,7 +119,10 @@ class HybridReceiver : public Receiver<M> {
   void InitTransmitters();
   void ClearTransmitters();
   void ReceiveHistoryMsg(const RoleAttributes& opposite_attr);
-  void ThreadFunc(const RoleAttributes& opposite_attr);
+  static void ThreadFunc(
+      const RoleAttributes& opposite_attr,
+      const RoleAttributes& receiver_attr,
+      const typename Receiver<M>::MessageListener& message_listener);
   Relation GetRelation(const RoleAttributes& opposite_attr);
 
   HistoryPtr history_;
@@ -195,7 +199,8 @@ void HybridReceiver<M>::Disable(const RoleAttributes& opposite_attr) {
   auto& mode_transmitters = transmitters_[mode];
   if (mode_transmitters.count(id) > 0) {
     mode_transmitters.erase(id);
-    if (mode_transmitters.empty()) {
+    // Dispatcher-backed receivers filter by writer; ICEORYX shares one worker.
+    if (mode != OptionalMode::ICEORYX || mode_transmitters.empty()) {
       receivers_[mode]->Disable(opposite_attr);
     }
   }
@@ -301,37 +306,48 @@ void HybridReceiver<M>::ReceiveHistoryMsg(const RoleAttributes& opposite_attr) {
     return;
   }
 
-  auto attr = opposite_attr;
-  cyber::Async(&HybridReceiver<M>::ThreadFunc, this, attr);
+  auto opposite = opposite_attr;
+  auto receiver = this->attr_;
+  auto message_listener = this->msg_listener_;
+  auto replay = cyber::Async(&HybridReceiver<M>::ThreadFunc, opposite, receiver,
+                             message_listener);
+  if (!replay.valid()) {
+    AERROR << "failed to enqueue history receive: channel="
+           << this->attr_.channel_name()
+           << " transmitter_id=" << opposite_attr.id();
+  }
 }
 
 template <typename M>
-void HybridReceiver<M>::ThreadFunc(const RoleAttributes& opposite_attr) {
+void HybridReceiver<M>::ThreadFunc(
+    const RoleAttributes& opposite_attr, const RoleAttributes& receiver_attr,
+    const typename Receiver<M>::MessageListener& message_listener) {
   std::string channel_name =
-      std::to_string(opposite_attr.id()) + std::to_string(this->attr_.id());
+      std::to_string(opposite_attr.id()) + std::to_string(receiver_attr.id());
   uint64_t channel_id = common::GlobalData::RegisterChannel(channel_name);
 
-  RoleAttributes attr(this->attr_);
+  RoleAttributes attr(receiver_attr);
   attr.set_channel_name(channel_name);
   attr.set_channel_id(channel_id);
   attr.mutable_qos_profile()->CopyFrom(opposite_attr.qos_profile());
 
-  volatile bool is_msg_arrived = false;
-  auto listener = [&](const std::shared_ptr<M>& msg,
-                      const MessageInfo& msg_info, const RoleAttributes& attr) {
-    is_msg_arrived = true;
-    this->OnNewMessage(msg, msg_info);
+  std::atomic<bool> is_msg_arrived(false);
+  auto listener = [message_listener, receiver_attr, &is_msg_arrived](
+                      const std::shared_ptr<M>& msg,
+                      const MessageInfo& msg_info, const RoleAttributes&) {
+    is_msg_arrived.store(true);
+    if (message_listener != nullptr) {
+      message_listener(msg, msg_info, receiver_attr);
+    }
   };
 
   auto receiver = std::make_shared<RtpsReceiver<M>>(attr, listener);
   receiver->Enable();
 
   do {
-    if (is_msg_arrived) {
-      is_msg_arrived = false;
-    }
+    is_msg_arrived.store(false);
     cyber::USleep(1000000);
-  } while (is_msg_arrived);
+  } while (is_msg_arrived.load());
 
   receiver->Disable();
   ADEBUG << "recv threadfunc exit.";

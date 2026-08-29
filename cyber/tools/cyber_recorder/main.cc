@@ -59,6 +59,11 @@ enum LongOnlyOptions {
   kConfigPathOption = 256,
 };
 
+class CyberClearGuard {
+ public:
+  ~CyberClearGuard() { ::apollo::cyber::Clear(); }
+};
+
 void DisplayUsage(const std::string& binary);
 void DisplayUsage(const std::string& binary, const std::string& command);
 void DisplayUsage(const std::string& binary, const std::string& command,
@@ -427,6 +432,7 @@ int main(int argc, char** argv) {
       return -1;
     }
     ::apollo::cyber::Init(argv[0]);
+    CyberClearGuard clear_guard;
     Info info;
     bool info_result = info.Display(file_path);
     return info_result ? 0 : -1;
@@ -444,6 +450,7 @@ int main(int argc, char** argv) {
       opt_output_vec.push_back(default_output_file);
     }
     ::apollo::cyber::Init(argv[0]);
+    CyberClearGuard clear_guard;
     Recoverer recoverer(opt_file_vec[0], opt_output_vec[0]);
     bool recover_result = recoverer.Proc();
     return recover_result ? 0 : -1;
@@ -455,6 +462,7 @@ int main(int argc, char** argv) {
       return -1;
     }
     ::apollo::cyber::Init(argv[0]);
+    CyberClearGuard clear_guard;
     PlayParam play_param;
     play_param.is_play_all_channels = opt_all || opt_white_channels.empty();
     play_param.is_loop_playback = opt_loop;
@@ -518,6 +526,7 @@ int main(int argc, char** argv) {
       }
     }
     ::apollo::cyber::Init(argv[0]);
+    CyberClearGuard clear_guard;
     auto recorder =
         std::make_shared<Recorder>(opt_output_vec[0], opt_header, recorder_config);
     bool record_result = recorder->Start();
@@ -542,6 +551,7 @@ int main(int argc, char** argv) {
       opt_output_vec.push_back(default_output_file);
     }
     ::apollo::cyber::Init(argv[0]);
+    CyberClearGuard clear_guard;
     Spliter spliter(opt_file_vec[0], opt_output_vec[0], opt_white_channels,
                     opt_black_channels, opt_begin, opt_end);
     bool split_result = spliter.Proc();

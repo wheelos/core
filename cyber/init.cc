@@ -108,8 +108,8 @@ void FinishClear(bool full_transport_cleanup) {
   TaskManager::CleanUp();
   scheduler::CleanUp();
   if (full_transport_cleanup) {
-    transport::Transport::CleanUp();
     service_discovery::TopologyManager::CleanUp();
+    transport::Transport::CleanUp();
   }
   StopLogger();
   SetState(STATE_SHUTDOWN);
@@ -129,7 +129,15 @@ void ExitHandle() {
     ClearForPythonExit();
     return;
   }
-  Clear();
+  std::lock_guard<std::mutex> lg(g_mutex);
+  if (GetState() == STATE_SHUTDOWN || GetState() == STATE_UNINITIALIZED) {
+    return;
+  }
+  SetState(STATE_SHUTTING_DOWN);
+  if (clock_node) {
+    clock_node.release();
+  }
+  FinishClear(false);
 }
 
 bool Init(const char* binary_name) {

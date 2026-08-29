@@ -20,7 +20,9 @@
 
 #include "gtest/gtest.h"
 
+#include "cyber/common/global_data.h"
 #include "cyber/common/log.h"
+#include "cyber/transport/common/identity.h"
 
 namespace apollo {
 namespace cyber {
@@ -29,7 +31,7 @@ namespace service_discovery {
 class TopologyTest : public ::testing::Test {
  protected:
   TopologyTest() { topology_ = TopologyManager::Instance(); }
-  virtual ~TopologyTest() { topology_->Shutdown(); }
+  virtual ~TopologyTest() {}
 
   virtual void SetUp() {}
 
@@ -66,6 +68,51 @@ TEST_F(TopologyTest, get_manager) {
 
   auto service_manager = topology_->service_manager();
   EXPECT_NE(service_manager, nullptr);
+}
+
+TEST_F(TopologyTest, recursive_publish_in_change_listener) {
+  std::atomic<bool> reentrant_called{false};
+  proto::RoleAttributes reader_attr;
+  reader_attr.set_host_name(common::GlobalData::Instance()->HostName());
+  reader_attr.set_process_id(common::GlobalData::Instance()->ProcessId());
+  reader_attr.set_node_name("recursive_test_reader_node");
+  reader_attr.set_node_id(common::GlobalData::RegisterNode(reader_attr.node_name()));
+  reader_attr.set_channel_name("recursive_test_reader_channel");
+  reader_attr.set_channel_id(
+      common::GlobalData::Instance()->RegisterChannel(reader_attr.channel_name()));
+  transport::Identity reader_id;
+  reader_attr.set_id(reader_id.HashValue());
+
+  auto conn = topology_->channel_manager()->AddChangeListener(
+      [this, &reader_attr, &reentrant_called](const ChangeMsg& msg) {
+        if (msg.role_type() == RoleType::ROLE_WRITER &&
+            msg.operate_type() == OperateType::OPT_JOIN &&
+            msg.role_attr().channel_name() == "trigger_channel") {
+          // Join a new reader synchronously inside the topology callback.
+          // In FastDDS 2.14 intraprocess mode, this writes to the discovery
+          // topic and re-enters SubscriberListener on the same thread.
+          topology_->channel_manager()->Join(reader_attr, RoleType::ROLE_READER);
+          reentrant_called.store(true);
+        }
+      });
+
+  proto::RoleAttributes writer_attr;
+  writer_attr.set_host_name(common::GlobalData::Instance()->HostName());
+  writer_attr.set_process_id(common::GlobalData::Instance()->ProcessId());
+  writer_attr.set_node_name("trigger_writer_node");
+  writer_attr.set_node_id(common::GlobalData::RegisterNode(writer_attr.node_name()));
+  writer_attr.set_channel_name("trigger_channel");
+  writer_attr.set_channel_id(
+      common::GlobalData::Instance()->RegisterChannel(writer_attr.channel_name()));
+  transport::Identity writer_id;
+  writer_attr.set_id(writer_id.HashValue());
+
+  EXPECT_TRUE(topology_->channel_manager()->Join(writer_attr, RoleType::ROLE_WRITER));
+  EXPECT_TRUE(reentrant_called.load());
+
+  topology_->channel_manager()->RemoveChangeListener(conn);
+  topology_->channel_manager()->Leave(writer_attr, RoleType::ROLE_WRITER);
+  topology_->channel_manager()->Leave(reader_attr, RoleType::ROLE_READER);
 }
 
 }  // namespace service_discovery
