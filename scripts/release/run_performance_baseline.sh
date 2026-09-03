@@ -4,6 +4,8 @@ set -euo pipefail
 OUTDIR=""
 QUICK=true
 LARGE_MESSAGE_COMPARISON=true
+RUN_ZERO_LOSS_CAPACITY=false
+CAPACITY_ARGS=()
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -12,8 +14,13 @@ while [ "$#" -gt 0 ]; do
     --full) QUICK=false; shift ;;
     --quick) QUICK=true; shift ;;
     --skip-large-message-comparison) LARGE_MESSAGE_COMPARISON=false; shift ;;
+    --run-zero-loss-capacity) RUN_ZERO_LOSS_CAPACITY=true; shift ;;
+    --capacity-quick) CAPACITY_ARGS+=("--quick"); shift ;;
+    --capacity-arg=*) CAPACITY_ARGS+=("${1#*=}"); shift ;;
     -h|--help)
       echo "Usage: $0 [--outdir DIR] [--full] [--skip-large-message-comparison]"
+      echo "          [--run-zero-loss-capacity] [--capacity-quick]"
+      echo "          [--capacity-arg=ARG]"
       exit 0
       ;;
     *)
@@ -37,6 +44,7 @@ mkdir -p "$OUTDIR"
 bazel build --config=ci \
   //tests/perf_test:benchmark_monitor \
   //tests/perf_test:benchmark_pub \
+  //tests/perf_test:benchmark_roudi \
   //tests/perf_test:benchmark_sub
 
 BENCHMARK_ARGS=("--output_json=$OUTDIR/baseline.json")
@@ -62,6 +70,10 @@ import sys
 from collections import defaultdict
 
 results = json.load(open(sys.argv[1], encoding="utf-8"))["results"]
+required = [item for item in results if item.get("required_for_release", True)]
+exploratory = [
+    item for item in results if not item.get("required_for_release", True)
+]
 groups = defaultdict(lambda: [0, 0, 0, 0.0, 0.0, 0.0])
 for result in results:
     group = groups[(result["coverage"], result["message_type"])]
@@ -74,8 +86,13 @@ for result in results:
 
 with open(sys.argv[2], "w", encoding="utf-8") as summary:
     summary.write("# Cyber RT Performance Baseline\n\n")
-    summary.write(f"Cases: {len(results)}; passed: "
-                  f"{sum(item['success'] for item in results)}\n\n")
+    summary.write(
+        f"Cases: {len(results)}; release gates: "
+        f"{sum(item['success'] for item in required)}/{len(required)} passed; "
+        f"exploratory stable points: "
+        f"{sum(item['success'] for item in exploratory)}/"
+        f"{len(exploratory)}\n\n"
+    )
     summary.write("| Coverage | Message | Cases | Passed | Max p99 (ns) | "
                   "Max msg/s | Total loss | Max loss rate |\n")
     summary.write("| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |\n")
@@ -135,7 +152,7 @@ import sys
 failed = [
     result
     for result in json.load(open(sys.argv[1], encoding="utf-8"))["results"]
-    if not result["success"]
+    if result.get("required_for_release", True) and not result["success"]
 ]
 if failed:
     for result in failed:
@@ -159,4 +176,19 @@ PY
   uname -a
 } > "$OUTDIR/metadata.txt"
 
+if [ "$RUN_ZERO_LOSS_CAPACITY" = true ]; then
+  CAPACITY_OUTDIR="$OUTDIR/capacity"
+  if ! bash scripts/release/run_zero_loss_capacity.sh \
+    --outdir="$CAPACITY_OUTDIR" \
+    --benchmark-bin="$REPO_ROOT/bazel-bin/tests/perf_test/benchmark_monitor" \
+    --skip-build \
+    "${CAPACITY_ARGS[@]}"; then
+    echo "Requested zero-loss capacity stage failed; reports: $CAPACITY_OUTDIR" >&2
+    exit 1
+  fi
+fi
+
 echo "Performance baseline reports: $OUTDIR/baseline.json and $OUTDIR/summary.md"
+if [ "$RUN_ZERO_LOSS_CAPACITY" = true ]; then
+  echo "Capacity reports: $OUTDIR/capacity/zero_loss_capacity.json and $OUTDIR/capacity/zero_loss_capacity.md"
+fi

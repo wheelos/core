@@ -61,6 +61,13 @@ class RtpsDispatcher : public Dispatcher {
                    const RoleAttributes& opposite_attr,
                    const MessageListener<MessageT>& listener);
 
+  template <typename MessageT>
+  void RemoveListener(const RoleAttributes& self_attr);
+
+  template <typename MessageT>
+  void RemoveListener(const RoleAttributes& self_attr,
+                      const RoleAttributes& opposite_attr);
+
   void set_participant(const ParticipantPtr& participant) {
     participant_ = participant;
   }
@@ -70,6 +77,7 @@ class RtpsDispatcher : public Dispatcher {
                  const std::shared_ptr<std::string>& msg_str,
                  const MessageInfo& msg_info);
   void AddSubscriber(const RoleAttributes& self_attr);
+  void RemoveSubscriber(uint64_t channel_id);
   // key: channel_id
   std::unordered_map<uint64_t, Subscriber> subs_;
   std::mutex subs_mutex_;
@@ -119,6 +127,19 @@ void RtpsDispatcher::AddListener(const RoleAttributes& self_attr,
   Dispatcher::AddListener<std::string>(self_attr, opposite_attr,
                                        listener_adapter);
   AddSubscriber(self_attr);
+}
+
+template <typename MessageT>
+void RtpsDispatcher::RemoveListener(const RoleAttributes& self_attr) {
+  Dispatcher::RemoveListener<MessageT>(self_attr);
+  RemoveSubscriber(self_attr.channel_id());
+}
+
+template <typename MessageT>
+void RtpsDispatcher::RemoveListener(const RoleAttributes& self_attr,
+                                    const RoleAttributes& opposite_attr) {
+  Dispatcher::RemoveListener<MessageT>(self_attr, opposite_attr);
+  RemoveSubscriber(self_attr.channel_id());
 }
 
 }  // namespace transport

@@ -406,7 +406,15 @@ class CyberToolsDiscoveryTest(unittest.TestCase):
                 stderr=subprocess.PIPE,
                 text=True,
             )
-            time.sleep(4)
+            _run_until_contains(
+                [
+                    _tool_path("cyber_channel", "cyber_channel"),
+                    "info",
+                    channel_name,
+                ],
+                "cyber_recorder_record_{}".format(recorder.pid),
+            )
+            time.sleep(2)
             recorder.send_signal(signal.SIGINT)
             recorder.wait(timeout=15)
             self.assertEqual(0, recorder.returncode, recorder.stderr.read())
@@ -469,6 +477,14 @@ class CyberToolsDiscoveryTest(unittest.TestCase):
                 lambda message: replayed.set()
                 if message.content == "cross-process-tool-message"
                 else None,
+            )
+            _run_until_contains(
+                [
+                    _tool_path("cyber_channel", "cyber_channel"),
+                    "info",
+                    channel_name,
+                ],
+                "tools_replay_reader_" + suffix,
             )
             player = subprocess.Popen(
                 [
@@ -686,6 +702,9 @@ if __name__ == "__main__":
     if len(sys.argv) == 5 and sys.argv[1] == "--publisher":
         _publisher(sys.argv[2], sys.argv[3], sys.argv[4])
     else:
+        os.environ.setdefault(
+            "CYBER_DOMAIN_ID", str(100 + os.getpid() % 100)
+        )
         cyber_path, temp_root = _write_rtps_config()
         os.environ["CYBER_PATH"] = cyber_path
         cyber.init("cyber_tools_discovery_test")

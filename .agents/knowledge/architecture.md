@@ -16,6 +16,13 @@ discovery, or transport.
 - The transport layer supports INTRA, SHM, RTPS, and HYBRID; the transport
   configuration selects the default.
 - Service discovery manages topology separately from data transport.
+- Fast-DDS participant teardown requires strict phased unpairing: for each
+  domain participant, all Subscribers (readers) must be removed first before
+  Publishers (writers) are removed, followed by removing the Participant itself.
+  This avoids use-after-free (UAF) during reader proxy unpairing.
+- Global teardown sequence in `FinishClear`: Transport cleanup (subscribers ->
+  publishers -> transport participant) precedes TopologyManager cleanup
+  (discovery subscribers -> discovery publishers -> topology participant).
 - The scheduler turns component reader work into tasks; component authors
   implement `Init` and `Proc` rather than taking over framework `Process`.
 

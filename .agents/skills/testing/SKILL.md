@@ -13,6 +13,9 @@ Read this when changing runtime, transport, message, example, or test code.
   `//tests/integration_test:examples_regression_tests`,
   `//cyber/transport/integration_test:rtps_transceiver_test`, and
   `//cyber/transport/rtps:rtps_test`.
+- The complete native/Python runtime, transport, record/play, mainboard, and
+  command-line tool acceptance matrix is
+  `//tests/integration_test:core_tool_matrix_tests`.
 - Run `source scripts/env/runtime.bash` before using tools from `bazel-bin`.
 - If an integration test has a timing-sensitive failure, rerun only the failed
   target once and distinguish an intermittent failure from a regression.

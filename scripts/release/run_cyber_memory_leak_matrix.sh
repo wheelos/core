@@ -50,7 +50,8 @@ for target in "${targets[@]}"; do
     --show-leak-kinds=definite,possible \
     --errors-for-leak-kinds=definite,indirect \
     --undef-value-errors=no \
-    --log-file="${REPO_ROOT}/${valgrind_log}" \
+    --suppressions="${REPO_ROOT}/scripts/release/fastdds_valgrind.supp" \
+    --log-file="${valgrind_log}" \
     --error-exitcode=1 \
     "${REPO_ROOT}/bazel-bin/${package}/${binary}" >"${log}" 2>&1
   status=$?

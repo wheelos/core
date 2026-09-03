@@ -18,6 +18,10 @@ checks fail.
   corresponding C++ check to be skipped.
 - The Ubuntu baseline covers `//cyber`, `//:wheelos_core`, and integration
   regression; distinguish compile, test, and environment failures.
+- Fast-DDS exit exceptions (such as heap-use-after-free or dangling proxy access
+  during Domain::removeParticipant) indicate a reader/writer destruction ordering
+  inversion; ensure Subscribers are removed before Publishers and that
+  `Domain::removeParticipant` is called only after user endpoints are cleared.
 - Offline builds use the vendor workflow and must keep the lockfile, vendor
   tree, and download-disabled parameters consistent.
 

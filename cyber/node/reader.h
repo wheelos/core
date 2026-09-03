@@ -296,8 +296,8 @@ void Reader<MessageT>::Shutdown() {
     return;
   }
   LeaveTheTopology();
-  ReceiverManager<MessageT>::Instance()->RemoveReceiver(role_attr_);
   receiver_ = nullptr;
+  ReceiverManager<MessageT>::Instance()->RemoveReceiver(role_attr_);
   channel_manager_ = nullptr;
 
   if (!croutine_name_.empty()) {

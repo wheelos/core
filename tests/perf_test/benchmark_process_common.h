@@ -45,6 +45,9 @@ namespace perf_test {
 
 constexpr uint64_t kOneSecondNs = 1000000000ULL;
 constexpr uint64_t kOneMillisecondNs = 1000000ULL;
+constexpr uint64_t kBenchmarkWarmupSeqBase =
+    std::numeric_limits<uint64_t>::max() - 1024;
+constexpr uint64_t kDefaultSequenceCapacity = 1ULL << 20;
 
 enum class CoverageMode {
   kIntraProcess,
@@ -341,6 +344,20 @@ inline bool WriteKvFile(const std::string& path,
   return !out.fail();
 }
 
+inline bool AppendKvFile(
+    const std::string& path,
+    const std::vector<std::pair<std::string, std::string>>& kvs) {
+  std::ofstream out(path, std::ios::out | std::ios::app);
+  if (!out.is_open()) {
+    return false;
+  }
+  for (const auto& kv : kvs) {
+    out << kv.first << "=" << kv.second << "\n";
+  }
+  out.flush();
+  return !out.fail();
+}
+
 inline bool ReadKvFile(const std::string& path,
                        std::unordered_map<std::string, std::string>* kv) {
   if (kv == nullptr) {
@@ -365,6 +382,27 @@ inline bool ReadKvFile(const std::string& path,
   return true;
 }
 
+inline bool ReadMeasurementStart(const std::string& path,
+                                 uint64_t* measurement_start_ns) {
+  if (path.empty() || measurement_start_ns == nullptr) {
+    return false;
+  }
+  std::unordered_map<std::string, std::string> kv;
+  if (!ReadKvFile(path, &kv)) {
+    return false;
+  }
+  const auto it = kv.find("measurement_start_ns");
+  if (it == kv.end()) {
+    return false;
+  }
+  const uint64_t value = ParseUInt64Or(it->second, 0);
+  if (value == 0) {
+    return false;
+  }
+  *measurement_start_ns = value;
+  return true;
+}
+
 inline std::string JoinCpuSet(const std::vector<int>& cpus) {
   std::ostringstream oss;
   for (size_t i = 0; i < cpus.size(); ++i) {
@@ -378,7 +416,8 @@ inline std::string JoinCpuSet(const std::vector<int>& cpus) {
 
 inline apollo::cyber::proto::RoleAttributes BuildRoleAttributes(
     const std::string& channel_name, const std::string& node_name,
-    const std::string& host_ip, int process_id, uint64_t unique_seed) {
+    const std::string& host_ip, int process_id, uint64_t unique_seed,
+    int qos_depth = 4096) {
   apollo::cyber::proto::RoleAttributes attr;
   attr.set_channel_name(channel_name);
   attr.set_channel_id(common::GlobalData::RegisterChannel(channel_name));
@@ -391,7 +430,7 @@ inline apollo::cyber::proto::RoleAttributes BuildRoleAttributes(
       node_name + "_" + channel_name + "_" + std::to_string(unique_seed)));
   attr.mutable_qos_profile()->CopyFrom(
       transport::QosProfileConf::QOS_PROFILE_DEFAULT);
-  attr.mutable_qos_profile()->set_depth(4096);
+  attr.mutable_qos_profile()->set_depth(std::max(1, qos_depth));
   return attr;
 }
 

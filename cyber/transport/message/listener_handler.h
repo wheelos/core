@@ -47,6 +47,7 @@ class ListenerHandlerBase {
 
   virtual void Disconnect(uint64_t self_id) = 0;
   virtual void Disconnect(uint64_t self_id, uint64_t oppo_id) = 0;
+  virtual bool IsEmpty() const = 0;
   inline bool IsRawMessage() const { return is_raw_message_; }
   virtual void RunFromString(const std::string& str,
                              const MessageInfo& msg_info) = 0;
@@ -74,6 +75,7 @@ class ListenerHandler : public ListenerHandlerBase {
 
   void Disconnect(uint64_t self_id) override;
   void Disconnect(uint64_t self_id, uint64_t oppo_id) override;
+  bool IsEmpty() const override;
 
   void Run(const Message& msg, const MessageInfo& msg_info);
   void RunFromString(const std::string& str,
@@ -156,6 +158,16 @@ void ListenerHandler<MessageT>::Disconnect(uint64_t self_id, uint64_t oppo_id) {
 
   signals_conns_[oppo_id][self_id].Disconnect();
   signals_conns_[oppo_id].erase(self_id);
+  if (signals_conns_[oppo_id].empty()) {
+    signals_conns_.erase(oppo_id);
+    signals_.erase(oppo_id);
+  }
+}
+
+template <typename MessageT>
+bool ListenerHandler<MessageT>::IsEmpty() const {
+  ReadLockGuard<AtomicRWLock> lock(const_cast<AtomicRWLock&>(rw_lock_));
+  return signal_conns_.empty() && signals_conns_.empty();
 }
 
 template <typename MessageT>

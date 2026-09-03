@@ -46,7 +46,10 @@ void RtpsDispatcher::Shutdown() {
   {
     std::lock_guard<std::mutex> lock(subs_mutex_);
     for (auto& item : subs_) {
-      item.second.sub = nullptr;
+      if (item.second.sub != nullptr) {
+        eprosima::fastrtps::Domain::removeSubscriber(item.second.sub);
+        item.second.sub = nullptr;
+      }
       if (item.second.sub_listener != nullptr) {
         item.second.sub_listener->Shutdown();
         RetainSubListener(std::move(item.second.sub_listener));
@@ -91,6 +94,32 @@ void RtpsDispatcher::AddSubscriber(const RoleAttributes& self_attr) {
       new_sub.sub_listener.get());
   RETURN_IF_NULL(new_sub.sub);
   subs_[channel_id] = new_sub;
+}
+
+void RtpsDispatcher::RemoveSubscriber(uint64_t channel_id) {
+  ListenerHandlerBasePtr* handler_base = nullptr;
+  if (msg_listeners_.Get(channel_id, &handler_base)) {
+    if (!(*handler_base)->IsEmpty()) {
+      return;
+    }
+  }
+
+  std::lock_guard<std::mutex> lock(subs_mutex_);
+  if (is_shutdown_.load()) {
+    return;
+  }
+  auto iter = subs_.find(channel_id);
+  if (iter != subs_.end()) {
+    if (iter->second.sub_listener != nullptr) {
+      iter->second.sub_listener->Shutdown();
+      RetainSubListener(std::move(iter->second.sub_listener));
+    }
+    if (iter->second.sub != nullptr) {
+      eprosima::fastrtps::Domain::removeSubscriber(iter->second.sub);
+      iter->second.sub = nullptr;
+    }
+    subs_.erase(iter);
+  }
 }
 
 void RtpsDispatcher::OnMessage(uint64_t channel_id,

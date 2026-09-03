@@ -62,26 +62,30 @@ bool Manager::StartDiscovery(RtpsParticipant* participant) {
   return true;
 }
 
+void Manager::StopSubscriber() {
+  std::lock_guard<std::mutex> lg(lock_);
+  if (subscriber_ != nullptr) {
+    eprosima::fastrtps::Domain::removeSubscriber(subscriber_);
+    subscriber_ = nullptr;
+  }
+  if (listener_ != nullptr) {
+    delete listener_;
+    listener_ = nullptr;
+  }
+}
+
+void Manager::StopPublisher() {
+  std::lock_guard<std::mutex> lg(lock_);
+  publisher_ = nullptr;
+}
+
 void Manager::StopDiscovery() {
   if (!is_discovery_started_.exchange(false)) {
     return;
   }
 
-  if (subscriber_ != nullptr) {
-    eprosima::fastrtps::Domain::removeSubscriber(subscriber_);
-    subscriber_ = nullptr;
-  }
-
-  if (listener_ != nullptr) {
-    delete listener_;
-    listener_ = nullptr;
-  }
-
-  std::lock_guard<std::mutex> lg(lock_);
-  if (publisher_ != nullptr) {
-    eprosima::fastrtps::Domain::removePublisher(publisher_);
-    publisher_ = nullptr;
-  }
+  StopSubscriber();
+  StopPublisher();
 }
 
 void Manager::Shutdown() {

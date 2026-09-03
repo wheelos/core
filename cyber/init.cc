@@ -108,8 +108,8 @@ void FinishClear(bool full_transport_cleanup) {
   TaskManager::CleanUp();
   scheduler::CleanUp();
   if (full_transport_cleanup) {
-    service_discovery::TopologyManager::CleanUp();
     transport::Transport::CleanUp();
+    service_discovery::TopologyManager::CleanUp();
   }
   StopLogger();
   SetState(STATE_SHUTDOWN);

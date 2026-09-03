@@ -44,11 +44,16 @@ struct PublisherOptions {
   std::string host_ip;
   std::string result_path = "/tmp/benchmark_pub_result.kv";
   std::string transport_mode_text;
+  std::string endpoint_ready_path;
+  std::string measurement_start_path;
   int publisher_index = 0;
   int frequency_hz = 1000;
   int payload_bytes = 1024;
   int duration_s = 3;
   int message_pool_depth = 1024;
+  int publisher_history_capacity = 1;
+  int readiness_timeout_s = 30;
+  int cooldown_wait_ms = 300;
   int cpu_interference_percent = 0;
   uint64_t start_ns = 0;
   int cpu = -1;
@@ -57,6 +62,12 @@ struct PublisherOptions {
 struct CpuInterferenceController {
   std::atomic<bool> run{false};
   std::vector<std::thread> workers;
+};
+
+struct PodPublishCounters {
+  uint64_t loan_publish_successes = 0;
+  uint64_t fallback_transmit_attempts = 0;
+  uint64_t fallback_transmit_successes = 0;
 };
 
 void StartCpuInterference(CpuInterferenceController* controller,
@@ -105,6 +116,12 @@ void WriteErrorResult(const PublisherOptions& options, const std::string& error)
                {"error", error},
                {"sent_messages", "0"},
                {"send_failures", "0"},
+               {"loan_publish_successes", "0"},
+               {"fallback_transmit_attempts", "0"},
+               {"fallback_transmit_successes", "0"},
+               {"measured_loan_publish_successes", "0"},
+               {"measured_fallback_transmit_attempts", "0"},
+               {"measured_fallback_transmit_successes", "0"},
                {"cpu_delta_s", "0"},
                {"rss_kb_begin", "0"},
                {"rss_kb_end", "0"},
@@ -132,6 +149,11 @@ bool ParsePublisherOptions(int argc, char** argv, PublisherOptions* options,
   options->result_path = GetArgOr(args, "--result_path", options->result_path);
   options->transport_mode_text =
       GetArgOr(args, "--transport_mode", options->transport_mode_text);
+  options->endpoint_ready_path =
+      GetArgOr(args, "--endpoint_ready_path", options->endpoint_ready_path);
+  options->measurement_start_path =
+      GetArgOr(args, "--measurement_start_path",
+               options->measurement_start_path);
   options->publisher_index =
       std::max(0, ParseIntOr(GetArgOr(args, "--publisher_index", "0"), 0));
   options->frequency_hz =
@@ -142,6 +164,12 @@ bool ParsePublisherOptions(int argc, char** argv, PublisherOptions* options,
       std::max(1, ParseIntOr(GetArgOr(args, "--duration_s", "3"), 3));
   options->message_pool_depth = std::max(
       2, ParseIntOr(GetArgOr(args, "--message_pool_depth", "1024"), 1024));
+  options->publisher_history_capacity = std::max(
+      1, ParseIntOr(GetArgOr(args, "--publisher_history_capacity", "1"), 1));
+  options->readiness_timeout_s = std::max(
+      1, ParseIntOr(GetArgOr(args, "--readiness_timeout_s", "30"), 30));
+  options->cooldown_wait_ms = std::max(
+      0, ParseIntOr(GetArgOr(args, "--cooldown_wait_ms", "300"), 300));
   options->cpu_interference_percent = std::max(
       0, ParseIntOr(GetArgOr(args, "--cpu_interference_percent", "0"), 0));
   options->start_ns = ParseUInt64Or(GetArgOr(args, "--start_ns", "0"), 0);
@@ -200,15 +228,11 @@ bool RunBenchmarkPublisher(const PublisherOptions& options, std::string* error) 
                                   : options.host_ip;
   const auto attr = BuildRoleAttributes(
       options.channel, options.node_name, host_ip, process_id,
-      static_cast<uint64_t>(options.publisher_index + 1) * 97ULL);
+      static_cast<uint64_t>(options.publisher_index + 1) * 97ULL,
+      options.publisher_history_capacity);
 
   const std::string payload(static_cast<size_t>(options.payload_bytes), 'x');
 
-  const uint64_t start_ns =
-      options.start_ns == 0 ? MonotonicRawNowNs() + 200 * kOneMillisecondNs
-                            : options.start_ns;
-  const uint64_t end_ns =
-      start_ns + static_cast<uint64_t>(options.duration_s) * kOneSecondNs;
   const uint64_t period_ns =
       options.frequency_hz > 0
           ? std::max<uint64_t>(1,
@@ -244,7 +268,7 @@ bool RunBenchmarkPublisher(const PublisherOptions& options, std::string* error) 
   } else {
     pod_transmitter = transport::Transport::Instance()
                           ->CreateTransmitter<transport::PodMessage>(
-                              attr, apollo::cyber::proto::OptionalMode::SHM);
+                              attr, mode);
     if (pod_transmitter == nullptr) {
       if (error != nullptr) {
         *error = "failed to create pod transmitter";
@@ -254,16 +278,123 @@ bool RunBenchmarkPublisher(const PublisherOptions& options, std::string* error) 
     loan_supported = pod_transmitter->IsLoanSupported();
   }
 
-  SleepUntilNs(start_ns);
+  auto publish_pod = [&](uint64_t timestamp_ns, uint64_t sequence,
+                         PodPublishCounters* counters) {
+    transport::PodChunkHeader header = transport::MakeImagePodChunkHeader(
+        timestamp_ns, sequence,
+        static_cast<uint32_t>(options.publisher_index), 1, 1, 0,
+        static_cast<uint32_t>(payload.size()));
+    bool published = false;
+    if (loan_supported) {
+      transport::LoanedMessage<transport::PodMessage> loaned;
+      const std::size_t required =
+          transport::PodChunkTotalSize(payload.size());
+      if (pod_transmitter->Loan(required, &loaned)) {
+        header.reserved[0] = reinterpret_cast<uint64_t>(loaned.data());
+        std::size_t written = 0;
+        if (transport::BuildPodChunk(header, payload.data(), payload.size(),
+                                     loaned.data(), loaned.capacity(),
+                                     &written) &&
+            loaned.set_size(written)) {
+          published = pod_transmitter->Publish(std::move(loaned));
+          if (published && counters != nullptr) {
+            ++counters->loan_publish_successes;
+          }
+        }
+      }
+    }
+    if (!published) {
+      if (counters != nullptr) {
+        ++counters->fallback_transmit_attempts;
+      }
+      header.reserved[0] = 0;
+      auto msg = std::make_shared<transport::PodMessage>(
+          header, payload.data(), payload.size());
+      published = pod_transmitter->Transmit(msg);
+      if (published && counters != nullptr) {
+        ++counters->fallback_transmit_successes;
+      }
+    }
+    return published;
+  };
 
+  if (!options.endpoint_ready_path.empty() &&
+      !WriteKvFile(options.endpoint_ready_path,
+                   {{"endpoint_ready", "1"},
+                    {"role", "publisher"},
+                    {"index", std::to_string(options.publisher_index)}})) {
+    if (error != nullptr) {
+      *error = "failed to write publisher endpoint readiness";
+    }
+    return false;
+  }
+
+  uint64_t start_ns = options.start_ns;
+  if (start_ns == 0 && options.measurement_start_path.empty()) {
+    start_ns = MonotonicRawNowNs() + 200 * kOneMillisecondNs;
+  }
+  uint64_t warmup_attempts = 0;
+  auto warmup = std::make_shared<apollo::cyber::proto::Chatter>();
+  if (options.message_type == MessageType::kProtobuf) {
+    warmup->set_content(payload);
+    warmup->set_lidar_timestamp(
+        static_cast<uint64_t>(options.publisher_index));
+    warmup->set_seq(kBenchmarkWarmupSeqBase +
+                    static_cast<uint64_t>(options.publisher_index));
+  }
+  const uint64_t readiness_deadline =
+      MonotonicRawNowNs() +
+      static_cast<uint64_t>(options.readiness_timeout_s) * kOneSecondNs;
+  while (true) {
+    if (!options.measurement_start_path.empty() &&
+        ReadMeasurementStart(options.measurement_start_path, &start_ns)) {
+      break;
+    }
+    if (options.measurement_start_path.empty() &&
+        MonotonicRawNowNs() >= start_ns) {
+      break;
+    }
+    if (MonotonicRawNowNs() >= readiness_deadline) {
+      if (error != nullptr) {
+        *error = "publisher timed out waiting for common measurement start";
+      }
+      return false;
+    }
+    if (options.message_type == MessageType::kProtobuf) {
+      warmup->set_timestamp(MonotonicRawNowNs());
+      if (chatter_transmitter->Transmit(warmup)) {
+        ++warmup_attempts;
+      }
+    } else if (publish_pod(
+                   MonotonicRawNowNs(),
+                   kBenchmarkWarmupSeqBase +
+                       static_cast<uint64_t>(options.publisher_index),
+                   nullptr)) {
+      ++warmup_attempts;
+    }
+    SleepNs(50 * kOneMillisecondNs);
+  }
+  if (options.measurement_start_path.empty()) {
+    start_ns = MonotonicRawNowNs();
+  } else if (start_ns <= MonotonicRawNowNs()) {
+    if (error != nullptr) {
+      *error = "publisher received a non-future measurement start";
+    }
+    return false;
+  }
+  SleepUntilNs(start_ns);
+  const uint64_t end_ns =
+      start_ns + static_cast<uint64_t>(options.duration_s) * kOneSecondNs;
+
+  const ResourceSnapshot begin = CaptureResourceSnapshot();
   CpuInterferenceController interference;
   StartCpuInterference(&interference, options.cpu_interference_percent,
                        options.cpu);
-  const ResourceSnapshot begin = CaptureResourceSnapshot();
   uint64_t sent_messages = 0;
   uint64_t send_failures = 0;
   uint64_t seq = 0;
   uint64_t next_send_ns = start_ns;
+  PodPublishCounters pod_publish_counters;
 
   if (options.message_type == MessageType::kProtobuf) {
     while (true) {
@@ -281,10 +412,10 @@ bool RunBenchmarkPublisher(const PublisherOptions& options, std::string* error) 
       msg->set_lidar_timestamp(static_cast<uint64_t>(options.publisher_index));
       if (chatter_transmitter->Transmit(msg)) {
         ++sent_messages;
+        ++seq;
       } else {
         ++send_failures;
       }
-      ++seq;
       if (period_ns > 0) {
         next_send_ns += period_ns;
       }
@@ -299,36 +430,13 @@ bool RunBenchmarkPublisher(const PublisherOptions& options, std::string* error) 
         SleepUntilNs(next_send_ns);
         continue;
       }
-      transport::PodChunkHeader header = transport::MakeImagePodChunkHeader(
-          now, seq, static_cast<uint32_t>(options.publisher_index), 1, 1, 0,
-          static_cast<uint32_t>(payload.size()));
-      bool published = false;
-      if (loan_supported) {
-        transport::LoanedMessage<transport::PodMessage> loaned;
-        const std::size_t required = transport::PodChunkTotalSize(payload.size());
-        if (pod_transmitter->Loan(required, &loaned)) {
-          const uint64_t ptr_value = reinterpret_cast<uint64_t>(loaned.data());
-          header.reserved[0] = ptr_value;
-          std::size_t written = 0;
-          if (transport::BuildPodChunk(header, payload.data(), payload.size(),
-                                       loaned.data(), loaned.capacity(), &written) &&
-              loaned.set_size(written)) {
-            published = pod_transmitter->Publish(std::move(loaned));
-          }
-        }
-      }
-      if (!published) {
-        header.reserved[0] = 0;
-        auto msg = std::make_shared<transport::PodMessage>(header, payload.data(),
-                                                            payload.size());
-        published = pod_transmitter->Transmit(msg);
-      }
+      const bool published = publish_pod(now, seq, &pod_publish_counters);
       if (published) {
         ++sent_messages;
+        ++seq;
       } else {
         ++send_failures;
       }
-      ++seq;
       if (period_ns > 0) {
         next_send_ns += period_ns;
       }
@@ -337,7 +445,14 @@ bool RunBenchmarkPublisher(const PublisherOptions& options, std::string* error) 
   const ResourceSnapshot end = CaptureResourceSnapshot();
   StopCpuInterference(&interference);
 
-  // on large RTPS payloads in short-lived benchmark workers.
+  SleepNs(static_cast<uint64_t>(options.cooldown_wait_ms) *
+          kOneMillisecondNs);
+  if (chatter_transmitter != nullptr) {
+    chatter_transmitter->Disable();
+  }
+  if (pod_transmitter != nullptr) {
+    pod_transmitter->Disable();
+  }
 
   const double cpu_delta =
       std::max(0.0, (end.cpu_user_s + end.cpu_sys_s) -
@@ -346,10 +461,30 @@ bool RunBenchmarkPublisher(const PublisherOptions& options, std::string* error) 
       options.result_path,
       {{"status", "ok"},
        {"worker_mode", "benchmark"},
+       {"endpoint_ready", "1"},
+       {"warmup_sent", warmup_attempts > 0 ? "1" : "0"},
+       {"warmup_attempts", std::to_string(warmup_attempts)},
+       {"measurement_start_ns", std::to_string(start_ns)},
+       {"measurement_duration_ns", std::to_string(end.wall_ns - begin.wall_ns)},
+       {"cooldown_wait_ms", std::to_string(options.cooldown_wait_ms)},
        {"message_type", ToString(options.message_type)},
        {"transport_mode", ToString(mode)},
        {"sent_messages", std::to_string(sent_messages)},
+       {"measured_sent_messages", std::to_string(sent_messages)},
        {"send_failures", std::to_string(send_failures)},
+       {"measured_send_failures", std::to_string(send_failures)},
+       {"loan_publish_successes",
+        std::to_string(pod_publish_counters.loan_publish_successes)},
+       {"fallback_transmit_attempts",
+        std::to_string(pod_publish_counters.fallback_transmit_attempts)},
+       {"fallback_transmit_successes",
+        std::to_string(pod_publish_counters.fallback_transmit_successes)},
+       {"measured_loan_publish_successes",
+        std::to_string(pod_publish_counters.loan_publish_successes)},
+       {"measured_fallback_transmit_attempts",
+        std::to_string(pod_publish_counters.fallback_transmit_attempts)},
+       {"measured_fallback_transmit_successes",
+        std::to_string(pod_publish_counters.fallback_transmit_successes)},
        {"loan_supported", loan_supported ? "1" : "0"},
        {"cpu_delta_s", std::to_string(cpu_delta)},
        {"rss_kb_begin", std::to_string(begin.rss_kb)},
@@ -394,6 +529,7 @@ bool RunShmProbePublisher(const PublisherOptions& options, std::string* error) {
   const bool loan_supported = transmitter->IsLoanSupported();
   std::string publish_mode = "fallback_transmit";
   uint64_t sent_count = 0;
+  PodPublishCounters pod_publish_counters;
 
   for (uint64_t frame = 0; MonotonicRawNowNs() < end_ns; ++frame) {
     transport::PodChunkHeader header = transport::MakeImagePodChunkHeader(
@@ -411,16 +547,23 @@ bool RunShmProbePublisher(const PublisherOptions& options, std::string* error) {
                                      loaned.data(), loaned.capacity(), &written) &&
             loaned.set_size(written)) {
           current_published = transmitter->Publish(std::move(loaned));
-          publish_mode = "loan_publish";
+          if (current_published) {
+            ++pod_publish_counters.loan_publish_successes;
+            publish_mode = "loan_publish";
+          }
         }
       }
     }
 
     if (!current_published) {
+      ++pod_publish_counters.fallback_transmit_attempts;
       header.reserved[0] = 0;
       auto msg = std::make_shared<transport::PodMessage>(header, payload.data(),
                                                           payload.size());
       current_published = transmitter->Transmit(msg);
+      if (current_published) {
+        ++pod_publish_counters.fallback_transmit_successes;
+      }
     }
     if (current_published) {
       published = true;
@@ -439,6 +582,12 @@ bool RunShmProbePublisher(const PublisherOptions& options, std::string* error) {
        {"probe_publish_mode", publish_mode},
        {"sent_messages", std::to_string(sent_count)},
        {"send_failures", published ? "0" : "1"},
+       {"loan_publish_successes",
+        std::to_string(pod_publish_counters.loan_publish_successes)},
+       {"fallback_transmit_attempts",
+        std::to_string(pod_publish_counters.fallback_transmit_attempts)},
+       {"fallback_transmit_successes",
+        std::to_string(pod_publish_counters.fallback_transmit_successes)},
        {"cpu_delta_s", "0"},
        {"rss_kb_begin", "0"},
        {"rss_kb_end", "0"},
@@ -491,5 +640,12 @@ int main(int argc, char** argv) {
     apollo::cyber::examples::perf_test::WriteErrorResult(options, run_error);
   }
   apollo::cyber::Clear();
-  return ok ? 0 : 1;
+  const int exit_code = ok ? 0 : 1;
+  if (!apollo::cyber::examples::perf_test::AppendKvFile(
+          options.result_path,
+          {{"shutdown_complete", "1"},
+           {"planned_exit_code", std::to_string(exit_code)}})) {
+    return 1;
+  }
+  return exit_code;
 }

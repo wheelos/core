@@ -157,29 +157,12 @@ TEST(ParticipantTest, participant_test) {
   eprosima::fastrtps::ParticipantListener listener1;
 }
 
-TEST(ParticipantTest, retained_data_participant_keeps_slot_lock) {
+TEST(ParticipantTest, data_participant_releases_slot_lock_on_shutdown) {
   int fds[2];
   ASSERT_EQ(pipe(fds), 0);
   const State original_state = GetState();
   SetState(STATE_SHUTTING_DOWN);
-  Participant participant("retained_data_participant", 11512);
-  ParticipantTestPeer::SetLockFd(&participant, fds[0]);
-
-  participant.Shutdown();
-
-  EXPECT_NE(fcntl(fds[0], F_GETFD), -1);
-  close(fds[0]);
-  close(fds[1]);
-  ParticipantTestPeer::ClearLockFd(&participant);
-  SetState(original_state);
-}
-
-TEST(ParticipantTest, non_retained_participant_releases_slot_lock) {
-  int fds[2];
-  ASSERT_EQ(pipe(fds), 0);
-  const State original_state = GetState();
-  SetState(STATE_INITIALIZED);
-  Participant participant("non_retained_participant", 11512);
+  Participant participant("data_participant", 11512);
   ParticipantTestPeer::SetLockFd(&participant, fds[0]);
 
   participant.Shutdown();

@@ -83,6 +83,16 @@ class Manager {
   void StopDiscovery();
 
   /**
+   * @brief Stop discovery subscriber
+   */
+  void StopSubscriber();
+
+  /**
+   * @brief Stop discovery publisher
+   */
+  void StopPublisher();
+
+  /**
    * @brief Shutdown module
    */
   virtual void Shutdown();

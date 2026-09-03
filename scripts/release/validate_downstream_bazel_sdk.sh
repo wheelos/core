@@ -9,6 +9,13 @@ cat > "${WORK_DIR}/MODULE.bazel" <<'EOF'
 module(name = "wheelos_core_sdk_consumer", version = "0.0.0")
 
 bazel_dep(name = "wheelos_core", version = "1.0.0")
+bazel_dep(name = "rules_cc", version = "0.0.9")
+bazel_dep(name = "rules_python", version = "0.34.0")
+
+python = use_extension("@rules_python//python/extensions:python.bzl", "python")
+python.toolchain(
+    python_version = "3.10",
+)
 EOF
 
 cat > "${WORK_DIR}/BUILD.bazel" <<'EOF'

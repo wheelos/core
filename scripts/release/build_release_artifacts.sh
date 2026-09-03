@@ -30,31 +30,43 @@ done
 REPO_ROOT=$(git rev-parse --show-toplevel)
 cd "$REPO_ROOT"
 
+CORE_PACKAGE_BUILT=false
 if [ "$SKIP_BASELINE" = false ]; then
   bash scripts/release/ubuntu2204_baseline.sh --distdir "$DISTDIR"
+  CORE_PACKAGE_BUILT=true
 fi
 
 rm -rf "$OUTDIR"
 mkdir -p "$OUTDIR/core" "$OUTDIR/pycyber"
 
 if [ "$SKIP_CORE_PACKAGE" = false ]; then
-  bazel build --config=ci --distdir="$DISTDIR" //:wheelos_core
-  bash scripts/release/validate_runtime_bundle.sh
+  if [ "$CORE_PACKAGE_BUILT" = false ]; then
+    bazel build --config=ci --distdir="$DISTDIR" //:wheelos_core
+  fi
   mapfile -t CORE_OUTPUTS < <(
-    bazel cquery //:wheelos_core \
-      --output=starlark \
-      --starlark:expr='"\n".join([f.path for f in target.files.to_list()])' |
-      sed '/^$/d'
+    bazel cquery --config=ci --distdir="$DISTDIR" \
+      //:wheelos_core --output=files |
+      sed -n '/\.deb$/p'
   )
 
-  if [ "${#CORE_OUTPUTS[@]}" -eq 0 ]; then
-    echo "No outputs found for //:wheelos_core" >&2
+  if [ "${#CORE_OUTPUTS[@]}" -ne 1 ]; then
+    echo "Expected exactly one deb output for //:wheelos_core, found ${#CORE_OUTPUTS[@]}" >&2
     exit 1
   fi
 
-  for output in "${CORE_OUTPUTS[@]}"; do
-    cp -f "$REPO_ROOT/$output" "$OUTDIR/core/$(basename "$output")"
-  done
+  CORE_DEB="${CORE_OUTPUTS[0]}"
+  if [[ "$CORE_DEB" != /* ]]; then
+    CORE_DEB="$REPO_ROOT/$CORE_DEB"
+  fi
+  if [ ! -f "$CORE_DEB" ]; then
+    echo "Configured //:wheelos_core output does not exist: $CORE_DEB" >&2
+    exit 1
+  fi
+
+  bash scripts/release/validate_runtime_bundle.sh \
+    --deb "$CORE_DEB" \
+    --workdir "$OUTDIR/.runtime-bundle-validation"
+  cp -f "$CORE_DEB" "$OUTDIR/core/$(basename "$CORE_DEB")"
 fi
 
 if [ "$SKIP_PYCYBER" = false ]; then

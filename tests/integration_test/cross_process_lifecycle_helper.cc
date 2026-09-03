@@ -14,6 +14,7 @@
 #include <unistd.h>
 
 #include "cyber/cyber.h"
+#include "cyber/service_discovery/topology_manager.h"
 #include "examples/proto/examples.pb.h"
 
 namespace {
@@ -31,9 +32,19 @@ int RunWriter(const std::string& channel, const std::string& token) {
   if (writer == nullptr) {
     return 2;
   }
-  std::cout << "READY" << std::endl;
+  std::cout << "ENDPOINT_CREATED writer" << std::endl;
   uint64_t sequence = 0;
+  bool had_reader = false;
+  uint64_t writes_after_topology = 0;
   while (apollo::cyber::OK()) {
+    const bool has_reader = writer->HasReader();
+    if (has_reader != had_reader) {
+      std::cout << (has_reader ? "TOPOLOGY_OBSERVED reader"
+                               : "TOPOLOGY_LOST reader")
+                << std::endl;
+      had_reader = has_reader;
+      writes_after_topology = 0;
+    }
     auto message = std::make_shared<Chatter>();
     message->set_seq(sequence++);
     message->set_content(token);
@@ -41,6 +52,9 @@ int RunWriter(const std::string& channel, const std::string& token) {
     if (!writer->Write(message)) {
       std::cerr << "WRITE_FAILED" << std::endl;
       return 3;
+    }
+    if (has_reader && ++writes_after_topology == 100) {
+      std::cout << "WRITE_ACCEPTED_AFTER_TOPOLOGY count=100" << std::endl;
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
   }
@@ -61,16 +75,26 @@ int RunReader(const std::string& channel) {
         }
         ++delivery_count;
         if (delivery_count <= 2) {
-          std::cout << "RECEIVED " << last_token
-                    << " delivery=" << delivery_count
+          std::cout << "DELIVERY " << last_token
+                    << " count=" << delivery_count
                     << " seq=" << message->seq() << std::endl;
         }
       });
   if (reader == nullptr) {
     return 2;
   }
-  std::cout << "READY" << std::endl;
-  apollo::cyber::WaitForShutdown();
+  std::cout << "ENDPOINT_CREATED reader" << std::endl;
+  bool had_writer = false;
+  while (apollo::cyber::OK()) {
+    const bool has_writer = reader->HasWriter();
+    if (has_writer != had_writer) {
+      std::cout << (has_writer ? "TOPOLOGY_OBSERVED writer"
+                               : "TOPOLOGY_LOST writer")
+                << std::endl;
+      had_writer = has_writer;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
   return 0;
 }
 
@@ -80,6 +104,7 @@ int RunServer(const std::string& service_name, const std::string& token) {
       service_name,
       [token](const std::shared_ptr<Driver>& request,
               std::shared_ptr<Driver>& response) {
+        std::cout << "REQUEST_DELIVERED " << request->content() << std::endl;
         response->set_content(token + ":" + request->content());
         response->set_msg_id(request->msg_id() + 1);
         response->set_timestamp(request->timestamp() + 1);
@@ -87,7 +112,7 @@ int RunServer(const std::string& service_name, const std::string& token) {
   if (service == nullptr) {
     return 2;
   }
-  std::cout << "READY" << std::endl;
+  std::cout << "ENDPOINT_CREATED server" << std::endl;
   apollo::cyber::WaitForShutdown();
   return 0;
 }
@@ -99,12 +124,32 @@ int RunClient(const std::string& service_name,
   if (client == nullptr) {
     return 2;
   }
-  if (keep_running) {
-    std::cout << "READY" << std::endl;
-  }
+  std::cout << "ENDPOINT_CREATED client" << std::endl;
 
   uint64_t sequence = 0;
+  auto service_manager =
+      apollo::cyber::service_discovery::TopologyManager::Instance()
+          ->service_manager();
+  bool service_was_present = service_manager->HasService(service_name);
+  std::cout << "SERVICE_TOPOLOGY "
+            << (service_was_present ? "present" : "absent") << std::endl;
+  bool response_was_available = false;
   while (apollo::cyber::OK()) {
+    const bool service_is_present =
+        service_manager->HasService(service_name);
+    if (service_is_present != service_was_present) {
+      std::cout << "SERVICE_TOPOLOGY "
+                << (service_is_present ? "present" : "absent") << std::endl;
+      service_was_present = service_is_present;
+    }
+    if (!service_is_present) {
+      if (keep_running && response_was_available) {
+        response_was_available = false;
+        std::cout << "RESPONSE_LOST service" << std::endl;
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+      continue;
+    }
     auto request = std::make_shared<Driver>();
     request->set_content(request_token);
     request->set_msg_id(sequence);
@@ -114,10 +159,17 @@ int RunClient(const std::string& service_name,
     if (response != nullptr &&
         response->msg_id() == request->msg_id() + 1 &&
         response->timestamp() == request->timestamp() + 1) {
+      if (keep_running && !response_was_available) {
+        std::cout << "RESPONSE_RECOVERED service" << std::endl;
+      }
+      response_was_available = true;
       std::cout << "RESPONSE " << response->content() << std::endl;
       if (!keep_running) {
         return 0;
       }
+    } else if (keep_running && response_was_available) {
+      response_was_available = false;
+      std::cout << "RESPONSE_LOST service" << std::endl;
     }
     ++sequence;
   }

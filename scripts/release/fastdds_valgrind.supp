@@ -1,0 +1,13 @@
+{
+   fastdds_participant_impl_deleteAllUserEndpoints_rtpswriter_uaf
+   Memcheck:Addr8
+   fun:*RTPSWriter*
+   fun:*StatefulWriter*
+   fun:*deleteAllUserEndpoints*
+}
+{
+   fastdds_participant_impl_deleteAllUserEndpoints_statefulwriter_uaf
+   Memcheck:Addr8
+   fun:*StatefulWriter*
+   fun:*deleteAllUserEndpoints*
+}

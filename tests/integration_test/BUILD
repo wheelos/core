@@ -12,6 +12,7 @@ cc_binary(
     srcs = ["cross_process_lifecycle_helper.cc"],
     deps = [
         "//cyber:cyber_core",
+        "//cyber/service_discovery:topology_manager",
         "//examples/proto:examples_cc_proto",
     ],
 )
@@ -61,7 +62,10 @@ py_test(
     size = "medium",
     timeout = "moderate",
     srcs = ["cyber_tools_discovery_test.py"],
-    tags = ["local"],
+    tags = [
+        "exclusive",
+        "local",
+    ],
     data = [
         "//cyber:cyber_conf",
         "//cyber/tools/cyber_channel:cyber_channel",
@@ -82,7 +86,10 @@ py_test(
     size = "large",
     timeout = "long",
     srcs = ["cross_process_churn_test.py"],
-    tags = ["local"],
+    tags = [
+        "exclusive",
+        "local",
+    ],
     data = [
         ":cross_process_lifecycle_helper",
         ":librecorder_input_component.so",
@@ -114,6 +121,24 @@ cc_test(
     ],
 )
 
+cc_test(
+    name = "core_transport_matrix_test",
+    size = "medium",
+    timeout = "moderate",
+    srcs = ["core_transport_matrix_test.cc"],
+    data = ["//cyber:cyber_conf"],
+    tags = [
+        "exclusive",
+        "local",
+    ],
+    deps = [
+        "//cyber:cyber_core",
+        "//cyber/proto:unit_test_cc_proto",
+        "//cyber/transport/message:pod_message",
+        "@com_google_googletest//:gtest",
+    ],
+)
+
 test_suite(
     name = "examples_regression_tests",
     tests = [
@@ -124,5 +149,28 @@ test_suite(
         ":examples_stress_test",
         ":mainboard_integration_test",
         "//examples/record_play:record_play_test",
+    ],
+)
+
+test_suite(
+    name = "core_tool_matrix_tests",
+    tests = [
+        ":core_transport_matrix_test",
+        ":examples_regression_tests",
+        "//cyber/python/cyber_py3/examples:examples_smoke_test",
+        "//cyber/python/cyber_py3/test:cyber_test",
+        "//cyber/python/cyber_py3/test:cyber_time_test",
+        "//cyber/python/cyber_py3/test:cyber_timer_test",
+        "//cyber/python/cyber_py3/test:init_test",
+        "//cyber/python/cyber_py3/test:parameter_test",
+        "//cyber/python/cyber_py3/test:record_test",
+        "//cyber/python/cyber_py3/test:shutdown_exit_test",
+        "//cyber/transport:transport_test",
+        "//cyber/transport/integration_test:hybrid_transceiver_test",
+        "//cyber/transport/integration_test:intra_transceiver_test",
+        "//cyber/transport/integration_test:rtps_transceiver_test",
+        "//cyber/transport/integration_test:shm_transceiver_test",
+        "//cyber/transport/rtps:rtps_test",
+        "//examples/record_play:record_play_tool_test",
     ],
 )

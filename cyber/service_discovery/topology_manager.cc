@@ -49,10 +49,44 @@ void TopologyManager::Shutdown() {
     return;
   }
 
-  node_manager_->Shutdown();
-  channel_manager_->Shutdown();
-  service_manager_->Shutdown();
-  participant_->Shutdown();
+  // Phase 1: Stop and remove all discovery subscribers across all managers first,
+  // ensuring all matched writer structures remain valid during reader unpairing.
+  if (node_manager_) {
+    node_manager_->StopSubscriber();
+  }
+  if (channel_manager_) {
+    channel_manager_->StopSubscriber();
+  }
+  if (service_manager_) {
+    service_manager_->StopSubscriber();
+  }
+
+  // Phase 2: Stop and remove all discovery publishers across all managers.
+  if (node_manager_) {
+    node_manager_->StopPublisher();
+  }
+  if (channel_manager_) {
+    channel_manager_->StopPublisher();
+  }
+  if (service_manager_) {
+    service_manager_->StopPublisher();
+  }
+
+  // Phase 3: Complete manager shutdown (signals, data structures).
+  if (node_manager_) {
+    node_manager_->Shutdown();
+  }
+  if (channel_manager_) {
+    channel_manager_->Shutdown();
+  }
+  if (service_manager_) {
+    service_manager_->Shutdown();
+  }
+
+  // Phase 4: Shutdown RTPS participant (zero user endpoints remaining).
+  if (participant_) {
+    participant_->Shutdown();
+  }
   delete participant_listener_;
   participant_listener_ = nullptr;
   participant_ = nullptr;

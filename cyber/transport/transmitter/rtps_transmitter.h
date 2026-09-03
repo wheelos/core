@@ -85,10 +85,6 @@ void RtpsTransmitter<M>::Enable() {
 template <typename M>
 void RtpsTransmitter<M>::Disable() {
   if (this->enabled_) {
-    if (publisher_ != nullptr && participant_ != nullptr &&
-        !participant_->is_shutdown()) {
-      eprosima::fastrtps::Domain::removePublisher(publisher_);
-    }
     publisher_ = nullptr;
     this->enabled_ = false;
   }

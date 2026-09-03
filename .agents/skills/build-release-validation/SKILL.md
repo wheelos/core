@@ -64,13 +64,15 @@ manylinux release.
 ### Part 2: Runtime, tools, and examples
 
 Run the shipped runtime and examples in the same clean image, using the named
-non-root `wheelos` user. The standard targets are:
+non-root `wheelos` user. The canonical runtime acceptance target is:
 
 ```bash
 bazel test --config=ci --test_output=errors \
-  //cyber/python/cyber_py3/examples:examples_smoke_test \
-  //tests/integration_test:examples_regression_tests
+  //tests/integration_test:core_tool_matrix_tests
 ```
+
+The Ubuntu baseline and release acceptance runner share this target. Do not
+rerun its constituent suites separately in the same acceptance flow.
 
 Set an unlimited memlock limit for runtime/example containers that exercise
 io_uring or shared-memory paths:

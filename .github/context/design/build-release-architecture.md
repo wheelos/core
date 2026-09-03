@@ -14,10 +14,14 @@
 - `bash scripts/release/ubuntu2204_baseline.sh` — canonical compile + regression baseline.
 - `bash scripts/release/build_release_artifacts.sh` — release-oriented artifact collection for `wheelos_core` and `pycyber`.
 - `bash scripts/release/build_and_package_pycyber.sh` — Python wheel-focused release path.
+- `//tests/integration_test:core_tool_matrix_tests` — shared runtime, tools,
+  transport, Python, examples, and record/play acceptance target.
 
 ## Artifact model
 
 - Native packaging is anchored on `//:wheelos_core`.
+- Native artifact validation and collection use the same `--config=ci` deb
+  output; validation must not rebuild or query a different configuration.
 - Python packaging is anchored on Bazel-built extension modules plus staged Python sources and generated protobuf output.
 - Release artifacts should be assembled only after the Ubuntu 22.04 baseline passes.
 

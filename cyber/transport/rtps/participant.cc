@@ -80,19 +80,13 @@ void Participant::Shutdown() {
   if (shutdown_.exchange(true)) {
     return;
   }
-  const bool retain_native_participant =
-      listener_ == nullptr && apollo::cyber::IsShutdown();
   if (fastrtps_participant_ != nullptr) {
     fastrtps_participant_->get_resource_event().stop_thread();
-    if (!retain_native_participant) {
-      eprosima::fastrtps::Domain::removeParticipant(fastrtps_participant_);
-    }
+    eprosima::fastrtps::Domain::removeParticipant(fastrtps_participant_);
     fastrtps_participant_ = nullptr;
     listener_ = nullptr;
   }
-  // A retained participant still owns its RTPS ports, so intentionally keep
-  // its slot lock descriptor open until the process exits.
-  if (!retain_native_participant && participant_lock_fd_ >= 0) {
+  if (participant_lock_fd_ >= 0) {
     close(participant_lock_fd_);
     participant_lock_fd_ = -1;
   }

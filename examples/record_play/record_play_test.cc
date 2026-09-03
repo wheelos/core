@@ -15,6 +15,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstdlib>
+#include <filesystem>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -25,6 +26,7 @@
 #include "gtest/gtest.h"
 
 #include "cyber/cyber.h"
+#include "cyber/record/record_writer.h"
 #include "examples/record_play/record_play.h"
 
 namespace apollo {
@@ -42,10 +44,85 @@ struct ChannelRuntimeState {
   std::size_t duplicates = 0;
 };
 
+bool WriteDeterministicFixture(const std::string& path) {
+  record::RecordWriter writer;
+  if (!writer.SetSizeOfFileSegmentation(0) ||
+      !writer.SetIntervalOfFileSegmentation(0) || !writer.Open(path)) {
+    return false;
+  }
+
+  const std::vector<std::string> channels = {
+      kImageFront6mm, kImageFront12mm, kPointCloud64};
+  constexpr std::size_t kMessagesPerChannel = 4;
+  constexpr std::size_t kPayloadSize = 128 * 1024;
+  for (std::size_t channel_index = 0; channel_index < channels.size();
+       ++channel_index) {
+    const auto& channel = channels[channel_index];
+    if (!writer.WriteChannel(channel, transport::PodMessage::TypeName(),
+                             transport::PodSchemaDescriptor())) {
+      writer.Close();
+      return false;
+    }
+    for (std::size_t message_index = 0;
+         message_index < kMessagesPerChannel; ++message_index) {
+      std::vector<uint8_t> payload(kPayloadSize);
+      for (std::size_t i = 0; i < payload.size(); ++i) {
+        payload[i] = static_cast<uint8_t>(
+            (channel_index * 53 + message_index * 17 + i * 31) & 0xff);
+      }
+      payload[payload.size() / 2] = 0;
+
+      transport::PodChunkHeader header{};
+      header.magic = transport::PodChunkHeader::kMagic;
+      header.version = transport::PodChunkHeader::kVersion;
+      header.header_size = sizeof(header);
+      header.payload_kind = static_cast<uint32_t>(
+          PayloadKindForChannel(channel));
+      header.timestamp_ns =
+          1000000000ULL + channel_index * 100000ULL + message_index;
+      header.frame_id = channel_index * 100 + message_index;
+      header.width = channel == kPointCloud64 ? kPayloadSize / 24 : 256;
+      header.height = channel == kPointCloud64 ? 1 : 128;
+      header.stride_bytes = channel == kPointCloud64 ? 24 : 1024;
+      header.pixel_format = static_cast<uint32_t>(channel_index + 1);
+      header.payload_size = static_cast<uint32_t>(payload.size());
+      header.schema_hash =
+          static_cast<uint32_t>(HashBytes(payload.data(), payload.size()));
+
+      transport::PodMessage message(header, payload.data(), payload.size());
+      std::string encoded;
+      if (!message.SerializeToString(&encoded) ||
+          !writer.WriteMessage(channel, encoded, header.timestamp_ns)) {
+        writer.Close();
+        return false;
+      }
+    }
+  }
+  writer.Close();
+  return true;
+}
+
 class RecordPlayTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    ASSERT_TRUE(LoadRecordPlayItems(kDefaultRecordPath, /*max_per_channel=*/16,
+    const char* fixture = std::getenv("CYBER_RECORD_PLAY_FIXTURE");
+    std::string record_path;
+    if (fixture != nullptr) {
+      ASSERT_NE(fixture[0], '\0')
+          << "CYBER_RECORD_PLAY_FIXTURE must name a record file";
+      record_path = fixture;
+      ASSERT_TRUE(std::filesystem::is_regular_file(record_path))
+          << "configured CYBER_RECORD_PLAY_FIXTURE not found: " << record_path;
+    } else {
+      generated_record_path_ =
+          "record_play_fixture_" + std::to_string(::getpid()) + "_" +
+          SanitizeName(
+              ::testing::UnitTest::GetInstance()->current_test_info()->name()) +
+          ".record";
+      ASSERT_TRUE(WriteDeterministicFixture(generated_record_path_));
+      record_path = generated_record_path_;
+    }
+    ASSERT_TRUE(LoadRecordPlayItems(record_path, /*max_per_channel=*/16,
                                     &items_));
     schedule_ = ExpandRecordPlaySchedule(items_, /*repeat=*/2);
     expected_by_channel_.clear();
@@ -54,6 +131,14 @@ class RecordPlayTest : public ::testing::Test {
     }
   }
 
+  void TearDown() override {
+    if (!generated_record_path_.empty()) {
+      std::error_code error;
+      std::filesystem::remove(generated_record_path_, error);
+    }
+  }
+
+  std::string generated_record_path_;
   RecordPlayItems items_;
   RecordPlaySchedule schedule_;
   ChannelItems expected_by_channel_;
@@ -137,7 +222,8 @@ TEST_F(RecordPlayTest, RoundTripBaseline) {
       {kImageFront12mm, writers[1]},
       {kPointCloud64, writers[2]},
   };
-  ASSERT_TRUE(PublishSchedule(schedule_, writer_map));
+  ASSERT_TRUE(PublishSchedule(schedule_, writer_map,
+                              std::chrono::milliseconds(1)));
 
   ASSERT_TRUE(WaitFor(
       [&]() {

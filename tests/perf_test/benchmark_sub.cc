@@ -26,7 +26,9 @@
 #include <utility>
 #include <vector>
 
+#include "tests/perf_test/benchmark_measurement_window.h"
 #include "tests/perf_test/benchmark_process_common.h"
+#include "tests/perf_test/benchmark_sequence_tracker.h"
 #include "cyber/init.h"
 #include "cyber/proto/unit_test.pb.h"
 #include "cyber/transport/message/pod_message.h"
@@ -39,15 +41,6 @@ namespace perf_test {
 
 namespace {
 
-struct SequenceTracker {
-  bool initialized = false;
-  uint64_t expected_seq = 0;
-  uint64_t received_unique = 0;
-  uint64_t internal_loss = 0;
-  uint64_t max_consecutive_loss = 0;
-  uint64_t duplicate_or_reordered = 0;
-};
-
 struct SubscriberOptions {
   std::string worker_mode = "benchmark";
   CoverageMode coverage = CoverageMode::kInterProcess;
@@ -58,12 +51,17 @@ struct SubscriberOptions {
   std::string result_path = "/tmp/benchmark_sub_result.kv";
   std::string transport_mode_text;
   std::string latency_dump_path;
+  std::string endpoint_ready_path;
+  std::string warmup_ready_path;
+  std::string measurement_start_path;
   int publishers = 1;
   int subscriber_index = 0;
   int duration_s = 3;
   int cooldown_wait_ms = 300;
+  int readiness_timeout_s = 30;
   int cpu_interference_percent = 0;
   size_t latency_sample_cap = 5000000;
+  uint64_t sequence_capacity = kDefaultSequenceCapacity;
   uint64_t start_ns = 0;
   int cpu = -1;
 };
@@ -197,6 +195,13 @@ bool ParseSubscriberOptions(int argc, char** argv, SubscriberOptions* options,
       GetArgOr(args, "--transport_mode", options->transport_mode_text);
   options->latency_dump_path =
       GetArgOr(args, "--latency_dump_path", options->result_path + ".lat");
+  options->endpoint_ready_path =
+      GetArgOr(args, "--endpoint_ready_path", options->endpoint_ready_path);
+  options->warmup_ready_path =
+      GetArgOr(args, "--warmup_ready_path", options->warmup_ready_path);
+  options->measurement_start_path =
+      GetArgOr(args, "--measurement_start_path",
+               options->measurement_start_path);
   options->publishers =
       std::max(1, ParseIntOr(GetArgOr(args, "--publishers", "1"), 1));
   options->subscriber_index =
@@ -205,10 +210,16 @@ bool ParseSubscriberOptions(int argc, char** argv, SubscriberOptions* options,
       std::max(1, ParseIntOr(GetArgOr(args, "--duration_s", "3"), 3));
   options->cooldown_wait_ms = std::max(
       0, ParseIntOr(GetArgOr(args, "--cooldown_wait_ms", "300"), 300));
+  options->readiness_timeout_s = std::max(
+      1, ParseIntOr(GetArgOr(args, "--readiness_timeout_s", "30"), 30));
   options->cpu_interference_percent = std::max(
       0, ParseIntOr(GetArgOr(args, "--cpu_interference_percent", "0"), 0));
   options->latency_sample_cap = static_cast<size_t>(std::max(
       1000, ParseIntOr(GetArgOr(args, "--latency_sample_cap", "5000000"), 5000000)));
+  options->sequence_capacity = std::max<uint64_t>(
+      1, ParseUInt64Or(GetArgOr(args, "--sequence_capacity",
+                               std::to_string(kDefaultSequenceCapacity)),
+                       kDefaultSequenceCapacity));
   options->start_ns = ParseUInt64Or(GetArgOr(args, "--start_ns", "0"), 0);
   options->cpu = ParseIntOr(GetArgOr(args, "--cpu", "-1"), -1);
 
@@ -269,60 +280,56 @@ bool RunBenchmarkSubscriber(const SubscriberOptions& options, std::string* error
 
   std::atomic<bool> active{true};
   std::atomic<uint64_t> received_messages{0};
+  std::atomic<uint64_t> raw_received_messages{0};
   std::atomic<uint64_t> received_bytes{0};
-  std::atomic<uint64_t> sample_count{0};
-  std::atomic<uint64_t> dropped_samples{0};
-  std::vector<uint64_t> latency_samples(options.latency_sample_cap, 0);
-  std::vector<SequenceTracker> trackers(static_cast<size_t>(options.publishers));
+  MeasurementWindowMetrics measured_metrics(
+      static_cast<size_t>(options.publishers), options.latency_sample_cap);
+  std::vector<PublisherSequenceTracker> trackers;
+  trackers.reserve(static_cast<size_t>(options.publishers));
+  for (int i = 0; i < options.publishers; ++i) {
+    trackers.emplace_back(options.sequence_capacity);
+  }
+  std::vector<bool> warmup_received(static_cast<size_t>(options.publishers),
+                                    false);
   std::mutex tracker_mutex;
 
   std::atomic<uint64_t> zero_copy_borrowed_messages{0};
   std::atomic<uint64_t> zero_copy_copy_count{0};
 
-  std::function<void(uint64_t, uint64_t, uint64_t)> update_tracker =
-      [&](uint64_t sent_ns, uint64_t seq, uint64_t publisher_id) {
+  std::function<bool(uint64_t, uint64_t, uint64_t, uint64_t)> update_tracker =
+      [&](uint64_t sent_ns, uint64_t seq, uint64_t publisher_id,
+          uint64_t payload_bytes) {
+        SequenceObservation observation;
+        {
+          std::lock_guard<std::mutex> lock(tracker_mutex);
+          if (!active.load(std::memory_order_acquire)) {
+            return false;
+          }
+          if (seq >= kBenchmarkWarmupSeqBase) {
+            if (publisher_id >= static_cast<uint64_t>(options.publishers)) {
+              return false;
+            }
+            warmup_received[static_cast<size_t>(publisher_id)] = true;
+            return false;
+          }
+          raw_received_messages.fetch_add(1, std::memory_order_relaxed);
+          if (publisher_id >= static_cast<uint64_t>(options.publishers)) {
+            return false;
+          }
+          observation =
+              trackers[static_cast<size_t>(publisher_id)].Observe(seq);
+          if (observation == SequenceObservation::kDuplicate ||
+              observation == SequenceObservation::kOutOfWindow) {
+            return false;
+          }
+          received_messages.fetch_add(1, std::memory_order_relaxed);
+          received_bytes.fetch_add(payload_bytes, std::memory_order_relaxed);
+        }
         const uint64_t now_ns = MonotonicRawNowNs();
         const uint64_t latency_ns = now_ns >= sent_ns ? now_ns - sent_ns : 0;
-        const uint64_t sample_idx =
-            sample_count.fetch_add(1, std::memory_order_relaxed);
-        if (sample_idx < latency_samples.size()) {
-          latency_samples[static_cast<size_t>(sample_idx)] = latency_ns;
-        } else {
-          dropped_samples.fetch_add(1, std::memory_order_relaxed);
-        }
-        received_messages.fetch_add(1, std::memory_order_relaxed);
-
-        if (publisher_id >= static_cast<uint64_t>(options.publishers)) {
-          return;
-        }
-        std::lock_guard<std::mutex> lock(tracker_mutex);
-        auto& tracker = trackers[static_cast<size_t>(publisher_id)];
-        if (!tracker.initialized) {
-          tracker.initialized = true;
-          if (seq > 0) {
-            tracker.internal_loss += seq;
-            tracker.max_consecutive_loss =
-                std::max(tracker.max_consecutive_loss, seq);
-          }
-          tracker.expected_seq = seq + 1;
-          tracker.received_unique += 1;
-          return;
-        }
-        if (seq == tracker.expected_seq) {
-          tracker.expected_seq += 1;
-          tracker.received_unique += 1;
-          return;
-        }
-        if (seq > tracker.expected_seq) {
-          const uint64_t gap = seq - tracker.expected_seq;
-          tracker.internal_loss += gap;
-          tracker.max_consecutive_loss =
-              std::max(tracker.max_consecutive_loss, gap);
-          tracker.expected_seq = seq + 1;
-          tracker.received_unique += 1;
-          return;
-        }
-        tracker.duplicate_or_reordered += 1;
+        (void)measured_metrics.Record(static_cast<size_t>(publisher_id),
+                                      payload_bytes, latency_ns);
+        return true;
       };
 
   std::shared_ptr<transport::Receiver<apollo::cyber::proto::Chatter>>
@@ -339,11 +346,11 @@ bool RunBenchmarkSubscriber(const SubscriberOptions& options, std::string* error
                                      msg == nullptr) {
                                    return;
                                  }
-                                 received_bytes.fetch_add(
-                                     static_cast<uint64_t>(msg->content().size()),
-                                     std::memory_order_relaxed);
-                                 update_tracker(msg->timestamp(), msg->seq(),
-                                                msg->lidar_timestamp());
+                                 (void)update_tracker(
+                                     msg->timestamp(), msg->seq(),
+                                     msg->lidar_timestamp(),
+                                     static_cast<uint64_t>(
+                                         msg->content().size()));
                                },
                                mode);
   } else {
@@ -358,21 +365,19 @@ bool RunBenchmarkSubscriber(const SubscriberOptions& options, std::string* error
                                return;
                              }
                              const auto view = msg->View();
-                             received_bytes.fetch_add(
-                                 static_cast<uint64_t>(view.payload_size),
-                                 std::memory_order_relaxed);
-                             update_tracker(view.header.timestamp_ns,
-                                            view.header.frame_id,
-                                            view.header.width);
-                             if (msg->is_borrowed()) {
+                             const bool unique = update_tracker(
+                                 view.header.timestamp_ns, view.header.frame_id,
+                                 view.header.width,
+                                 static_cast<uint64_t>(view.payload_size));
+                             if (unique && msg->is_borrowed()) {
                                zero_copy_borrowed_messages.fetch_add(
                                    1, std::memory_order_relaxed);
-                             } else {
+                             } else if (unique) {
                                zero_copy_copy_count.fetch_add(
                                    1, std::memory_order_relaxed);
                              }
                            },
-                           apollo::cyber::proto::OptionalMode::SHM);
+                           mode);
   }
   if (chatter_receiver == nullptr && pod_receiver == nullptr) {
     if (error != nullptr) {
@@ -381,18 +386,95 @@ bool RunBenchmarkSubscriber(const SubscriberOptions& options, std::string* error
     return false;
   }
 
-  const uint64_t start_ns =
-      options.start_ns == 0 ? MonotonicRawNowNs() + 200 * kOneMillisecondNs
-                            : options.start_ns;
+  if (!options.endpoint_ready_path.empty() &&
+      !WriteKvFile(options.endpoint_ready_path,
+                   {{"endpoint_ready", "1"},
+                    {"role", "subscriber"},
+                    {"index", std::to_string(options.subscriber_index)}})) {
+    if (error != nullptr) {
+      *error = "failed to write subscriber endpoint readiness";
+    }
+    return false;
+  }
+
+  auto all_warmup_received = [&]() {
+    std::lock_guard<std::mutex> lock(tracker_mutex);
+    return std::all_of(warmup_received.begin(), warmup_received.end(),
+                       [](bool received) { return received; });
+  };
+  bool warmup_confirmed = all_warmup_received();
+  if (!options.measurement_start_path.empty()) {
+    const uint64_t readiness_deadline =
+        MonotonicRawNowNs() +
+        static_cast<uint64_t>(options.readiness_timeout_s) * kOneSecondNs;
+    while (!(warmup_confirmed = all_warmup_received())) {
+      if (MonotonicRawNowNs() >= readiness_deadline) {
+        if (error != nullptr) {
+          std::ostringstream diagnostic;
+          diagnostic << "subscriber warmup timeout: subscriber="
+                     << options.subscriber_index << " missing_publishers=";
+          std::lock_guard<std::mutex> lock(tracker_mutex);
+          bool first = true;
+          for (int i = 0; i < options.publishers; ++i) {
+            if (!warmup_received[static_cast<size_t>(i)]) {
+              diagnostic << (first ? "" : ",") << i;
+              first = false;
+            }
+          }
+          *error = diagnostic.str();
+        }
+        return false;
+      }
+      SleepNs(10 * kOneMillisecondNs);
+    }
+    if (!options.warmup_ready_path.empty() &&
+        !WriteKvFile(options.warmup_ready_path,
+                     {{"warmup_confirmed", "1"},
+                      {"subscriber_index",
+                       std::to_string(options.subscriber_index)}})) {
+      if (error != nullptr) {
+        *error = "failed to write subscriber warmup readiness";
+      }
+      return false;
+    }
+  }
+
+  uint64_t start_ns = options.start_ns;
+  if (!options.measurement_start_path.empty()) {
+    const uint64_t start_deadline =
+        MonotonicRawNowNs() +
+        static_cast<uint64_t>(options.readiness_timeout_s) * kOneSecondNs;
+    while (!ReadMeasurementStart(options.measurement_start_path, &start_ns)) {
+      if (MonotonicRawNowNs() >= start_deadline) {
+        if (error != nullptr) {
+          *error = "subscriber timed out waiting for common measurement start";
+        }
+        return false;
+      }
+      SleepNs(10 * kOneMillisecondNs);
+    }
+  } else if (start_ns == 0) {
+    start_ns = MonotonicRawNowNs() + 200 * kOneMillisecondNs;
+  }
+  if (start_ns <= MonotonicRawNowNs()) {
+    if (error != nullptr) {
+      *error = "subscriber received a non-future measurement start";
+    }
+    return false;
+  }
   const uint64_t end_ns =
       start_ns + static_cast<uint64_t>(options.duration_s) * kOneSecondNs;
   SleepUntilNs(start_ns);
+  const ResourceSnapshot begin = CaptureResourceSnapshot();
+  measured_metrics.Start();
   CpuInterferenceController interference;
   StartCpuInterference(&interference, options.cpu_interference_percent,
                        options.cpu);
-  const ResourceSnapshot begin = CaptureResourceSnapshot();
   active.store(true, std::memory_order_release);
   SleepUntilNs(end_ns);
+  const MeasurementWindowSnapshot measured_snapshot =
+      measured_metrics.StopAndSnapshot();
+  const ResourceSnapshot measurement_end = CaptureResourceSnapshot();
   StopCpuInterference(&interference);
 
   SleepNs(static_cast<uint64_t>(options.cooldown_wait_ms) * kOneMillisecondNs);
@@ -405,7 +487,7 @@ bool RunBenchmarkSubscriber(const SubscriberOptions& options, std::string* error
     }
   }
   active.store(false, std::memory_order_release);
-  const ResourceSnapshot end = CaptureResourceSnapshot();
+  const ResourceSnapshot cooldown_end = CaptureResourceSnapshot();
   if (chatter_receiver != nullptr) {
     chatter_receiver->Disable();
   }
@@ -413,10 +495,9 @@ bool RunBenchmarkSubscriber(const SubscriberOptions& options, std::string* error
     pod_receiver->Disable();
   }
 
-  const uint64_t sampled = sample_count.load(std::memory_order_relaxed);
-  const uint64_t kept =
-      std::min<uint64_t>(sampled, static_cast<uint64_t>(latency_samples.size()));
-  if (!WriteLatencyDump(options.latency_dump_path, latency_samples, kept)) {
+  if (!WriteLatencyDump(options.latency_dump_path,
+                        measured_snapshot.latency_samples,
+                        measured_snapshot.latency_samples.size())) {
     if (error != nullptr) {
       *error = "failed to write latency dump";
     }
@@ -429,12 +510,8 @@ bool RunBenchmarkSubscriber(const SubscriberOptions& options, std::string* error
   uint64_t latency_p99 = 0;
   uint64_t latency_p999 = 0;
   uint64_t latency_max = 0;
-  if (kept > 0) {
-    std::vector<uint64_t> sorted;
-    sorted.reserve(static_cast<size_t>(kept));
-    for (uint64_t i = 0; i < kept; ++i) {
-      sorted.push_back(latency_samples[static_cast<size_t>(i)]);
-    }
+  if (!measured_snapshot.latency_samples.empty()) {
+    std::vector<uint64_t> sorted = measured_snapshot.latency_samples;
     std::sort(sorted.begin(), sorted.end());
     latency_min = sorted.front();
     latency_max = sorted.back();
@@ -445,18 +522,56 @@ bool RunBenchmarkSubscriber(const SubscriberOptions& options, std::string* error
   }
 
   const double cpu_delta =
-      std::max(0.0, (end.cpu_user_s + end.cpu_sys_s) -
+      std::max(0.0, (measurement_end.cpu_user_s + measurement_end.cpu_sys_s) -
                         (begin.cpu_user_s + begin.cpu_sys_s));
+  const uint64_t final_received =
+      received_messages.load(std::memory_order_relaxed);
+  const uint64_t final_received_bytes =
+      received_bytes.load(std::memory_order_relaxed);
+  const uint64_t cooldown_received_messages =
+      final_received >= measured_snapshot.received_messages
+          ? final_received - measured_snapshot.received_messages
+          : 0;
+  const uint64_t cooldown_received_bytes =
+      final_received_bytes >= measured_snapshot.received_bytes
+          ? final_received_bytes - measured_snapshot.received_bytes
+          : 0;
   std::vector<std::pair<std::string, std::string>> kvs = {
       {"status", "ok"},
       {"worker_mode", "benchmark"},
+      {"endpoint_ready", "1"},
+      {"warmup_confirmed", warmup_confirmed ? "1" : "0"},
+      {"measured_delivery_confirmed",
+       measured_snapshot.DeliveryConfirmed() ? "1" : "0"},
+      {"measurement_start_ns", std::to_string(start_ns)},
+      {"measurement_duration_ns",
+       std::to_string(measurement_end.wall_ns - begin.wall_ns)},
       {"received_messages",
-       std::to_string(received_messages.load(std::memory_order_relaxed))},
-      {"received_bytes",
-       std::to_string(received_bytes.load(std::memory_order_relaxed))},
-      {"sample_count", std::to_string(kept)},
-      {"dropped_samples",
-       std::to_string(dropped_samples.load(std::memory_order_relaxed))},
+       std::to_string(measured_snapshot.received_messages)},
+      {"measured_received_messages",
+       std::to_string(measured_snapshot.received_messages)},
+      {"final_received_messages", std::to_string(final_received)},
+      {"raw_received_messages",
+       std::to_string(raw_received_messages.load(std::memory_order_relaxed))},
+      {"received_bytes", std::to_string(measured_snapshot.received_bytes)},
+      {"measured_received_bytes",
+       std::to_string(measured_snapshot.received_bytes)},
+      {"final_received_bytes", std::to_string(final_received_bytes)},
+      {"received_at_measurement_end",
+       std::to_string(measured_snapshot.received_messages)},
+      {"received_bytes_at_measurement_end",
+       std::to_string(measured_snapshot.received_bytes)},
+      {"cooldown_received_messages",
+       std::to_string(cooldown_received_messages)},
+      {"cooldown_received_bytes",
+       std::to_string(cooldown_received_bytes)},
+      {"sample_count",
+       std::to_string(measured_snapshot.latency_samples.size())},
+      {"measured_sample_count",
+       std::to_string(measured_snapshot.latency_samples.size())},
+      {"dropped_samples", std::to_string(measured_snapshot.dropped_samples)},
+      {"measured_dropped_samples",
+       std::to_string(measured_snapshot.dropped_samples)},
       {"latency_min_ns", std::to_string(latency_min)},
       {"latency_p50_ns", std::to_string(latency_p50)},
       {"latency_p95_ns", std::to_string(latency_p95)},
@@ -466,11 +581,14 @@ bool RunBenchmarkSubscriber(const SubscriberOptions& options, std::string* error
       {"latency_dump_path", options.latency_dump_path},
       {"cpu_delta_s", std::to_string(cpu_delta)},
       {"rss_kb_begin", std::to_string(begin.rss_kb)},
-      {"rss_kb_end", std::to_string(end.rss_kb)},
+      {"rss_kb_end", std::to_string(measurement_end.rss_kb)},
+      {"rss_kb_cooldown_end", std::to_string(cooldown_end.rss_kb)},
       {"voluntary_ctx_switches",
-       std::to_string(end.voluntary_ctx_switches - begin.voluntary_ctx_switches)},
+       std::to_string(measurement_end.voluntary_ctx_switches -
+                      begin.voluntary_ctx_switches)},
       {"involuntary_ctx_switches",
-       std::to_string(end.involuntary_ctx_switches - begin.involuntary_ctx_switches)},
+       std::to_string(measurement_end.involuntary_ctx_switches -
+                      begin.involuntary_ctx_switches)},
       {"publishers", std::to_string(options.publishers)},
       {"message_type", ToString(options.message_type)},
       {"transport_mode", ToString(mode)},
@@ -483,18 +601,47 @@ bool RunBenchmarkSubscriber(const SubscriberOptions& options, std::string* error
     std::lock_guard<std::mutex> lock(tracker_mutex);
     for (int i = 0; i < options.publishers; ++i) {
       const auto& tracker = trackers[static_cast<size_t>(i)];
+      kvs.emplace_back("tracker_" + std::to_string(i) + "_warmup_received",
+                       warmup_received[static_cast<size_t>(i)] ? "1" : "0");
       kvs.emplace_back("tracker_" + std::to_string(i) + "_initialized",
-                       tracker.initialized ? "1" : "0");
+                       tracker.initialized() ? "1" : "0");
       kvs.emplace_back("tracker_" + std::to_string(i) + "_expected_seq",
-                       std::to_string(tracker.expected_seq));
+                       std::to_string(tracker.next_sequence()));
+      kvs.emplace_back("tracker_" + std::to_string(i) + "_last_sequence",
+                       std::to_string(tracker.last_sequence()));
       kvs.emplace_back("tracker_" + std::to_string(i) + "_received_unique",
-                       std::to_string(tracker.received_unique));
+                       std::to_string(tracker.received_unique()));
+      kvs.emplace_back(
+          "tracker_" + std::to_string(i) + "_final_received_unique",
+          std::to_string(tracker.received_unique()));
+      kvs.emplace_back(
+          "tracker_" + std::to_string(i) + "_measured_received_unique",
+          std::to_string(
+              measured_snapshot.received_per_endpoint[static_cast<size_t>(i)]));
+      kvs.emplace_back("tracker_" + std::to_string(i) + "_gaps_observed",
+                       std::to_string(tracker.gaps_observed()));
       kvs.emplace_back("tracker_" + std::to_string(i) + "_internal_loss",
-                       std::to_string(tracker.internal_loss));
+                       std::to_string(
+                           tracker.LossForSent(tracker.next_sequence())));
       kvs.emplace_back("tracker_" + std::to_string(i) + "_max_consecutive_loss",
-                       std::to_string(tracker.max_consecutive_loss));
+                       std::to_string(
+                           tracker.MaxConsecutiveLossForSent(
+                               tracker.next_sequence())));
+      kvs.emplace_back("tracker_" + std::to_string(i) + "_duplicates",
+                       std::to_string(tracker.duplicates()));
+      kvs.emplace_back("tracker_" + std::to_string(i) + "_final_duplicates",
+                       std::to_string(tracker.duplicates()));
+      kvs.emplace_back("tracker_" + std::to_string(i) + "_reordered",
+                       std::to_string(tracker.reordered()));
+      kvs.emplace_back("tracker_" + std::to_string(i) + "_final_reordered",
+                       std::to_string(tracker.reordered()));
+      kvs.emplace_back("tracker_" + std::to_string(i) + "_out_of_window",
+                       std::to_string(tracker.out_of_window()));
+      kvs.emplace_back("tracker_" + std::to_string(i) + "_sequence_capacity",
+                       std::to_string(tracker.sequence_capacity()));
       kvs.emplace_back("tracker_" + std::to_string(i) + "_duplicate_or_reordered",
-                       std::to_string(tracker.duplicate_or_reordered));
+                       std::to_string(tracker.duplicates() +
+                                      tracker.reordered()));
     }
   }
   const bool ok = WriteKvFile(options.result_path, kvs);
@@ -652,5 +799,12 @@ int main(int argc, char** argv) {
     apollo::cyber::examples::perf_test::WriteErrorResult(options, run_error);
   }
   apollo::cyber::Clear();
-  return ok ? 0 : 1;
+  const int exit_code = ok ? 0 : 1;
+  if (!apollo::cyber::examples::perf_test::AppendKvFile(
+          options.result_path,
+          {{"shutdown_complete", "1"},
+           {"planned_exit_code", std::to_string(exit_code)}})) {
+    return 1;
+  }
+  return exit_code;
 }

@@ -26,9 +26,13 @@ bash scripts/release/check_bzlmod_lockfile.sh --check
 
 bazel build --config=ci --distdir="$DISTDIR" //cyber //:wheelos_core
 
+TEST_ENV_ARGS=()
+if [[ -v CYBER_RECORD_PLAY_FIXTURE ]]; then
+  TEST_ENV_ARGS+=("--test_env=CYBER_RECORD_PLAY_FIXTURE=$CYBER_RECORD_PLAY_FIXTURE")
+fi
 bazel test --config=ci --distdir="$DISTDIR" \
-  //cyber/... \
-  //tests/integration_test:examples_regression_tests
+  "${TEST_ENV_ARGS[@]}" \
+  //tests/integration_test:core_tool_matrix_tests
 
 if [ "$RUN_PYCYBER" = true ]; then
   bash scripts/release/build_and_package_pycyber.sh

@@ -237,13 +237,15 @@ void ReceiverManager<MessageT>::RemoveReceiver(
     if (iter == receiver_map_.end()) {
       return;
     }
-    if (iter->second.use_count() > 2) {
+    if (iter->second.use_count() > 1) {
       return;
     }
     receiver = iter->second;
     receiver_map_.erase(iter);
   }
-  receiver->Disable();
+  if (receiver != nullptr) {
+    receiver->Disable();
+  }
 }
 
 template <typename MessageT>

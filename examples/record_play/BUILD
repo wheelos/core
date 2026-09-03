@@ -92,6 +92,7 @@ cc_test(
     deps = [
         ":record_play",
         "//cyber:init",
+        "//cyber/record:record_writer",
         "@com_google_googletest//:gtest",
     ],
 )
