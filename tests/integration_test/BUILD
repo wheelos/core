@@ -139,6 +139,56 @@ cc_test(
     ],
 )
 
+cc_test(
+    name = "gpu_writer_reader_ipc_test",
+    size = "medium",
+    srcs = ["gpu_writer_reader_ipc_test.cc"],
+    linkopts = ["-lcudart"],
+    tags = ["local"],
+    deps = [
+        "//cyber:cyber_core",
+        "//cyber/transport/nvsci:gpu_reader",
+        "//cyber/transport/nvsci:gpu_writer",
+        "@com_google_googletest//:gtest",
+    ],
+)
+
+cc_test(
+    name = "gpu_channel_ipc_session_test",
+    size = "small",
+    srcs = ["gpu_channel_ipc_session_test.cc"],
+    linkopts = ["-lcudart"],
+    deps = [
+        "//cyber/transport/nvsci:gpu_channel_manager",
+        "//cyber/transport/nvsci:gpu_control_protocol",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "gpu_zero_copy_integration_test",
+    size = "small",
+    srcs = ["gpu_zero_copy_integration_test.cc"],
+    linkopts = ["-lcudart"],
+    deps = [
+        "//cyber/transport/nvsci:gpu_channel_session",
+        "//cyber/transport/nvsci:gpu_loaned_message",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "nvsci_integration_test",
+    size = "small",
+    srcs = ["nvsci_integration_test.cc"],
+    linkopts = ["-lcudart"],
+    deps = [
+        "//cyber/transport/nvsci:gpu_channel_session",
+        "//cyber/transport/nvsci:gpu_loaned_message",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
 test_suite(
     name = "examples_regression_tests",
     tests = [

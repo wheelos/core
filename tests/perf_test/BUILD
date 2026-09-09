@@ -131,6 +131,33 @@ cc_binary(
     ],
 )
 
+cc_test(
+    name = "gpu_zero_copy_perf_test",
+    size = "small",
+    srcs = ["gpu_zero_copy_perf_test.cc"],
+    linkopts = ["-lcudart"],
+    deps = [
+        "//cyber:cyber_core",
+        "//cyber/transport/nvsci:gpu_channel_session",
+        "//cyber/transport/nvsci:gpu_loaned_message",
+        "//cyber/transport/nvsci:gpu_reader",
+        "//cyber/transport/nvsci:gpu_writer",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "cuda_ipc_process_test",
+    size = "medium",
+    srcs = ["cuda_ipc_process_test.cc"],
+    linkopts = ["-lcudart"],
+    tags = ["local"],
+    deps = [
+        "//cyber/transport/nvsci:nvsci_buf_pool",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
 py_test(
     name = "iceoryx_roudi_lifecycle_test",
     size = "large",

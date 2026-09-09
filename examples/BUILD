@@ -66,3 +66,30 @@ cc_binary(
         "//cyber/proto:record_cc_proto",
     ],
 )
+
+cc_library(
+    name = "gpu_image_meta",
+    hdrs = ["gpu_image_meta.h"],
+)
+
+cc_binary(
+    name = "gpu_talker",
+    srcs = ["gpu_talker.cc"],
+    linkopts = ["-lcudart"],
+    deps = [
+        ":gpu_image_meta",
+        "//cyber",
+        "//cyber/transport/nvsci:gpu_writer",
+    ],
+)
+
+cc_binary(
+    name = "gpu_listener",
+    srcs = ["gpu_listener.cc"],
+    linkopts = ["-lcudart"],
+    deps = [
+        ":gpu_image_meta",
+        "//cyber",
+        "//cyber/transport/nvsci:gpu_reader",
+    ],
+)
