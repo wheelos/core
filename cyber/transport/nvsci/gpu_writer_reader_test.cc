@@ -1,18 +1,16 @@
-/******************************************************************************
- * Copyright 2026 WheelOS. All Rights Reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *****************************************************************************/
+// Copyright 2026 WheelOS. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include <chrono>
 #include <cstdint>
@@ -114,6 +112,25 @@ TEST_F(GpuWriterReaderTest, EndToEndPublishAndReceive) {
   // Wait for Cyber RT intra discovery to establish control connections
   std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
+  auto registration_writer = reader_node_->CreateWriter<message::RawMessage>(
+      channel + "/_gpu_registration");
+  ASSERT_NE(registration_writer, nullptr);
+  for (int i = 0; i < 50 && !registration_writer->HasReader(); ++i) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  ASSERT_TRUE(registration_writer->HasReader());
+  auto session = GpuChannelManager::Instance()->GetSession(channel);
+  ASSERT_NE(session, nullptr);
+  ASSERT_EQ(session->GetConsumerCount(), 1U);
+  GpuConsumerUnregister stale_unregister;
+  stale_unregister.channel_id = session->channel_id();
+  stale_unregister.session_id = session->session_id() + 1;
+  stale_unregister.consumer_id = r_opts.consumer_id;
+  ASSERT_TRUE(registration_writer->Write(std::make_shared<message::RawMessage>(
+      EncodeGpuConsumerUnregister(stale_unregister))));
+  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  EXPECT_EQ(session->GetConsumerCount(), 1U);
+
   // 1. Loan a slot
   auto loan = writer->Loan();
   ASSERT_TRUE(loan.has_value());
@@ -140,9 +157,8 @@ TEST_F(GpuWriterReaderTest, EndToEndPublishAndReceive) {
   EXPECT_TRUE(received.load());
   EXPECT_EQ(received_frame.load(), 99);
 
-  // 4. Check that slot was returned to FREE after callback finished and ACK was processed
-  auto session = GpuChannelManager::Instance()->GetSession(channel);
-  ASSERT_NE(session, nullptr);
+  // 4. Check that slot was returned to FREE after callback finished and ACK was
+  // processed
   EXPECT_EQ(session->pool()->GetSlotState(0), SlotState::FREE);
 }
 
@@ -169,6 +185,104 @@ TEST_F(GpuWriterReaderTest, BackpressureDropPolicy) {
 
   auto loan3 = writer->Loan();
   EXPECT_TRUE(loan3.has_value());
+  EXPECT_FALSE(writer->Publish(std::move(*loan3)));
+}
+
+TEST_F(GpuWriterReaderTest, OneWriterFansOutToMultipleReadersOnSameNode) {
+  const std::string channel = "test/gpu_multi_reader_channel";
+  cudaStream_t second_reader_stream = nullptr;
+  if (reader_stream_) {
+    ASSERT_EQ(
+        cudaStreamCreateWithFlags(&second_reader_stream, cudaStreamNonBlocking),
+        cudaSuccess);
+  }
+
+  GpuWriterOptions writer_options;
+  writer_options.slot_count = 2;
+  writer_options.slot_size = 1024;
+  writer_options.stream = writer_stream_;
+  auto writer =
+      CreateGpuWriter<TestFrameMeta>(writer_node_, channel, writer_options);
+  ASSERT_NE(writer, nullptr);
+
+  std::atomic<uint32_t> first_count{0};
+  std::atomic<uint32_t> second_count{0};
+  std::atomic<bool> release_callbacks{false};
+  GpuReaderOptions first_options;
+  first_options.stream = reader_stream_;
+  GpuReaderOptions second_options;
+  second_options.stream = second_reader_stream;
+
+  auto first_reader = CreateGpuReader<TestFrameMeta>(
+      reader_node_, channel, first_options, [&](GpuMsgView<TestFrameMeta>&) {
+        first_count.fetch_add(1);
+        while (!release_callbacks.load()) {
+          std::this_thread::yield();
+        }
+      });
+  auto second_reader = CreateGpuReader<TestFrameMeta>(
+      reader_node_, channel, second_options, [&](GpuMsgView<TestFrameMeta>&) {
+        second_count.fetch_add(1);
+        while (!release_callbacks.load()) {
+          std::this_thread::yield();
+        }
+      });
+  ASSERT_NE(first_reader, nullptr);
+  ASSERT_NE(second_reader, nullptr);
+  EXPECT_NE(first_reader->consumer_id(), second_reader->consumer_id());
+
+  auto session = GpuChannelManager::Instance()->GetSession(channel);
+  ASSERT_NE(session, nullptr);
+  EXPECT_EQ(session->GetConsumerCount(), 2U);
+
+  auto first_loan = writer->Loan();
+  ASSERT_TRUE(first_loan.has_value());
+  first_loan->metadata().frame_id = 1;
+  ASSERT_TRUE(writer->Publish(std::move(*first_loan)));
+  for (int i = 0;
+       i < 100 && (first_count.load() != 1 || second_count.load() != 1); ++i) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  EXPECT_EQ(first_count.load(), 1U);
+  EXPECT_EQ(second_count.load(), 1U);
+  release_callbacks.store(true);
+
+  first_reader.reset();
+  EXPECT_EQ(session->GetConsumerCount(), 1U);
+  auto second_loan = writer->Loan();
+  ASSERT_TRUE(second_loan.has_value());
+  second_loan->metadata().frame_id = 2;
+  ASSERT_TRUE(writer->Publish(std::move(*second_loan)));
+  for (int i = 0; i < 100 && second_count.load() != 2; ++i) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  EXPECT_EQ(first_count.load(), 1U);
+  EXPECT_EQ(second_count.load(), 2U);
+
+  second_reader.reset();
+  if (second_reader_stream) {
+    cudaStreamDestroy(second_reader_stream);
+  }
+}
+
+TEST_F(GpuWriterReaderTest, RejectsSecondWriterForSameChannel) {
+  const std::string channel = "test/gpu_single_writer_channel";
+  GpuWriterOptions options;
+  options.slot_count = 2;
+  options.slot_size = 1024;
+  options.stream = writer_stream_;
+
+  auto first = CreateGpuWriter<TestFrameMeta>(writer_node_, channel, options);
+  ASSERT_NE(first, nullptr);
+  const auto original_session =
+      GpuChannelManager::Instance()->GetSession(channel);
+  ASSERT_NE(original_session, nullptr);
+
+  auto second = CreateGpuWriter<TestFrameMeta>(writer_node_, channel, options);
+  EXPECT_EQ(second, nullptr);
+  EXPECT_EQ(GpuChannelManager::Instance()->GetSession(channel),
+            original_session);
+  EXPECT_TRUE(first->is_ready());
 }
 
 }  // namespace transport

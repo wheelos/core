@@ -99,6 +99,24 @@ TEST(GpuChannelIpcSessionTest, FullSessionDescriptorIsVersionedAndComplete) {
   manager->Clear();
 }
 
+TEST(GpuChannelIpcSessionTest, WriterOwnershipIsExclusiveAndIdentityScoped) {
+  auto* manager = GpuChannelManager::Instance();
+  manager->Clear();
+  NvSciBufPoolConfig config;
+  config.slot_count = 2;
+  config.slot_size = 4096;
+  auto session = manager->GetOrCreateSession("single-writer", config);
+  ASSERT_NE(session, nullptr);
+
+  EXPECT_TRUE(manager->ClaimWriterSession("single-writer", session));
+  EXPECT_FALSE(manager->ClaimWriterSession("single-writer", session));
+  manager->ReleaseWriterSession("single-writer", session->session_id() + 1);
+  EXPECT_EQ(manager->GetSession("single-writer"), session);
+  manager->ReleaseWriterSession("single-writer", session->session_id());
+  EXPECT_EQ(manager->GetSession("single-writer"), nullptr);
+  manager->Clear();
+}
+
 }  // namespace
 }  // namespace transport
 }  // namespace cyber

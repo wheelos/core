@@ -105,6 +105,7 @@ int main(int argc, char* argv[]) {
     rate.Sleep();
   }
 
+  gpu_writer->Shutdown();
   cudaStreamDestroy(capture_stream);
   return 0;
 }

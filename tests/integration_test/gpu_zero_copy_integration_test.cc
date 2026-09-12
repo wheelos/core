@@ -63,14 +63,14 @@ TEST(GpuZeroCopyIntegrationTest, RealGpuPublishAndReceiveLoop) {
   auto pool = std::make_shared<NvSciBufPool>(config);
   ASSERT_TRUE(pool->Initialize());
 
-  // Verify memory allocated is genuine GPU Device Memory
+  // Verify memory allocated is genuine GPU Device Memory or Mapped Host Memory (Orin UMA)
   void* probe_ptr = pool->GetDevicePtr(0);
   ASSERT_NE(probe_ptr, nullptr);
   cudaPointerAttributes attrs{};
   err = cudaPointerGetAttributes(&attrs, probe_ptr);
   EXPECT_EQ(err, cudaSuccess);
 #if CUDART_VERSION >= 10000
-  EXPECT_EQ(attrs.type, cudaMemoryTypeDevice);
+  EXPECT_TRUE(attrs.type == cudaMemoryTypeDevice || attrs.type == cudaMemoryTypeHost);
 #endif
 
   // 3. Initialize sync engine & channel session
@@ -82,10 +82,23 @@ TEST(GpuZeroCopyIntegrationTest, RealGpuPublishAndReceiveLoop) {
   constexpr uint64_t kConsumerId = 5001;
   session->RegisterConsumer(kConsumerId);
 
+  for (uint32_t slot = 0; slot < kSlotCount; ++slot) {
+    const uint8_t expected = static_cast<uint8_t>(0xB0 + slot);
+    uint8_t observed = 0;
+    ASSERT_EQ(cudaMemsetAsync(pool->GetDevicePtr(slot), expected, 1024,
+                              producer_stream),
+              cudaSuccess);
+    ASSERT_EQ(cudaMemcpyAsync(&observed, pool->GetDevicePtr(slot), 1,
+                              cudaMemcpyDeviceToHost, producer_stream),
+              cudaSuccess);
+    ASSERT_EQ(cudaStreamSynchronize(producer_stream), cudaSuccess);
+    ASSERT_EQ(observed, expected) << "CUDA mapping failed for slot " << slot;
+  }
+
   // 4. Stream 10 frames end-to-end on GPU with hardware async synchronization
   constexpr uint32_t kFramesToTest = 10;
   for (uint32_t frame = 1; frame <= kFramesToTest; ++frame) {
-    int slot = pool->AcquireSlot();
+    int slot = session->AcquireSlot();
     ASSERT_GE(slot, 0) << "GPU Buffer pool starved at frame " << frame;
 
     void* dev_ptr = pool->GetDevicePtr(slot);

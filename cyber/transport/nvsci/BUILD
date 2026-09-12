@@ -3,13 +3,8 @@ load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 package(default_visibility = ["//visibility:public"])
 
 config_setting(
-    name = "orin_platform",
-    values = {"cpu": "aarch64"},
-)
-
-config_setting(
-    name = "x86_platform",
-    values = {"cpu": "k8"},
+    name = "use_nvsci_enabled",
+    values = {"define": "use_nvsci=true"},
 )
 
 cc_library(
@@ -30,8 +25,7 @@ cc_library(
         "orin_nvsci_wrapper.h",
     ],
     defines = select({
-        ":orin_platform": ["CYBER_USE_NVSCI=1"],
-        ":x86_platform": ["CYBER_USE_CUDA_IPC=1"],
+        ":use_nvsci_enabled": ["CYBER_USE_NVSCI=1"],
         "//conditions:default": ["CYBER_USE_CUDA_IPC=1"],
     }),
     deps = [
@@ -45,20 +39,18 @@ cc_library(
     srcs = ["nvsci_buf_pool.cc"],
     hdrs = ["nvsci_buf_pool.h"],
     defines = select({
-        ":orin_platform": ["CYBER_USE_NVSCI=1"],
-        ":x86_platform": ["CYBER_USE_CUDA_IPC=1"],
+        ":use_nvsci_enabled": ["CYBER_USE_NVSCI=1"],
         "//conditions:default": ["CYBER_USE_CUDA_IPC=1"],
     }),
     linkopts = select({
-        ":orin_platform": [
+        ":use_nvsci_enabled": [
             "-lnvscibuf",
             "-lnvscisync",
-            "-lcudart",
-        ],
-        ":x86_platform": [
+            "-lrt",
             "-lcudart",
         ],
         "//conditions:default": [
+            "-lrt",
             "-lcudart",
         ],
     }),
@@ -75,20 +67,18 @@ cc_library(
     srcs = ["nvsci_sync_engine.cc"],
     hdrs = ["nvsci_sync_engine.h"],
     defines = select({
-        ":orin_platform": ["CYBER_USE_NVSCI=1"],
-        ":x86_platform": ["CYBER_USE_CUDA_IPC=1"],
+        ":use_nvsci_enabled": ["CYBER_USE_NVSCI=1"],
         "//conditions:default": ["CYBER_USE_CUDA_IPC=1"],
     }),
     linkopts = select({
-        ":orin_platform": [
+        ":use_nvsci_enabled": [
             "-lnvscibuf",
             "-lnvscisync",
-            "-lcudart",
-        ],
-        ":x86_platform": [
+            "-lrt",
             "-lcudart",
         ],
         "//conditions:default": [
+            "-lrt",
             "-lcudart",
         ],
     }),
@@ -130,6 +120,20 @@ cc_library(
 )
 
 cc_library(
+    name = "gpu_control_endpoint",
+    hdrs = ["gpu_control_endpoint.h"],
+    deps = [
+        "//cyber/common:global_data",
+        "//cyber/common:util",
+        "//cyber/message:message_traits",
+        "//cyber/message:protobuf_factory",
+        "//cyber/message:raw_message",
+        "//cyber/node",
+        "//cyber/transport/common:identity",
+    ],
+)
+
+cc_library(
     name = "gpu_channel_manager",
     srcs = ["gpu_channel_manager.cc"],
     hdrs = ["gpu_channel_manager.h"],
@@ -147,6 +151,7 @@ cc_library(
     name = "gpu_writer",
     hdrs = ["gpu_writer.h"],
     deps = [
+        ":gpu_control_endpoint",
         ":gpu_channel_manager",
         ":gpu_channel_session",
         ":gpu_control_protocol",
@@ -161,6 +166,7 @@ cc_library(
     name = "gpu_reader",
     hdrs = ["gpu_reader.h"],
     deps = [
+        ":gpu_control_endpoint",
         ":gpu_channel_manager",
         ":gpu_channel_session",
         ":gpu_control_protocol",

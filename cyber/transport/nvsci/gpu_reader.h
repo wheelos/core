@@ -1,18 +1,16 @@
-/******************************************************************************
- * Copyright 2026 WheelOS. All Rights Reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *****************************************************************************/
+// Copyright 2026 WheelOS. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #ifndef CYBER_TRANSPORT_NVSCI_GPU_READER_H_
 #define CYBER_TRANSPORT_NVSCI_GPU_READER_H_
@@ -38,6 +36,7 @@
 #include "cyber/node/writer.h"
 #include "cyber/transport/nvsci/gpu_channel_manager.h"
 #include "cyber/transport/nvsci/gpu_channel_session.h"
+#include "cyber/transport/nvsci/gpu_control_endpoint.h"
 #include "cyber/transport/nvsci/gpu_control_protocol.h"
 #include "cyber/transport/nvsci/nvsci_types.h"
 
@@ -92,7 +91,11 @@ class GpuMsgView {
         prefence_(prefence),
         waited_(waited) {}
 
-  ~GpuMsgView() { Done(stream_); }
+  ~GpuMsgView() {
+    if (!completed_ && !Done(stream_)) {
+      AERROR << "Failed to complete GPU message for slot " << slot_id_;
+    }
+  }
 
   GpuMsgView(const GpuMsgView&) = delete;
   GpuMsgView& operator=(const GpuMsgView&) = delete;
@@ -150,7 +153,7 @@ class GpuMsgView {
     }
     if (consumer_stream != nullptr) {
       if (!session_->sync_engine()->InsertWaitFence(consumer_stream,
-                                                   prefence_)) {
+                                                    prefence_)) {
         return false;
       }
       waited_ = true;
@@ -167,18 +170,18 @@ class GpuMsgView {
    * Called automatically by destructor, but can also be invoked explicitly
    * with a specific stream.
    */
-  void Done(void* finish_stream = nullptr) {
+  bool Done(void* finish_stream = nullptr) {
     if (completed_) {
-      return;
+      return true;
     }
-    completed_ = true;
     void* active_stream = finish_stream ? finish_stream : stream_;
+    if (active_stream == nullptr || !session_ || !session_->sync_engine()) {
+      return false;
+    }
     NvSciSyncFence postfence{};
-    if (session_ && session_->sync_engine()) {
-      postfence = session_->sync_engine()->GenerateSignalFence(active_stream);
-      if (active_stream == nullptr && postfence.IsValid()) {
-        session_->sync_engine()->MarkFenceCompleted(postfence.fence_id);
-      }
+    postfence = session_->sync_engine()->GenerateSignalFence(active_stream);
+    if (!postfence.IsValid()) {
+      return false;
     }
 
     GpuCompletionPacket ack;
@@ -188,13 +191,16 @@ class GpuMsgView {
     ack.consumer_id = consumer_id_;
     ack.postfence = postfence;
 
-    if (session_) {
-      session_->OnCompletion(ack);
-    }
+    const bool completed_locally = session_->OnCompletion(ack);
+    bool ack_sent = false;
     if (ack_writer_) {
       std::string ack_wire = EncodeGpuAckMessage(ack);
-      ack_writer_->Write(std::make_shared<message::RawMessage>(ack_wire));
+      ack_sent = !ack_wire.empty() &&
+                 ack_writer_->Write(std::make_shared<message::RawMessage>(
+                     std::move(ack_wire)));
     }
+    completed_ = completed_locally || ack_sent;
+    return completed_;
   }
 
  private:
@@ -219,7 +225,7 @@ class GpuMsgView {
 template <typename MetaT>
 class GpuReader {
  public:
-  using CallbackFunc = std::function<void(const GpuMsgView<MetaT>&)>;
+  using CallbackFunc = std::function<void(GpuMsgView<MetaT>&)>;
 
   GpuReader(const std::string& channel_name, const GpuReaderOptions& options,
             Node* node, CallbackFunc callback)
@@ -228,8 +234,7 @@ class GpuReader {
         node_(node),
         callback_(std::move(callback)) {
     if (options_.consumer_id == 0) {
-      static std::atomic<uint64_t> next_cid{1000};
-      options_.consumer_id = next_cid.fetch_add(1, std::memory_order_relaxed);
+      options_.consumer_id = NewGpuEndpointId();
     }
     if (options_.sync_engine_id == 0) {
       static std::atomic<uint64_t> next_engine{1};
@@ -254,30 +259,33 @@ class GpuReader {
       AERROR << "GpuReader requires a valid Cyber Node";
       return false;
     }
+    if (options_.stream == nullptr) {
+      AERROR << "GpuReader requires an explicit CUDA stream";
+      return false;
+    }
 
     NvSciBufPoolConfig config;
     config.slot_count = options_.slot_count;
     config.slot_size = options_.slot_size;
     config.alignment = options_.alignment;
     if (options_.imported_session_descriptor.session_id != 0) {
-      const auto status = GpuChannelManager::Instance()->ImportSession(
+      const auto status = GpuChannelManager::Instance()->CreateImportedSession(
           channel_name_, options_.imported_session_descriptor,
-          options_.sync_engine_id);
+          options_.sync_engine_id, &session_);
       if (status != GpuChannelIpcStatus::kSuccess) {
         return false;
       }
-      session_ = GpuChannelManager::Instance()->GetSession(channel_name_);
       remote_session_ = true;
     } else if (!options_.imported_session_descriptors.empty()) {
-      const auto status = GpuChannelManager::Instance()->ImportSession(
+      const auto status = GpuChannelManager::Instance()->CreateImportedSession(
           channel_name_, config, options_.imported_session_descriptors,
-          options_.sync_engine_id, options_.imported_producer_sync_desc);
+          options_.sync_engine_id, options_.imported_producer_sync_desc,
+          &session_);
       if (status != GpuChannelIpcStatus::kSuccess) {
         AERROR << "Failed to import GPU session for " << channel_name_
                << " (status " << static_cast<int>(status) << ")";
         return false;
       }
-      session_ = GpuChannelManager::Instance()->GetSession(channel_name_);
       remote_session_ = true;
     } else {
       session_ = GpuChannelManager::Instance()->GetSession(channel_name_);
@@ -325,8 +333,8 @@ class GpuReader {
     data_reader_cfg.pending_queue_size =
         std::max(64U, options_.slot_count * 16U);
     data_reader_cfg.qos_profile.set_depth(data_reader_cfg.pending_queue_size);
-    data_reader_ = node_->CreateReader<message::RawMessage>(
-        data_reader_cfg,
+    data_reader_ = GpuControlDispatcher::Instance()->Subscribe(
+        node_, data_reader_cfg, options_.consumer_id,
         [this](const std::shared_ptr<message::RawMessage>& msg) {
           OnDataReceived(msg);
         });
@@ -355,8 +363,21 @@ class GpuReader {
       std::lock_guard<std::mutex> lock(bootstrap_mutex_);
       session = std::move(session_);
     }
-    if (session && !remote_session_) {
-      session->UnregisterConsumer(options_.consumer_id);
+    if (session) {
+      if (!remote_session_) {
+        session->UnregisterConsumer(options_.consumer_id);
+      } else if (registration_writer_) {
+        // Send explicit unregistration message to writer
+        GpuConsumerUnregister unreg;
+        unreg.channel_id = session->channel_id();
+        unreg.session_id = session->session_id();
+        unreg.consumer_id = options_.consumer_id;
+        std::string unreg_wire = EncodeGpuConsumerUnregister(unreg);
+        if (!unreg_wire.empty()) {
+          registration_writer_->Write(
+              std::make_shared<message::RawMessage>(unreg_wire));
+        }
+      }
     }
     data_reader_ = nullptr;
     ack_writer_ = nullptr;
@@ -364,9 +385,6 @@ class GpuReader {
     session_reader_ = nullptr;
     registration_writer_ = nullptr;
     registration_ack_reader_ = nullptr;
-    if (remote_session_) {
-      GpuChannelManager::Instance()->RemoveSession(channel_name_);
-    }
   }
 
   bool is_ready() const {
@@ -387,15 +405,15 @@ class GpuReader {
   bool BootstrapRemoteSession() {
     session_request_writer_ = node_->CreateWriter<message::RawMessage>(
         channel_name_ + "/_gpu_session_request");
-    session_reader_ = node_->CreateReader<message::RawMessage>(
-        channel_name_ + "/_gpu_session",
+    session_reader_ = GpuControlDispatcher::Instance()->Subscribe(
+        node_, channel_name_ + "/_gpu_session", options_.consumer_id,
         [this](const std::shared_ptr<message::RawMessage>& msg) {
           OnSessionDescriptor(msg);
         });
     registration_writer_ = node_->CreateWriter<message::RawMessage>(
         channel_name_ + "/_gpu_registration");
-    registration_ack_reader_ = node_->CreateReader<message::RawMessage>(
-        channel_name_ + "/_gpu_registration_ack",
+    registration_ack_reader_ = GpuControlDispatcher::Instance()->Subscribe(
+        node_, channel_name_ + "/_gpu_registration_ack", options_.consumer_id,
         [this](const std::shared_ptr<message::RawMessage>& msg) {
           OnRegistrationAck(msg);
         });
@@ -440,18 +458,18 @@ class GpuReader {
     }
     {
       std::lock_guard<std::mutex> lock(bootstrap_mutex_);
-      if (session_ != nullptr && session_->session_id() == descriptor.session_id &&
+      if (session_ != nullptr &&
+          session_->session_id() == descriptor.session_id &&
           registration_confirmed_) {
         return;
       }
     }
-    const auto status = GpuChannelManager::Instance()->ImportSession(
-        channel_name_, descriptor, options_.sync_engine_id, true);
+    GpuChannelSessionPtr imported_session;
+    const auto status = GpuChannelManager::Instance()->CreateImportedSession(
+        channel_name_, descriptor, options_.sync_engine_id, &imported_session);
     if (status != GpuChannelIpcStatus::kSuccess) {
       return;
     }
-    GpuChannelSessionPtr imported_session =
-        GpuChannelManager::Instance()->GetSession(channel_name_);
     std::string registration_wire;
     if (imported_session && imported_session->sync_engine()) {
       std::vector<uint8_t> sync_desc;
@@ -598,8 +616,7 @@ class GpuReader {
 
     // 1. Insert hardware wait fence asynchronously on consumer CUDA stream
     bool waited = false;
-    if (options_.stream != nullptr && session->sync_engine() &&
-        packet.prefence.IsValid()) {
+    if (session->sync_engine() && packet.prefence.IsValid()) {
       if (!session->sync_engine()->InsertWaitFence(options_.stream,
                                                    packet.prefence)) {
         AERROR << "Failed to insert GPU prefence on " << channel_name_;
@@ -633,14 +650,13 @@ class GpuReader {
   Node* node_ = nullptr;
   CallbackFunc callback_ = nullptr;
   GpuChannelSessionPtr session_ = nullptr;
-  std::shared_ptr<Reader<message::RawMessage>> data_reader_ = nullptr;
+  std::shared_ptr<GpuControlSubscription> data_reader_ = nullptr;
   std::shared_ptr<Writer<message::RawMessage>> ack_writer_ = nullptr;
   std::shared_ptr<Writer<message::RawMessage>> session_request_writer_ =
       nullptr;
-  std::shared_ptr<Reader<message::RawMessage>> session_reader_ = nullptr;
+  std::shared_ptr<GpuControlSubscription> session_reader_ = nullptr;
   std::shared_ptr<Writer<message::RawMessage>> registration_writer_ = nullptr;
-  std::shared_ptr<Reader<message::RawMessage>> registration_ack_reader_ =
-      nullptr;
+  std::shared_ptr<GpuControlSubscription> registration_ack_reader_ = nullptr;
   mutable std::mutex bootstrap_mutex_;
   std::condition_variable bootstrap_cv_;
   std::string registration_wire_;
@@ -657,7 +673,7 @@ template <typename MetaT>
 std::shared_ptr<GpuReader<MetaT>> CreateGpuReader(
     Node* node, const std::string& channel_name,
     const GpuReaderOptions& options,
-    std::function<void(const GpuMsgView<MetaT>&)> callback) {
+    std::function<void(GpuMsgView<MetaT>&)> callback) {
   auto reader = std::make_shared<GpuReader<MetaT>>(channel_name, options, node,
                                                    std::move(callback));
   if (!reader->Init()) {
@@ -670,7 +686,7 @@ template <typename MetaT>
 std::shared_ptr<GpuReader<MetaT>> CreateGpuReader(
     const std::shared_ptr<Node>& node, const std::string& channel_name,
     const GpuReaderOptions& options,
-    std::function<void(const GpuMsgView<MetaT>&)> callback) {
+    std::function<void(GpuMsgView<MetaT>&)> callback) {
   return CreateGpuReader<MetaT>(node.get(), channel_name, options,
                                 std::move(callback));
 }
@@ -679,7 +695,7 @@ template <typename MetaT>
 std::shared_ptr<GpuReader<MetaT>> CreateGpuReader(
     const std::unique_ptr<Node>& node, const std::string& channel_name,
     const GpuReaderOptions& options,
-    std::function<void(const GpuMsgView<MetaT>&)> callback) {
+    std::function<void(GpuMsgView<MetaT>&)> callback) {
   return CreateGpuReader<MetaT>(node.get(), channel_name, options,
                                 std::move(callback));
 }

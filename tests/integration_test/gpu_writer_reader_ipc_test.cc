@@ -35,6 +35,7 @@ struct IpcMeta {
 };
 
 constexpr uint32_t kFrameCount = 8;
+constexpr uint32_t kReaderCount = 2;
 constexpr uint8_t kChildReady = 1;
 constexpr uint8_t kChildCyberUnavailable = 2;
 constexpr uint8_t kChildGpuIpcUnavailable = 3;
@@ -86,39 +87,46 @@ int RunReader(int descriptor_fd, int result_fd) {
     return 13;
   }
   auto node = apollo::cyber::CreateNode("gpu_ipc_reader_node");
-  cudaStream_t stream = nullptr;
-  if (cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking) !=
-      cudaSuccess) {
-    return 14;
+  std::vector<cudaStream_t> streams(kReaderCount, nullptr);
+  std::vector<uint32_t> received_counts(kReaderCount, 0);
+  std::vector<std::shared_ptr<GpuReader<IpcMeta>>> readers;
+  readers.reserve(kReaderCount);
+  for (uint32_t reader_index = 0; reader_index < kReaderCount; ++reader_index) {
+    if (cudaStreamCreateWithFlags(&streams[reader_index],
+                                  cudaStreamNonBlocking) != cudaSuccess) {
+      return 14;
+    }
+    GpuReaderOptions options;
+    options.stream = streams[reader_index];
+    options.bootstrap_timeout_ms = 8000;
+    auto reader = CreateGpuReader<IpcMeta>(
+        node, "test/gpu_cross_process", options,
+        [&, reader_index](const GpuMsgView<IpcMeta>& view) {
+          uint8_t value = 0;
+          const bool copied =
+              cudaMemcpyAsync(&value, view.device_ptr(), sizeof(value),
+                              cudaMemcpyDeviceToHost,
+                              streams[reader_index]) == cudaSuccess &&
+              cudaStreamSynchronize(streams[reader_index]) == cudaSuccess;
+          const uint32_t expected_frame = 42 + received_counts[reader_index];
+          const uint8_t expected_value =
+              static_cast<uint8_t>(0x5a + received_counts[reader_index]);
+          const uint8_t result = copied && value == expected_value &&
+                                         view->frame_id == expected_frame
+                                     ? 1
+                                     : 0;
+          WriteAll(result_fd, &result, sizeof(result));
+          ++received_counts[reader_index];
+        });
+    if (!reader || !reader->is_ready()) {
+      const uint8_t status = kChildGpuIpcUnavailable;
+      WriteAll(result_fd, &status, sizeof(status));
+      return 14;
+    }
+    readers.push_back(std::move(reader));
   }
-  GpuReaderOptions options;
-  options.consumer_id = 9001;
-  options.stream = stream;
-  options.bootstrap_timeout_ms = 8000;
-
-  uint32_t received_count = 0;
-  auto reader = CreateGpuReader<IpcMeta>(
-      node, "test/gpu_cross_process", options,
-      [&](const GpuMsgView<IpcMeta>& view) {
-        uint8_t value = 0;
-        const bool copied =
-            cudaMemcpyAsync(&value, view.device_ptr(), sizeof(value),
-                            cudaMemcpyDeviceToHost, stream) == cudaSuccess &&
-            cudaStreamSynchronize(stream) == cudaSuccess;
-        const uint32_t expected_frame = 42 + received_count;
-        const uint8_t expected_value =
-            static_cast<uint8_t>(0x5a + received_count);
-        const uint8_t result = copied && value == expected_value &&
-                                       view->frame_id == expected_frame
-                                   ? 1
-                                   : 0;
-        WriteAll(result_fd, &result, sizeof(result));
-        ++received_count;
-      });
-  if (!reader || !reader->is_ready()) {
-    const uint8_t status = kChildGpuIpcUnavailable;
-    WriteAll(result_fd, &status, sizeof(status));
-    return 14;
+  if (readers[0]->consumer_id() == readers[1]->consumer_id()) {
+    return 17;
   }
 
   const uint8_t ready = kChildReady;
@@ -126,9 +134,13 @@ int RunReader(int descriptor_fd, int result_fd) {
     return 15;
   }
   std::this_thread::sleep_for(std::chrono::seconds(2));
-  reader.reset();
-  cudaStreamDestroy(stream);
-  return received_count == kFrameCount ? 0 : 16;
+  readers.clear();
+  bool received_all = true;
+  for (uint32_t reader_index = 0; reader_index < kReaderCount; ++reader_index) {
+    received_all = received_all && received_counts[reader_index] == kFrameCount;
+    cudaStreamDestroy(streams[reader_index]);
+  }
+  return received_all ? 0 : 16;
 }
 
 }  // namespace
@@ -269,6 +281,13 @@ TEST(GpuWriterReaderIpcTest, ForkedWriterAndReaderBootstrapAutomatically) {
   // Allow the independently-created data and ACK endpoints to complete RTPS
   // discovery before the first packet; later iterations exercise reclamation.
   std::this_thread::sleep_for(std::chrono::milliseconds(500));
+  auto session =
+      GpuChannelManager::Instance()->GetSession("test/gpu_cross_process");
+  ASSERT_NE(session, nullptr);
+  for (int i = 0; i < 100 && session->GetConsumerCount() != kReaderCount; ++i) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+  }
+  ASSERT_EQ(session->GetConsumerCount(), kReaderCount);
 
   for (uint32_t frame = 0; frame < kFrameCount; ++frame) {
     std::optional<GpuLoan<IpcMeta>> loan;
@@ -289,11 +308,15 @@ TEST(GpuWriterReaderIpcTest, ForkedWriterAndReaderBootstrapAutomatically) {
         cudaSuccess);
     ASSERT_TRUE(writer->Publish(std::move(*loan)));
 
-    uint8_t result = 0;
-    ASSERT_TRUE(ReadByteWithTimeout(result_pipe[0], &result, 5000))
-        << "reader did not report frame " << frame;
-    ASSERT_EQ(result, 1)
-        << "reader observed invalid ownership or payload for frame " << frame;
+    for (uint32_t reader_index = 0; reader_index < kReaderCount;
+         ++reader_index) {
+      uint8_t result = 0;
+      ASSERT_TRUE(ReadByteWithTimeout(result_pipe[0], &result, 5000))
+          << "reader " << reader_index << " did not report frame " << frame;
+      ASSERT_EQ(result, 1)
+          << "a reader observed invalid ownership or payload for frame "
+          << frame;
+    }
   }
 
   close(result_pipe[0]);

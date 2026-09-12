@@ -49,7 +49,7 @@ int main(int argc, char* argv[]) {
   // 3. Create high-level typed GPU zero-copy Reader via Cyber RT
   auto gpu_reader = CreateGpuReader<GpuImageMeta>(
       listener_node, "camera/front", options,
-      [&](const GpuMsgView<GpuImageMeta>& view) {
+      [&](GpuMsgView<GpuImageMeta>& view) {
         // Asynchronous hardware wait has already been mounted on infer_stream!
         AINFO << "GPU Listener processing frame " << view->frame_id
               << " [" << view->width << "x" << view->height << "]"
@@ -58,8 +58,9 @@ int main(int argc, char* argv[]) {
         // Downstream GPU processing (e.g. inference, filter, encoding) runs directly
         // on view.device_ptr() on infer_stream...
 
-        // View destructor automatically generates postfence on infer_stream
-        // and sends reverse completion ACK back to writer!
+        if (!view.Done(infer_stream)) {
+          AERROR << "Failed to complete GPU frame " << view->frame_id;
+        }
       });
 
   if (!gpu_reader) {
@@ -72,6 +73,7 @@ int main(int argc, char* argv[]) {
 
   apollo::cyber::WaitForShutdown();
 
+  gpu_reader->Shutdown();
   cudaStreamDestroy(infer_stream);
   return 0;
 }

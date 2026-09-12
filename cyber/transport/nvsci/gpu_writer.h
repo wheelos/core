@@ -1,18 +1,16 @@
-/******************************************************************************
- * Copyright 2026 WheelOS. All Rights Reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *****************************************************************************/
+// Copyright 2026 WheelOS. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #ifndef CYBER_TRANSPORT_NVSCI_GPU_WRITER_H_
 #define CYBER_TRANSPORT_NVSCI_GPU_WRITER_H_
@@ -36,6 +34,7 @@
 #include "cyber/node/writer.h"
 #include "cyber/transport/nvsci/gpu_channel_manager.h"
 #include "cyber/transport/nvsci/gpu_channel_session.h"
+#include "cyber/transport/nvsci/gpu_control_endpoint.h"
 #include "cyber/transport/nvsci/gpu_control_protocol.h"
 #include "cyber/transport/nvsci/nvsci_types.h"
 
@@ -191,7 +190,10 @@ class GpuWriter {
  public:
   GpuWriter(const std::string& channel_name, const GpuWriterOptions& options,
             Node* node)
-      : channel_name_(channel_name), options_(options), node_(node) {}
+      : channel_name_(channel_name),
+        options_(options),
+        node_(node),
+        endpoint_id_(NewGpuEndpointId()) {}
 
   ~GpuWriter() { Shutdown(); }
 
@@ -218,8 +220,20 @@ class GpuWriter {
       AERROR << "Failed to initialize GpuChannelSession for " << channel_name_;
       return false;
     }
-    session_->SetQuarantineGracePeriodNs(
-        options_.quarantine_grace_period_ms * 1000000ULL);
+    if (!session_->pool() ||
+        session_->pool()->GetSlotCount() != options_.slot_count ||
+        session_->pool()->GetSlotCapacity() != options_.slot_size ||
+        session_->pool()->GetAlignment() != options_.alignment ||
+        !GpuChannelManager::Instance()->ClaimWriterSession(channel_name_,
+                                                           session_)) {
+      AERROR << "GPU channel already has a writer or incompatible pool: "
+             << channel_name_;
+      session_ = nullptr;
+      return false;
+    }
+    writer_session_owned_ = true;
+    session_->SetQuarantineGracePeriodNs(options_.quarantine_grace_period_ms *
+                                         1000000ULL);
 
     proto::RoleAttributes data_role;
     data_role.set_channel_name(channel_name_ + "/_gpu_data");
@@ -238,8 +252,8 @@ class GpuWriter {
     ack_reader_cfg.pending_queue_size =
         std::max(64U, options_.slot_count * 16U);
     ack_reader_cfg.qos_profile.set_depth(ack_reader_cfg.pending_queue_size);
-    ack_reader_ = node_->CreateReader<message::RawMessage>(
-        ack_reader_cfg,
+    ack_reader_ = GpuControlDispatcher::Instance()->Subscribe(
+        node_, ack_reader_cfg, endpoint_id_,
         [this](const std::shared_ptr<message::RawMessage>& msg) {
           OnAckReceived(msg);
         });
@@ -258,13 +272,13 @@ class GpuWriter {
                                                                "/_gpu_session");
     registration_ack_writer_ = node_->CreateWriter<message::RawMessage>(
         channel_name_ + "/_gpu_registration_ack");
-    session_request_reader_ = node_->CreateReader<message::RawMessage>(
-        channel_name_ + "/_gpu_session_request",
+    session_request_reader_ = GpuControlDispatcher::Instance()->Subscribe(
+        node_, channel_name_ + "/_gpu_session_request", endpoint_id_,
         [this](const std::shared_ptr<message::RawMessage>& msg) {
           OnSessionRequest(msg);
         });
-    registration_reader_ = node_->CreateReader<message::RawMessage>(
-        channel_name_ + "/_gpu_registration",
+    registration_reader_ = GpuControlDispatcher::Instance()->Subscribe(
+        node_, channel_name_ + "/_gpu_registration", endpoint_id_,
         [this](const std::shared_ptr<message::RawMessage>& msg) {
           OnRegistration(msg);
         });
@@ -286,27 +300,40 @@ class GpuWriter {
 
   void Shutdown() {
     std::shared_ptr<Writer<message::RawMessage>> data_writer;
-    std::shared_ptr<Reader<message::RawMessage>> ack_reader;
+    std::shared_ptr<GpuControlSubscription> ack_reader;
+    std::shared_ptr<GpuControlSubscription> session_request_reader;
+    std::shared_ptr<GpuControlSubscription> registration_reader;
     stop_maintenance_.store(true, std::memory_order_release);
     if (maintenance_thread_.joinable()) {
       maintenance_thread_.join();
     }
+    uint64_t session_id = 0;
+    bool release_writer_session = false;
     {
       std::lock_guard<std::mutex> lock(mutex_);
-      if (!init_) {
+      if (!init_ && !writer_session_owned_) {
         return;
       }
       init_ = false;
       data_writer = std::move(data_writer_);
       ack_reader = std::move(ack_reader_);
       session_writer_ = nullptr;
-      session_request_reader_ = nullptr;
-      registration_reader_ = nullptr;
+      session_request_reader = std::move(session_request_reader_);
+      registration_reader = std::move(registration_reader_);
       registration_ack_writer_ = nullptr;
       remote_consumers_.clear();
+      remote_sync_descriptors_.clear();
+      if (writer_session_owned_ && session_) {
+        session_id = session_->session_id();
+        release_writer_session = true;
+      }
+      writer_session_owned_ = false;
       session_ = nullptr;
     }
-    GpuChannelManager::Instance()->RemoveSession(channel_name_);
+    if (release_writer_session) {
+      GpuChannelManager::Instance()->ReleaseWriterSession(channel_name_,
+                                                          session_id);
+    }
   }
 
   bool is_ready() const {
@@ -426,6 +453,11 @@ class GpuWriter {
     }
 
     void* stream = loan.stream_ ? loan.stream_ : options_.stream;
+    if (stream == nullptr) {
+      AERROR << "GpuWriter::Publish requires an explicit CUDA stream on "
+             << channel_name_;
+      return false;
+    }
 
     // 1. Enforce Write-After-Read (WAR) hardware hazard protection
     if (!loan.waited_on_prev_fence_) {
@@ -513,6 +545,37 @@ class GpuWriter {
     if (!msg) {
       return;
     }
+    GpuConsumerUnregister unregister;
+    if (DecodeGpuConsumerUnregister(msg->message, &unregister)) {
+      GpuChannelSessionPtr session;
+      std::vector<uint8_t> old_sync_descriptor;
+      {
+        std::lock_guard<std::mutex> lock(mutex_);
+        session = session_;
+        if (!session || unregister.channel_id != session->channel_id() ||
+            unregister.session_id != session->session_id()) {
+          return;
+        }
+        remote_consumers_.erase(unregister.consumer_id);
+        auto it = remote_sync_descriptors_.find(unregister.consumer_id);
+        if (it != remote_sync_descriptors_.end()) {
+          old_sync_descriptor = std::move(it->second);
+          remote_sync_descriptors_.erase(it);
+        }
+      }
+      session->UnregisterConsumer(unregister.consumer_id);
+      if (!old_sync_descriptor.empty()) {
+        uint64_t old_engine_id = 0;
+        if (session->sync_engine()->GetSyncObjId(old_sync_descriptor,
+                                                 &old_engine_id) &&
+            session->pool()) {
+          session->pool()->ClearPostFencesForEngine(old_engine_id);
+        }
+        session->sync_engine()->ReleaseSyncObj(old_sync_descriptor);
+      }
+      return;
+    }
+
     GpuConsumerRegistration registration;
     if (!DecodeGpuConsumerRegistration(msg->message, &registration)) {
       return;
@@ -621,13 +684,13 @@ class GpuWriter {
   std::string channel_name_;
   GpuWriterOptions options_;
   Node* node_ = nullptr;
+  uint64_t endpoint_id_ = 0;
   GpuChannelSessionPtr session_ = nullptr;
   std::shared_ptr<Writer<message::RawMessage>> data_writer_ = nullptr;
-  std::shared_ptr<Reader<message::RawMessage>> ack_reader_ = nullptr;
+  std::shared_ptr<GpuControlSubscription> ack_reader_ = nullptr;
   std::shared_ptr<Writer<message::RawMessage>> session_writer_ = nullptr;
-  std::shared_ptr<Reader<message::RawMessage>> session_request_reader_ =
-      nullptr;
-  std::shared_ptr<Reader<message::RawMessage>> registration_reader_ = nullptr;
+  std::shared_ptr<GpuControlSubscription> session_request_reader_ = nullptr;
+  std::shared_ptr<GpuControlSubscription> registration_reader_ = nullptr;
   std::shared_ptr<Writer<message::RawMessage>> registration_ack_writer_ =
       nullptr;
   std::string session_descriptor_wire_;
@@ -638,6 +701,7 @@ class GpuWriter {
   std::thread maintenance_thread_;
   mutable std::mutex mutex_;
   bool init_ = false;
+  bool writer_session_owned_ = false;
 };
 
 template <typename MetaT>

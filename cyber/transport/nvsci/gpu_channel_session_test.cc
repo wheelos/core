@@ -1,18 +1,16 @@
-/******************************************************************************
- * Copyright 2026 WheelOS. All Rights Reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *****************************************************************************/
+// Copyright 2026 WheelOS. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "cyber/transport/nvsci/gpu_channel_session.h"
 
@@ -171,6 +169,37 @@ TEST(GpuChannelSessionTest, CancelPublishReleasesEveryConsumerReference) {
   EXPECT_TRUE(session.CancelPublish(slot, packet.seq_num));
   EXPECT_EQ(pool->GetSlotState(slot), SlotState::FREE);
   EXPECT_FALSE(session.CancelPublish(slot, packet.seq_num));
+}
+
+TEST(GpuChannelSessionTest, ReusesSlotOnlyAfterPostFenceCompletes) {
+  NvSciBufPoolConfig config;
+  config.slot_count = 1;
+  config.slot_size = 1024;
+  auto pool = std::make_shared<NvSciBufPool>(config);
+  ASSERT_TRUE(pool->Initialize());
+
+  auto sync_engine = std::make_shared<NvSciSyncEngine>(18);
+  GpuChannelSession session(1006, pool, sync_engine);
+  session.RegisterConsumer(701);
+
+  const int slot = session.AcquireSlot();
+  ASSERT_EQ(slot, 0);
+  GpuTransportPacket packet;
+  ASSERT_TRUE(session.OnPublish(
+      slot, sync_engine->GenerateSignalFence(nullptr), &packet));
+
+  GpuCompletionPacket completion;
+  completion.channel_id = session.channel_id();
+  completion.slot_id = static_cast<uint32_t>(slot);
+  completion.seq_num = packet.seq_num;
+  completion.consumer_id = 701;
+  completion.postfence = sync_engine->GenerateSignalFence(nullptr);
+  ASSERT_TRUE(session.OnCompletion(completion));
+  ASSERT_EQ(pool->GetSlotState(slot), SlotState::FREE);
+
+  EXPECT_EQ(session.AcquireSlot(), -1);
+  sync_engine->MarkFenceCompleted(completion.postfence.fence_id);
+  EXPECT_EQ(session.AcquireSlot(), slot);
 }
 
 TEST(GpuChannelSessionTest, ConsumerCrashAndRestartReclaimsInFlightSlot) {
