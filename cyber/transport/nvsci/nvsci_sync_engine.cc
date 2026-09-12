@@ -1,18 +1,16 @@
-/******************************************************************************
- * Copyright 2026 WheelOS. All Rights Reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *****************************************************************************/
+// Copyright 2026 WheelOS. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "cyber/transport/nvsci/nvsci_sync_engine.h"
 
@@ -120,22 +118,42 @@ NvSciSyncFence NvSciSyncEngine::GenerateSignalFence(void* stream_ptr) {
   fence.timestamp_ns = static_cast<uint64_t>(
       std::chrono::duration_cast<std::chrono::nanoseconds>(now).count());
 
-  const uint32_t event_idx =
+  uint32_t event_idx =
       static_cast<uint32_t>(fid % NvSciSyncEngine::kEventRingSize);
-  StoreFenceOwner(engine_id_, event_idx, &fence);
 
 #if defined(CYBER_USE_CUDA_IPC)
   if (stream_ptr != nullptr) {
     cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);
-    if (!EnsureCudaIpcEvents() ||
+    if (!EnsureCudaIpcEvents()) {
+      fence.Reset();
+      return fence;
+    }
+    std::lock_guard<std::mutex> lock(mutex_);
+    bool event_available = false;
+    for (size_t offset = 0; offset < kEventRingSize; ++offset) {
+      const uint32_t candidate = static_cast<uint32_t>(
+          (event_idx + offset) % NvSciSyncEngine::kEventRingSize);
+      if (!event_recorded_[candidate] ||
+          cudaEventQuery(cuda_events_[candidate]) == cudaSuccess) {
+        event_idx = candidate;
+        event_available = true;
+        break;
+      }
+    }
+    if (!event_available ||
         cudaEventRecord(cuda_events_[event_idx], stream) != cudaSuccess) {
       fence.Reset();
+      return fence;
     }
+    event_recorded_[event_idx] = true;
+    StoreFenceOwner(engine_id_, event_idx, &fence);
   } else {
     std::lock_guard<std::mutex> lock(mutex_);
+    StoreFenceOwner(engine_id_, event_idx, &fence);
     pending_streamless_fences_.insert(fence.fence_id);
   }
 #elif defined(CYBER_USE_NVSCI)
+  StoreFenceOwner(engine_id_, event_idx, &fence);
   orin::OrinNvSciBackend::GenerateNvSciFence(stream_ptr, &fence);
   if (stream_ptr == nullptr) {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -145,6 +163,7 @@ NvSciSyncFence NvSciSyncEngine::GenerateSignalFence(void* stream_ptr) {
   (void)stream_ptr;
   {
     std::lock_guard<std::mutex> lock(mutex_);
+    StoreFenceOwner(engine_id_, event_idx, &fence);
     pending_streamless_fences_.insert(fence.fence_id);
   }
 #endif

@@ -1,18 +1,16 @@
-/******************************************************************************
- * Copyright 2026 WheelOS. All Rights Reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *****************************************************************************/
+// Copyright 2026 WheelOS. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "cyber/transport/nvsci/gpu_channel_session.h"
 
@@ -32,7 +30,30 @@ GpuChannelSession::GpuChannelSession(uint64_t channel_id, NvSciBufPoolPtr pool,
       sync_engine_(std::move(sync_engine)) {}
 
 int GpuChannelSession::AcquireSlot() {
-  return pool_ ? pool_->AcquireSlot() : -1;
+  if (!pool_) {
+    return -1;
+  }
+  for (size_t attempt = 0; attempt < pool_->GetSlotCount(); ++attempt) {
+    const int slot_id = pool_->AcquireSlot();
+    if (slot_id < 0) {
+      return -1;
+    }
+    bool ready = true;
+    if (sync_engine_) {
+      for (const auto& fence : pool_->GetLastPostFences(slot_id)) {
+        if (fence.IsValid() && !sync_engine_->IsFenceSignaled(fence)) {
+          ready = false;
+          break;
+        }
+      }
+    }
+    if (ready) {
+      pool_->ClearPostFences(slot_id);
+      return slot_id;
+    }
+    pool_->ReleaseSlot(slot_id, NvSciSyncFence{});
+  }
+  return -1;
 }
 
 void* GpuChannelSession::GetDevicePtr(int slot_id) const {

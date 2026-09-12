@@ -1,18 +1,16 @@
-/******************************************************************************
- * Copyright 2026 WheelOS. All Rights Reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *****************************************************************************/
+// Copyright 2026 WheelOS. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #ifndef CYBER_TRANSPORT_NVSCI_GPU_CONTROL_PROTOCOL_H_
 #define CYBER_TRANSPORT_NVSCI_GPU_CONTROL_PROTOCOL_H_
@@ -41,6 +39,7 @@ constexpr uint32_t kGpuSessionMagic = 0x53555047;          // "GPUS"
 constexpr uint32_t kGpuSessionRequestMagic = 0x52555047;   // "GPUR"
 constexpr uint32_t kGpuRegistrationMagic = 0x47555047;     // "GPUG"
 constexpr uint32_t kGpuRegistrationAckMagic = 0x4B555047;  // "GPUK"
+constexpr uint32_t kGpuUnregisterMagic = 0x55555047;       // "GPUU"
 constexpr size_t kMaxGpuMetadataSize = 64U * 1024U * 1024U;
 constexpr size_t kGpuFenceWireSize = 64;
 constexpr size_t kGpuDataHeaderWireSize = 104;
@@ -476,6 +475,42 @@ inline bool DecodeGpuRegistrationAck(const std::string& raw,
          wire::ReadU64(data, raw.size(), &offset, consumer_id) &&
          magic == kGpuRegistrationAckMagic &&
          version == kGpuControlProtocolVersion;
+}
+
+struct GpuConsumerUnregister {
+  uint64_t channel_id = 0;
+  uint64_t session_id = 0;
+  uint64_t consumer_id = 0;
+};
+
+inline std::string EncodeGpuConsumerUnregister(
+    const GpuConsumerUnregister& unregister) {
+  std::string out;
+  wire::AppendU32(kGpuUnregisterMagic, &out);
+  wire::AppendU32(kGpuControlProtocolVersion, &out);
+  wire::AppendU64(unregister.channel_id, &out);
+  wire::AppendU64(unregister.session_id, &out);
+  wire::AppendU64(unregister.consumer_id, &out);
+  return out;
+}
+
+inline bool DecodeGpuConsumerUnregister(const std::string& raw,
+                                        GpuConsumerUnregister* unregister) {
+  if (unregister == nullptr || raw.size() != 32) {
+    return false;
+  }
+  size_t offset = 0;
+  uint32_t magic = 0;
+  uint32_t version = 0;
+  const auto* data = reinterpret_cast<const uint8_t*>(raw.data());
+  return wire::ReadU32(data, raw.size(), &offset, &magic) &&
+         wire::ReadU32(data, raw.size(), &offset, &version) &&
+         wire::ReadU64(data, raw.size(), &offset, &unregister->channel_id) &&
+         wire::ReadU64(data, raw.size(), &offset, &unregister->session_id) &&
+         wire::ReadU64(data, raw.size(), &offset, &unregister->consumer_id) &&
+         magic == kGpuUnregisterMagic &&
+         version == kGpuControlProtocolVersion &&
+         unregister->channel_id != 0 && unregister->consumer_id != 0;
 }
 
 }  // namespace transport

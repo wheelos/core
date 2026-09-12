@@ -1,20 +1,25 @@
-/******************************************************************************
- * Copyright 2026 WheelOS. All Rights Reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *****************************************************************************/
+// Copyright 2026 WheelOS. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "cyber/transport/nvsci/nvsci_buf_pool.h"
+
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <unistd.h>
+
+#include <cerrno>
+#include <cstring>
 
 #include <gtest/gtest.h>
 
@@ -87,6 +92,46 @@ TEST(NvSciBufPoolTest, ExportAndImport) {
   EXPECT_TRUE(pool.ImportBuffer(1, ipc_desc));
   // Mismatched slot id import should fail
   EXPECT_FALSE(pool.ImportBuffer(0, ipc_desc));
+}
+
+TEST(NvSciBufPoolTest, OrinSharedMemoryIsPrivateAndUnlinkedOnDestruction) {
+  NvSciBufPoolConfig config;
+  config.slot_count = 1;
+  config.slot_size = 4096;
+
+  std::string shm_name;
+  {
+    NvSciBufPool pool(config);
+    ASSERT_TRUE(pool.Initialize());
+    std::vector<uint8_t> descriptor;
+    ASSERT_TRUE(pool.ExportBuffer(0, &descriptor));
+    ASSERT_GE(descriptor.size(), kGpuBufferDescriptorHeaderSize);
+
+    uint32_t magic = 0;
+    uint32_t name_size = 0;
+    std::memcpy(&magic, descriptor.data(), sizeof(magic));
+    if (magic != kOrinUmaBufferMagic) {
+      GTEST_SKIP() << "Orin UMA shared memory is not active.";
+    }
+    std::memcpy(&name_size, descriptor.data() + 12, sizeof(name_size));
+    ASSERT_EQ(descriptor.size(), kGpuBufferDescriptorHeaderSize + name_size);
+    shm_name.assign(
+        reinterpret_cast<const char*>(descriptor.data() +
+                                      kGpuBufferDescriptorHeaderSize),
+        name_size);
+
+    const int fd = shm_open(shm_name.c_str(), O_RDWR | O_CLOEXEC, 0);
+    ASSERT_GE(fd, 0);
+    struct stat shm_stat {};
+    ASSERT_EQ(fstat(fd, &shm_stat), 0);
+    EXPECT_EQ(shm_stat.st_size, static_cast<off_t>(config.slot_size));
+    EXPECT_EQ(shm_stat.st_mode & 0777, 0600);
+    close(fd);
+  }
+
+  errno = 0;
+  EXPECT_EQ(shm_open(shm_name.c_str(), O_RDWR | O_CLOEXEC, 0), -1);
+  EXPECT_EQ(errno, ENOENT);
 }
 
 TEST(NvSciBufPoolTest, QuarantineAndUnquarantine) {

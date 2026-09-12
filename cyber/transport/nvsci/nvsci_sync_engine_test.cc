@@ -1,23 +1,27 @@
-/******************************************************************************
- * Copyright 2026 WheelOS. All Rights Reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *****************************************************************************/
+// Copyright 2026 WheelOS. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "cyber/transport/nvsci/nvsci_sync_engine.h"
 
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
+
+#include <chrono>
+#include <thread>
 
 #include <cuda_runtime.h>
 #include <gtest/gtest.h>
@@ -83,7 +87,63 @@ TEST(NvSciSyncEngineTest, ExportAndImport) {
   EXPECT_FALSE(engine.ImportSyncObj(corrupted_desc));
 }
 
+TEST(NvSciSyncEngineTest, DoesNotReusePendingCudaEvents) {
+  int device_count = 0;
+  if (cudaGetDeviceCount(&device_count) != cudaSuccess || device_count == 0) {
+    GTEST_SKIP() << "A CUDA device is required for event ring validation.";
+  }
+
+  cudaStream_t blocker_stream = nullptr;
+  cudaStream_t signal_stream = nullptr;
+  cudaEvent_t blocker = nullptr;
+  ASSERT_EQ(cudaStreamCreateWithFlags(&blocker_stream, cudaStreamNonBlocking),
+            cudaSuccess);
+  ASSERT_EQ(cudaStreamCreateWithFlags(&signal_stream, cudaStreamNonBlocking),
+            cudaSuccess);
+  ASSERT_EQ(cudaEventCreateWithFlags(&blocker, cudaEventDisableTiming),
+            cudaSuccess);
+  ASSERT_EQ(cudaLaunchHostFunc(
+                blocker_stream,
+                [](void*) {
+                  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                },
+                nullptr),
+            cudaSuccess);
+  ASSERT_EQ(cudaEventRecord(blocker, blocker_stream), cudaSuccess);
+  ASSERT_EQ(cudaStreamWaitEvent(signal_stream, blocker, 0), cudaSuccess);
+
+  NvSciSyncEngine engine(43);
+  for (size_t index = 0; index < 16; ++index) {
+    EXPECT_TRUE(engine.GenerateSignalFence(signal_stream).IsValid());
+  }
+  EXPECT_FALSE(engine.GenerateSignalFence(signal_stream).IsValid());
+
+  ASSERT_EQ(cudaStreamSynchronize(signal_stream), cudaSuccess);
+  EXPECT_TRUE(engine.GenerateSignalFence(signal_stream).IsValid());
+  ASSERT_EQ(cudaStreamSynchronize(signal_stream), cudaSuccess);
+  EXPECT_EQ(cudaEventDestroy(blocker), cudaSuccess);
+  EXPECT_EQ(cudaStreamDestroy(signal_stream), cudaSuccess);
+  EXPECT_EQ(cudaStreamDestroy(blocker_stream), cudaSuccess);
+}
+
 TEST(NvSciSyncEngineTest, CudaEventSynchronizesAcrossProcesses) {
+  int device_count = 0;
+  if (cudaGetDeviceCount(&device_count) != cudaSuccess || device_count == 0) {
+    GTEST_SKIP() << "A CUDA device is required for CUDA IPC event validation.";
+  }
+
+  // Under Tegra/Jetson Linux, fork without execve causes the CUDA Driver/Runtime
+  // state in the child to retain the parent's driver handle, triggering
+  // CUDA_ERROR_INITIALIZATION (error 3) on cudaIpcOpenEventHandle.
+  // When processes are separate (normal exec'ed processes), it functions natively.
+  int dev = 0;
+  cudaDeviceProp prop{};
+  if (cudaGetDevice(&dev) == cudaSuccess &&
+      cudaGetDeviceProperties(&prop, dev) == cudaSuccess &&
+      prop.integrated == 1) {
+    GTEST_SKIP() << "Fork without exec cannot initialize CUDA IPC context on Tegra/Orin.";
+  }
+
   int pipe_fds[2];
   ASSERT_EQ(pipe(pipe_fds), 0);
   const pid_t child = fork();
@@ -137,23 +197,15 @@ TEST(NvSciSyncEngineTest, CudaEventSynchronizesAcrossProcesses) {
   }
 
   close(pipe_fds[0]);
-  int device_count = 0;
-  if (cudaGetDeviceCount(&device_count) != cudaSuccess || device_count == 0) {
-    const uint8_t disabled = 0;
-    ASSERT_TRUE(WriteAll(pipe_fds[1], &disabled, sizeof(disabled)));
-    close(pipe_fds[1]);
-    int status = 0;
-    ASSERT_EQ(waitpid(child, &status, 0), child);
-    GTEST_SKIP() << "A CUDA device is required for CUDA IPC event validation.";
-  }
 
   void* device_ptr = nullptr;
-  cudaStream_t stream = nullptr;
   ASSERT_EQ(cudaMalloc(&device_ptr, 4096), cudaSuccess);
+  cudaStream_t stream = nullptr;
   ASSERT_EQ(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking),
             cudaSuccess);
   cudaIpcMemHandle_t mem_handle{};
   ASSERT_EQ(cudaIpcGetMemHandle(&mem_handle, device_ptr), cudaSuccess);
+
   NvSciSyncEngine engine(101);
   std::vector<uint8_t> sync_desc;
   ASSERT_TRUE(engine.ExportSyncObj(&sync_desc));

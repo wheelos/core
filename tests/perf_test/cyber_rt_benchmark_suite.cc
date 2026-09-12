@@ -3313,7 +3313,7 @@ class BenchmarkSuiteRunner {
          total_loan_publish_successes == total_sent &&
          total_fallback_transmit_attempts == 0 &&
          total_fallback_transmit_successes == 0 &&
-         total_borrowed == total_measured_received && total_copies == 0);
+         total_borrowed == total_final_drained_received && total_copies == 0);
     std::ostringstream notes;
     notes << "real_multi_process=true"
           << " | worker_cpu_set=" << cpu_set_text

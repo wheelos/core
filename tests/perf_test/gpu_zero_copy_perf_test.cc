@@ -91,7 +91,8 @@ bool InitializeGpu(GpuTestContext* context, uint32_t slot_count,
   cudaPointerAttributes attributes{};
   if (device_ptr == nullptr ||
       cudaPointerGetAttributes(&attributes, device_ptr) != cudaSuccess ||
-      attributes.type != cudaMemoryTypeDevice) {
+      (attributes.type != cudaMemoryTypeDevice &&
+       attributes.type != cudaMemoryTypeHost)) {
     DestroyGpu(context);
     return false;
   }
@@ -103,9 +104,9 @@ bool InitializeGpu(GpuTestContext* context, uint32_t slot_count,
   return true;
 }
 
-int AcquireSlot(const std::shared_ptr<NvSciBufPool>& pool) {
+int AcquireSlot(const std::shared_ptr<GpuChannelSession>& session) {
   for (int retry = 0; retry < 1000; ++retry) {
-    const int slot = pool->AcquireSlot();
+    const int slot = session->AcquireSlot();
     if (slot >= 0) {
       return slot;
     }
@@ -130,7 +131,7 @@ void RunOnePerfCase(const PerfMatrixCase& test_case, uint64_t channel_id,
 
   const auto start = std::chrono::steady_clock::now();
   for (uint32_t frame = 1; frame <= test_case.frames; ++frame) {
-    const int slot = AcquireSlot(context.pool);
+    const int slot = AcquireSlot(context.session);
     ASSERT_GE(slot, 0) << test_case.name << " pool starvation at frame " << frame;
     void* device_ptr = context.pool->GetDevicePtr(slot);
     ASSERT_NE(device_ptr, nullptr);
@@ -180,7 +181,7 @@ TEST(GpuZeroCopyPerfTest, DeviceMemoryAndDataIntegrityStress) {
   latency_us.reserve(kFrames);
   for (uint32_t frame = 1; frame <= kFrames; ++frame) {
     const auto frame_start = std::chrono::steady_clock::now();
-    const int slot = AcquireSlot(context.pool);
+    const int slot = AcquireSlot(context.session);
     ASSERT_GE(slot, 0) << "pool starvation at frame " << frame;
     void* device_ptr = context.pool->GetDevicePtr(slot);
     ASSERT_NE(device_ptr, nullptr);
@@ -238,11 +239,12 @@ TEST(GpuZeroCopyPerfTest, SustainedRingBufferThroughput) {
   constexpr uint32_t kFrames = 1000;
   constexpr size_t kPayloadBytes = 1U << 20;
   uint8_t* verification = nullptr;
-  ASSERT_EQ(cudaMalloc(reinterpret_cast<void**>(&verification), 1), cudaSuccess);
+  ASSERT_EQ(cudaMalloc(reinterpret_cast<void**>(&verification), kPayloadBytes),
+            cudaSuccess);
   const auto start = std::chrono::steady_clock::now();
 
   for (uint32_t frame = 1; frame <= kFrames; ++frame) {
-    const int slot = AcquireSlot(context.pool);
+    const int slot = AcquireSlot(context.session);
     ASSERT_GE(slot, 0) << "pool starvation at frame " << frame;
     void* device_ptr = context.pool->GetDevicePtr(slot);
     ASSERT_EQ(cudaMemsetAsync(device_ptr, static_cast<int>(frame & 0xff),
@@ -258,7 +260,7 @@ TEST(GpuZeroCopyPerfTest, SustainedRingBufferThroughput) {
     }
     GpuConstView<PerfImageMeta> view(packet, &meta, 102, context.session);
     ASSERT_TRUE(view.WaitUntilReady(context.consumer_stream));
-    ASSERT_EQ(cudaMemcpyAsync(verification, view.device_ptr(), 1,
+    ASSERT_EQ(cudaMemcpyAsync(verification, view.device_ptr(), kPayloadBytes,
                               cudaMemcpyDeviceToDevice, context.consumer_stream),
               cudaSuccess);
     ASSERT_TRUE(view.SignalCompletion(context.consumer_stream));
@@ -275,7 +277,8 @@ TEST(GpuZeroCopyPerfTest, SustainedRingBufferThroughput) {
   const double gbps = (static_cast<double>(kFrames) * kPayloadBytes * 8.0) /
                       elapsed_seconds / 1.0e9;
   std::cout << std::fixed << std::setprecision(2)
-            << "\nGPU-GPU zero-copy throughput: " << frames_per_second
+            << "\nIn-process full-payload GPU consumer throughput: "
+            << frames_per_second
             << " FPS, " << gbps << " Gb/s, " << elapsed_seconds << " s\n";
   EXPECT_EQ(context.pool->GetSlotState(0), SlotState::FREE);
   DestroyGpu(&context);
@@ -291,7 +294,7 @@ TEST(GpuZeroCopyPerfTest, FanoutStress) {
 
   constexpr uint32_t kFrames = 300;
   for (uint32_t frame = 1; frame <= kFrames; ++frame) {
-    const int slot = AcquireSlot(context.pool);
+    const int slot = AcquireSlot(context.session);
     ASSERT_GE(slot, 0) << "fanout pool starvation at frame " << frame;
     void* device_ptr = context.pool->GetDevicePtr(slot);
     ASSERT_EQ(cudaMemsetAsync(device_ptr, static_cast<int>(frame & 0xff), 4096,
@@ -490,6 +493,13 @@ TEST(GpuZeroCopyPerfTest, ResourceLifetimeLeakageProbe) {
     GTEST_SKIP() << "A CUDA device is required for resource lifetime validation.";
   }
 
+  {
+    GpuTestContext warmup;
+    ASSERT_TRUE(InitializeGpu(&warmup, 4, 1U << 20, 8999, 9999));
+    DestroyGpu(&warmup);
+  }
+  ASSERT_EQ(cudaDeviceSynchronize(), cudaSuccess);
+
   size_t free_before = 0;
   size_t total_before = 0;
   ASSERT_EQ(cudaMemGetInfo(&free_before, &total_before), cudaSuccess);
@@ -508,7 +518,10 @@ TEST(GpuZeroCopyPerfTest, ResourceLifetimeLeakageProbe) {
   size_t free_after = 0;
   size_t total_after = 0;
   ASSERT_EQ(cudaMemGetInfo(&free_after, &total_after), cudaSuccess);
-  EXPECT_GE(free_after, free_before - (16U * 1024U * 1024U));
+  constexpr size_t kRetainedMemoryTolerance = 16ULL * 1024ULL * 1024ULL;
+  const size_t retained_bytes =
+      free_before > free_after ? free_before - free_after : 0;
+  EXPECT_LE(retained_bytes, kRetainedMemoryTolerance);
   EXPECT_EQ(total_after, total_before);
 }
 
@@ -533,6 +546,13 @@ TEST(GpuZeroCopyPerfTest, FrameworkWriterReaderEndToEndPressure) {
   w_opts.slot_count = kSlotCount;
   w_opts.slot_size = kSlotSize;
   w_opts.backpressure = GpuBackpressurePolicy::BLOCK;
+  cudaStream_t writer_stream = nullptr;
+  cudaStream_t reader_stream = nullptr;
+  ASSERT_EQ(cudaStreamCreateWithFlags(&writer_stream, cudaStreamNonBlocking),
+            cudaSuccess);
+  ASSERT_EQ(cudaStreamCreateWithFlags(&reader_stream, cudaStreamNonBlocking),
+            cudaSuccess);
+  w_opts.stream = writer_stream;
 
   auto writer = CreateGpuWriter<PerfImageMeta>(writer_node, channel, w_opts);
   ASSERT_NE(writer, nullptr);
@@ -545,15 +565,18 @@ TEST(GpuZeroCopyPerfTest, FrameworkWriterReaderEndToEndPressure) {
   r_opts.consumer_id = 9999;
   r_opts.slot_count = kSlotCount;
   r_opts.slot_size = kSlotSize;
+  r_opts.stream = reader_stream;
 
   auto reader = CreateGpuReader<PerfImageMeta>(
       reader_node, channel, r_opts,
-      [&](const GpuMsgView<PerfImageMeta>& view) {
+      [&](GpuMsgView<PerfImageMeta>& view) {
         const uint32_t fid = view->frame_id;
         const uint8_t expected_val = static_cast<uint8_t>(fid & 0xff);
         uint8_t observed_val = 0;
-        if (cudaMemcpy(&observed_val, view.device_ptr(), sizeof(observed_val),
-                       cudaMemcpyDeviceToHost) != cudaSuccess) {
+        if (cudaMemcpyAsync(&observed_val, view.device_ptr(),
+                  sizeof(observed_val), cudaMemcpyDeviceToHost,
+                  reader_stream) != cudaSuccess ||
+          cudaStreamSynchronize(reader_stream) != cudaSuccess) {
           data_corrupted.store(true);
         } else if (observed_val != expected_val) {
           data_corrupted.store(true);
@@ -578,8 +601,8 @@ TEST(GpuZeroCopyPerfTest, FrameworkWriterReaderEndToEndPressure) {
     ASSERT_TRUE(loan.has_value());
     loan->metadata().frame_id = i;
     loan->metadata().payload_bytes = kSlotSize;
-    ASSERT_EQ(cudaMemset(loan->device_ptr(), static_cast<int>(i & 0xff),
-                         kSlotSize),
+    ASSERT_EQ(cudaMemsetAsync(loan->device_ptr(), static_cast<int>(i & 0xff),
+                  kSlotSize, writer_stream),
               cudaSuccess);
     ASSERT_TRUE(writer->Publish(std::move(*loan)));
   }
@@ -601,6 +624,8 @@ TEST(GpuZeroCopyPerfTest, FrameworkWriterReaderEndToEndPressure) {
 
   reader->Shutdown();
   writer->Shutdown();
+  EXPECT_EQ(cudaStreamDestroy(reader_stream), cudaSuccess);
+  EXPECT_EQ(cudaStreamDestroy(writer_stream), cudaSuccess);
   GpuChannelManager::Instance()->Clear();
 }
 
