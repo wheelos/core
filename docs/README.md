@@ -9,7 +9,8 @@ This repository has two documentation layers:
 
 1. [Installation and setup](getting-started/installation.md)
 2. [Quick start](getting-started/quickstart.md)
-3. [Deployment options](guides/build-and-run.md)
+3. [GPU zero-copy usage guide](guides/gpu-zero-copy.md)
+4. [Deployment options](guides/build-and-run.md)
 
 ## Guides
 
@@ -20,6 +21,7 @@ This repository has two documentation layers:
 - [Parameter Service](guides/parameter-service.md)
 - [Record and Replay](guides/record-and-replay.md)
 - [Python Quick Start](guides/python-quickstart.md)
+- [GPU zero-copy usage guide](guides/gpu-zero-copy.md)
 - [Zero-Copy and Sensor Data](guides/zero-copy-and-sensor-data.md)
 
 ### Additional operational guides

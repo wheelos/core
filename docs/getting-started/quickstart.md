@@ -48,4 +48,6 @@ The component receives messages and prints output in the terminal running `cyber
 - [Release and verification](../guides/release-and-verification.md)
 - [Performance testing](../guides/performance-testing.md)
 - [Publish/Subscribe Basics](../guides/pubsub-basics.md)
+- [GPU zero-copy usage guide](../guides/gpu-zero-copy.md)
+- [Zero-Copy and Sensor Data](../guides/zero-copy-and-sensor-data.md)
 - [Python Quick Start](../guides/python-quickstart.md)
