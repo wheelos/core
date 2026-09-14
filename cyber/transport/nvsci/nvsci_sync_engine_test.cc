@@ -21,6 +21,7 @@
 #include <unistd.h>
 
 #include <chrono>
+#include <cstdlib>
 #include <thread>
 
 #include <cuda_runtime.h>
@@ -58,6 +59,56 @@ bool ReadAll(int fd, void* data, size_t size) {
 }
 
 }  // namespace
+
+int RunCudaEventChildFromEnvironment() {
+  const char* pipe_fd_text = std::getenv("GPU_SYNC_EVENT_CHILD_FD");
+  if (pipe_fd_text == nullptr) {
+    return 20;
+  }
+  const int pipe_fd = std::atoi(pipe_fd_text);
+  uint8_t enabled = 0;
+  if (!ReadAll(pipe_fd, &enabled, sizeof(enabled)) || enabled == 0) {
+    return 0;
+  }
+  uint32_t sync_size = 0;
+  cudaIpcMemHandle_t mem_handle{};
+  NvSciSyncFence fence;
+  if (!ReadAll(pipe_fd, &sync_size, sizeof(sync_size)) || sync_size == 0 ||
+      sync_size > 4096) {
+    return 10;
+  }
+  std::vector<uint8_t> sync_desc(sync_size);
+  if (!ReadAll(pipe_fd, sync_desc.data(), sync_desc.size()) ||
+      !ReadAll(pipe_fd, &mem_handle, sizeof(mem_handle)) ||
+      !ReadAll(pipe_fd, &fence, sizeof(fence))) {
+    return 11;
+  }
+  void* imported = nullptr;
+  cudaStream_t stream = nullptr;
+  NvSciSyncEngine peer(202);
+  if (!peer.ImportSyncObj(sync_desc)) {
+    return 12;
+  }
+  if (cudaIpcOpenMemHandle(&imported, mem_handle,
+                           cudaIpcMemLazyEnablePeerAccess) != cudaSuccess) {
+    return 13;
+  }
+  if (cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking) !=
+      cudaSuccess) {
+    return 14;
+  }
+  if (!peer.InsertWaitFence(stream, fence)) {
+    return 15;
+  }
+  uint8_t value = 0;
+  const bool ok = cudaMemcpyAsync(&value, imported, 1, cudaMemcpyDeviceToHost,
+                                  stream) == cudaSuccess &&
+                  cudaStreamSynchronize(stream) == cudaSuccess &&
+                  value == 0x7b;
+  cudaStreamDestroy(stream);
+  cudaIpcCloseMemHandle(imported);
+  return ok ? 0 : 16;
+}
 
 TEST(NvSciSyncEngineTest, FenceGenerationAndValidation) {
   NvSciSyncEngine engine(42);
@@ -127,76 +178,31 @@ TEST(NvSciSyncEngineTest, DoesNotReusePendingCudaEvents) {
 }
 
 TEST(NvSciSyncEngineTest, CudaEventSynchronizesAcrossProcesses) {
-  int device_count = 0;
-  if (cudaGetDeviceCount(&device_count) != cudaSuccess || device_count == 0) {
-    GTEST_SKIP() << "A CUDA device is required for CUDA IPC event validation.";
-  }
-
-  // Under Tegra/Jetson Linux, fork without execve causes the CUDA Driver/Runtime
-  // state in the child to retain the parent's driver handle, triggering
-  // CUDA_ERROR_INITIALIZATION (error 3) on cudaIpcOpenEventHandle.
-  // When processes are separate (normal exec'ed processes), it functions natively.
-  int dev = 0;
-  cudaDeviceProp prop{};
-  if (cudaGetDevice(&dev) == cudaSuccess &&
-      cudaGetDeviceProperties(&prop, dev) == cudaSuccess &&
-      prop.integrated == 1) {
-    GTEST_SKIP() << "Fork without exec cannot initialize CUDA IPC context on Tegra/Orin.";
-  }
-
   int pipe_fds[2];
   ASSERT_EQ(pipe(pipe_fds), 0);
+  // Fork before either process initializes CUDA. In production the peers are
+  // independently exec'ed; inheriting an initialized CUDA runtime is invalid.
   const pid_t child = fork();
   ASSERT_GE(child, 0);
   if (child == 0) {
     close(pipe_fds[1]);
-    uint8_t enabled = 0;
-    if (!ReadAll(pipe_fds[0], &enabled, sizeof(enabled)) || enabled == 0) {
-      _exit(0);
-    }
-    uint32_t sync_size = 0;
-    cudaIpcMemHandle_t mem_handle{};
-    NvSciSyncFence fence;
-    if (!ReadAll(pipe_fds[0], &sync_size, sizeof(sync_size)) ||
-        sync_size == 0 || sync_size > 4096) {
-      _exit(10);
-    }
-    std::vector<uint8_t> sync_desc(sync_size);
-    if (!ReadAll(pipe_fds[0], sync_desc.data(), sync_desc.size()) ||
-        !ReadAll(pipe_fds[0], &mem_handle, sizeof(mem_handle)) ||
-        !ReadAll(pipe_fds[0], &fence, sizeof(fence))) {
-      _exit(11);
-    }
-    void* imported = nullptr;
-    cudaStream_t stream = nullptr;
-    NvSciSyncEngine peer(202);
-    if (!peer.ImportSyncObj(sync_desc)) {
-      fprintf(stderr, "cuda event import failed: %s\n",
-              cudaGetErrorString(cudaGetLastError()));
-      _exit(12);
-    }
-    if (cudaIpcOpenMemHandle(&imported, mem_handle,
-                             cudaIpcMemLazyEnablePeerAccess) != cudaSuccess) {
-      _exit(13);
-    }
-    if (cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking) !=
-        cudaSuccess) {
-      _exit(14);
-    }
-    if (!peer.InsertWaitFence(stream, fence)) {
-      _exit(15);
-    }
-    uint8_t value = 0;
-    const bool ok = cudaMemcpyAsync(&value, imported, 1, cudaMemcpyDeviceToHost,
-                                    stream) == cudaSuccess &&
-                    cudaStreamSynchronize(stream) == cudaSuccess &&
-                    value == 0x7b;
-    cudaStreamDestroy(stream);
-    cudaIpcCloseMemHandle(imported);
-    _exit(ok ? 0 : 16);
+    const std::string pipe_fd = std::to_string(pipe_fds[0]);
+    setenv("GPU_SYNC_EVENT_CHILD_FD", pipe_fd.c_str(), 1);
+    execl("/proc/self/exe", "/proc/self/exe", nullptr);
+    _exit(21);
   }
 
   close(pipe_fds[0]);
+
+  int device_count = 0;
+  if (cudaGetDeviceCount(&device_count) != cudaSuccess || device_count == 0) {
+    const uint8_t disabled = 0;
+    ASSERT_TRUE(WriteAll(pipe_fds[1], &disabled, sizeof(disabled)));
+    close(pipe_fds[1]);
+    int status = 0;
+    ASSERT_EQ(waitpid(child, &status, 0), child);
+    GTEST_SKIP() << "A CUDA device is required for CUDA IPC event validation.";
+  }
 
   void* device_ptr = nullptr;
   ASSERT_EQ(cudaMalloc(&device_ptr, 4096), cudaSuccess);
@@ -244,6 +250,48 @@ TEST(NvSciSyncEngineTest, ExportsVersionedCudaDescriptor) {
   EXPECT_TRUE(engine.ImportSyncObj(sync_desc));
 }
 
+TEST(NvSciSyncEngineTest, HostSynchronizedFenceCompletesBeforeHandoff) {
+  int device_count = 0;
+  if (cudaGetDeviceCount(&device_count) != cudaSuccess || device_count == 0) {
+    GTEST_SKIP() << "A CUDA device is required for host synchronization.";
+  }
+
+  cudaStream_t stream = nullptr;
+  ASSERT_EQ(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking),
+            cudaSuccess);
+  void* device_ptr = nullptr;
+  ASSERT_EQ(cudaMalloc(&device_ptr, 4096), cudaSuccess);
+  ASSERT_EQ(cudaMemsetAsync(device_ptr, 0x6d, 4096, stream), cudaSuccess);
+
+  NvSciSyncEngine producer(301, true);
+  const NvSciSyncFence fence = producer.GenerateSignalFence(stream);
+  ASSERT_TRUE(fence.IsValid());
+
+  uint8_t value = 0;
+  ASSERT_EQ(cudaMemcpy(&value, device_ptr, sizeof(value),
+                       cudaMemcpyDeviceToHost),
+            cudaSuccess);
+  EXPECT_EQ(value, 0x6d);
+
+  std::vector<uint8_t> descriptor;
+  ASSERT_TRUE(producer.ExportSyncObj(&descriptor));
+  NvSciSyncEngine consumer(302, true);
+  EXPECT_TRUE(consumer.ImportSyncObj(descriptor));
+  EXPECT_TRUE(consumer.InsertWaitFence(stream, fence));
+  EXPECT_TRUE(consumer.IsFenceSignaled(fence));
+
+  cudaFree(device_ptr);
+  cudaStreamDestroy(stream);
+}
+
 }  // namespace transport
 }  // namespace cyber
 }  // namespace apollo
+
+int main(int argc, char** argv) {
+  if (std::getenv("GPU_SYNC_EVENT_CHILD_FD") != nullptr) {
+    return apollo::cyber::transport::RunCudaEventChildFromEnvironment();
+  }
+  ::testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
+}

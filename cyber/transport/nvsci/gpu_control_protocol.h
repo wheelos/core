@@ -32,7 +32,7 @@ namespace apollo {
 namespace cyber {
 namespace transport {
 
-constexpr uint32_t kGpuControlProtocolVersion = 1;
+constexpr uint32_t kGpuControlProtocolVersion = 2;
 constexpr uint32_t kGpuDataMagic = 0x47505544;             // "GPUD"
 constexpr uint32_t kGpuAckMagic = 0x47505541;              // "GPUA"
 constexpr uint32_t kGpuSessionMagic = 0x53555047;          // "GPUS"
@@ -42,8 +42,8 @@ constexpr uint32_t kGpuRegistrationAckMagic = 0x4B555047;  // "GPUK"
 constexpr uint32_t kGpuUnregisterMagic = 0x55555047;       // "GPUU"
 constexpr size_t kMaxGpuMetadataSize = 64U * 1024U * 1024U;
 constexpr size_t kGpuFenceWireSize = 64;
-constexpr size_t kGpuDataHeaderWireSize = 104;
-constexpr size_t kGpuAckWireSize = 100;
+constexpr size_t kGpuDataHeaderWireSize = 112;
+constexpr size_t kGpuAckWireSize = 108;
 constexpr size_t kGpuSessionHeaderWireSize = 56;
 constexpr size_t kMaxGpuDescriptorSize = 1024U * 1024U;
 
@@ -141,6 +141,7 @@ inline std::string EncodeGpuDataMessage(const GpuTransportPacket& packet,
   wire::AppendU32(kGpuDataMagic, &buf);
   wire::AppendU32(kGpuControlProtocolVersion, &buf);
   wire::AppendU64(packet.channel_id, &buf);
+  wire::AppendU64(packet.session_id, &buf);
   wire::AppendU64(packet.seq_num, &buf);
   wire::AppendU32(packet.slot_id, &buf);
   wire::AppendU32(static_cast<uint32_t>(meta_bytes.size()), &buf);
@@ -169,6 +170,7 @@ inline bool DecodeGpuDataMessage(const std::string& raw,
   if (!wire::ReadU32(data, raw.size(), &offset, &magic) ||
       !wire::ReadU32(data, raw.size(), &offset, &version) ||
       !wire::ReadU64(data, raw.size(), &offset, &packet->channel_id) ||
+      !wire::ReadU64(data, raw.size(), &offset, &packet->session_id) ||
       !wire::ReadU64(data, raw.size(), &offset, &packet->seq_num) ||
       !wire::ReadU32(data, raw.size(), &offset, &packet->slot_id) ||
       !wire::ReadU32(data, raw.size(), &offset, &meta_size) ||
@@ -209,6 +211,7 @@ inline std::string EncodeGpuAckMessage(const GpuCompletionPacket& ack) {
   wire::AppendU32(kGpuAckMagic, &buf);
   wire::AppendU32(kGpuControlProtocolVersion, &buf);
   wire::AppendU64(ack.channel_id, &buf);
+  wire::AppendU64(ack.session_id, &buf);
   wire::AppendU64(ack.seq_num, &buf);
   wire::AppendU32(ack.slot_id, &buf);
   wire::AppendU64(ack.consumer_id, &buf);
@@ -233,6 +236,7 @@ inline bool DecodeGpuAckMessage(const std::string& raw,
   if (!wire::ReadU32(data, raw.size(), &offset, &magic) ||
       !wire::ReadU32(data, raw.size(), &offset, &version) ||
       !wire::ReadU64(data, raw.size(), &offset, &ack->channel_id) ||
+      !wire::ReadU64(data, raw.size(), &offset, &ack->session_id) ||
       !wire::ReadU64(data, raw.size(), &offset, &ack->seq_num) ||
       !wire::ReadU32(data, raw.size(), &offset, &ack->slot_id) ||
       !wire::ReadU64(data, raw.size(), &offset, &ack->consumer_id) ||

@@ -126,6 +126,7 @@ struct GpuBufferDescriptor {
  */
 struct alignas(8) GpuTransportPacket {
   uint64_t channel_id = 0;
+  uint64_t session_id = 0;
   uint32_t slot_id = 0;
   uint64_t seq_num = 0;
   uint64_t timestamp_ns = 0;
@@ -137,6 +138,7 @@ struct alignas(8) GpuTransportPacket {
  */
 struct alignas(8) GpuCompletionPacket {
   uint64_t channel_id = 0;
+  uint64_t session_id = 0;
   uint32_t slot_id = 0;
   uint64_t seq_num = 0;
   uint64_t consumer_id = 0;
@@ -151,6 +153,9 @@ struct NvSciBufPoolConfig {
   uint64_t slot_size = 4 * 1024 * 1024;  // Default 4 MiB
   uint32_t alignment = 4096;             // 4 KiB page alignment for GPU MMU
   NvSciBufAccessPerm access_perm = NvSciBufAccessPerm::READ_WRITE;
+  // Primarily used by validation on non-integrated GPUs. Orin selects this
+  // backend automatically.
+  bool force_uma_shm = false;
 };
 
 /**

@@ -75,6 +75,7 @@ TEST_F(GpuWriterReaderTest, EndToEndPublishAndReceive) {
   w_opts.slot_size = 1024;
   w_opts.stream = writer_stream_;
   w_opts.backpressure = GpuBackpressurePolicy::DROP;
+  w_opts.force_uma_shm = true;
 
   auto writer = CreateGpuWriter<TestFrameMeta>(writer_node_, channel, w_opts);
   ASSERT_NE(writer, nullptr);
@@ -121,6 +122,7 @@ TEST_F(GpuWriterReaderTest, EndToEndPublishAndReceive) {
   ASSERT_TRUE(registration_writer->HasReader());
   auto session = GpuChannelManager::Instance()->GetSession(channel);
   ASSERT_NE(session, nullptr);
+  ASSERT_EQ(session->pool()->GetBackend(), GpuBufferBackend::ORIN_UMA);
   ASSERT_EQ(session->GetConsumerCount(), 1U);
   GpuConsumerUnregister stale_unregister;
   stale_unregister.channel_id = session->channel_id();

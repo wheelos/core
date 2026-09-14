@@ -69,23 +69,24 @@ void GpuChannelSession::UnregisterConsumer(uint64_t consumer_id) {
   std::lock_guard<std::mutex> lock(mutex_);
   consumers_.erase(consumer_id);
 
-  // Remove from any in-flight slot expectations and release slot reference
+  // Unregistration or lease expiry does not prove that the consumer's GPU
+  // work has stopped. Preserve its ownership in quarantine until a completion
+  // fence arrives; otherwise the slot must remain isolated.
   for (auto it = in_flight_slots_.begin(); it != in_flight_slots_.end();) {
-    if (it->second.pending_consumers.erase(consumer_id) > 0) {
-      it->second.abandoned_consumer = true;
-      if (pool_) {
-        pool_->ReleaseSlot(it->first, it->second.last_post_fence);
-      }
-    }
-    if (it->second.pending_consumers.empty()) {
-      if (pool_ && it->second.abandoned_consumer &&
-          !it->second.has_consumer_post_fence) {
-        pool_->ClearPostFences(it->first);
-      }
-      it = in_flight_slots_.erase(it);
-    } else {
+    if (it->second.pending_consumers.count(consumer_id) == 0 || !pool_ ||
+        !pool_->QuarantineSlot(it->first)) {
       ++it;
+      continue;
     }
+    const auto now = std::chrono::steady_clock::now().time_since_epoch();
+    QuarantinedSlot quarantined;
+    quarantined.slot_id = it->first;
+    quarantined.seq_num = it->second.seq_num;
+    quarantined.quarantine_timestamp_ns = static_cast<uint64_t>(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(now).count());
+    quarantined.pending_consumers = std::move(it->second.pending_consumers);
+    quarantined_slots_.push_back(std::move(quarantined));
+    it = in_flight_slots_.erase(it);
   }
 }
 
@@ -116,6 +117,7 @@ bool GpuChannelSession::OnPublish(int slot_id, const NvSciSyncFence& prefence,
 
   seq_num_++;
   out_packet->channel_id = channel_id_;
+  out_packet->session_id = session_id_;
   out_packet->slot_id = static_cast<uint32_t>(slot_id);
   out_packet->seq_num = seq_num_;
   out_packet->timestamp_ns = now_ns;
@@ -158,7 +160,9 @@ bool GpuChannelSession::CancelPublish(int slot_id, uint64_t seq_num) {
 }
 
 bool GpuChannelSession::OnCompletion(const GpuCompletionPacket& packet) {
-  if (!pool_ || packet.channel_id != channel_id_) {
+  if (!pool_ || packet.channel_id != channel_id_ ||
+      packet.session_id != session_id_ ||
+      !packet.postfence.IsValid()) {
     return false;
   }
 
@@ -166,6 +170,14 @@ bool GpuChannelSession::OnCompletion(const GpuCompletionPacket& packet) {
   const int slot_id = static_cast<int>(packet.slot_id);
   auto it = in_flight_slots_.find(slot_id);
   if (it == in_flight_slots_.end()) {
+    for (auto& quarantined : quarantined_slots_) {
+      if (quarantined.slot_id == slot_id &&
+          quarantined.seq_num == packet.seq_num &&
+          quarantined.pending_consumers.erase(packet.consumer_id) > 0) {
+        pool_->AddPostFence(slot_id, packet.postfence);
+        return true;
+      }
+    }
     return false;
   }
 
@@ -212,8 +224,7 @@ size_t GpuChannelSession::ReapHungSlots(uint64_t timeout_ns) {
       q.slot_id = it->first;
       q.seq_num = it->second.seq_num;
       q.quarantine_timestamp_ns = now_ns;
-      q.last_post_fence = it->second.last_post_fence;
-      q.has_consumer_post_fence = it->second.has_consumer_post_fence;
+      q.pending_consumers = std::move(it->second.pending_consumers);
       quarantined_slots_.push_back(std::move(q));
 
       it = in_flight_slots_.erase(it);
@@ -243,15 +254,12 @@ size_t GpuChannelSession::RecoverQuarantinedSlots() {
         (now_ns >= it->quarantine_timestamp_ns &&
          (now_ns - it->quarantine_timestamp_ns) >= quarantine_grace_period_ns_);
 
-    if (grace_passed) {
-      if (it->has_consumer_post_fence && sync_engine_ &&
-          it->last_post_fence.IsValid()) {
-        safe_to_free = sync_engine_->IsFenceSignaled(it->last_post_fence);
-      } else if (!it->has_consumer_post_fence) {
-        if (sync_engine_ && it->last_post_fence.IsValid()) {
-          safe_to_free = sync_engine_->IsFenceSignaled(it->last_post_fence);
-        } else {
-          safe_to_free = true;
+    if (grace_passed && it->pending_consumers.empty() && sync_engine_) {
+      safe_to_free = true;
+      for (const auto& fence : pool_->GetLastPostFences(it->slot_id)) {
+        if (!fence.IsValid() || !sync_engine_->IsFenceSignaled(fence)) {
+          safe_to_free = false;
+          break;
         }
       }
     }

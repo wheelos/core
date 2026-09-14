@@ -104,15 +104,13 @@ class GpuChannelSession {
     std::unordered_set<uint64_t> pending_consumers;
     NvSciSyncFence last_post_fence{};
     bool has_consumer_post_fence = false;
-    bool abandoned_consumer = false;
   };
 
   struct QuarantinedSlot {
     int slot_id = -1;
     uint64_t seq_num = 0;
     uint64_t quarantine_timestamp_ns = 0;
-    NvSciSyncFence last_post_fence{};
-    bool has_consumer_post_fence = false;
+    std::unordered_set<uint64_t> pending_consumers;
   };
 
   uint64_t channel_id_ = 0;

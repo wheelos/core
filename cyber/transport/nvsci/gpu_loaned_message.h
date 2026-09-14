@@ -317,6 +317,7 @@ class GpuConstView {
 
     GpuCompletionPacket packet;
     packet.channel_id = channel_id_;
+    packet.session_id = session_->session_id();
     packet.slot_id = static_cast<uint32_t>(slot_id_);
     packet.seq_num = seq_num_;
     packet.consumer_id = consumer_id_;

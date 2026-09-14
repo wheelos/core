@@ -28,7 +28,9 @@ namespace {
 constexpr uint32_t kSyncDescriptorMagic = 0x53595047;  // "GPYS"
 constexpr uint32_t kSyncDescriptorVersion = 1;
 constexpr uint32_t kSyncBackendCudaIpc = 1;
+constexpr uint32_t kSyncBackendHostSynchronized = 2;
 constexpr uint32_t kFencePayloadMagic = 0x434E5953;  // "SYNC"
+constexpr uint8_t kHostSynchronizedFence = 1;
 
 void StoreFenceOwner(uint64_t engine_id, uint32_t event_idx,
                      NvSciSyncFence* fence) {
@@ -60,11 +62,19 @@ bool LoadFenceOwner(const NvSciSyncFence& fence, uint64_t* engine_id,
   return true;
 }
 
+bool IsHostSynchronizedFence(const NvSciSyncFence& fence, uint64_t* owner) {
+  return fence.payload[16] == kHostSynchronizedFence &&
+         LoadFenceOwner(fence, owner) &&
+         static_cast<uint32_t>(fence.fence_id >> 32) ==
+             static_cast<uint32_t>(*owner);
+}
+
 }  // namespace
 
 NvSciSyncEngine::NvSciSyncEngine() : NvSciSyncEngine(1) {}
 
-NvSciSyncEngine::NvSciSyncEngine(uint64_t engine_id) : engine_id_(engine_id) {}
+NvSciSyncEngine::NvSciSyncEngine(uint64_t engine_id, bool host_synchronized)
+    : engine_id_(engine_id), host_synchronized_(host_synchronized) {}
 
 NvSciSyncEngine::~NvSciSyncEngine() {
 #if defined(CYBER_USE_CUDA_IPC)
@@ -122,6 +132,17 @@ NvSciSyncFence NvSciSyncEngine::GenerateSignalFence(void* stream_ptr) {
       static_cast<uint32_t>(fid % NvSciSyncEngine::kEventRingSize);
 
 #if defined(CYBER_USE_CUDA_IPC)
+  if (host_synchronized_) {
+    if (stream_ptr != nullptr &&
+        cudaStreamSynchronize(static_cast<cudaStream_t>(stream_ptr)) !=
+            cudaSuccess) {
+      fence.Reset();
+      return fence;
+    }
+    StoreFenceOwner(engine_id_, event_idx, &fence);
+    fence.payload[16] = kHostSynchronizedFence;
+    return fence;
+  }
   if (stream_ptr != nullptr) {
     cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);
     if (!EnsureCudaIpcEvents()) {
@@ -177,6 +198,15 @@ bool NvSciSyncEngine::InsertWaitFence(void* stream_ptr,
     return false;
   }
 #if defined(CYBER_USE_CUDA_IPC)
+  if (host_synchronized_) {
+    uint64_t owner = 0;
+    if (!IsHostSynchronizedFence(fence, &owner)) {
+      return false;
+    }
+    std::lock_guard<std::mutex> lock(mutex_);
+    return owner == engine_id_ ||
+           imported_host_engines_.find(owner) != imported_host_engines_.end();
+  }
   cudaStream_t stream = static_cast<cudaStream_t>(stream_ptr);
   if (stream != nullptr) {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -215,6 +245,18 @@ bool NvSciSyncEngine::ExportSyncObj(std::vector<uint8_t>* sync_desc) {
     return false;
   }
 #if defined(CYBER_USE_CUDA_IPC)
+  if (host_synchronized_) {
+    sync_desc->clear();
+    sync_desc->reserve(32);
+    wire::AppendU32(kSyncDescriptorMagic, sync_desc);
+    wire::AppendU32(kSyncDescriptorVersion, sync_desc);
+    wire::AppendU32(kSyncBackendHostSynchronized, sync_desc);
+    wire::AppendU32(0, sync_desc);
+    wire::AppendU64(engine_id_, sync_desc);
+    wire::AppendU32(0, sync_desc);
+    wire::AppendU32(0, sync_desc);
+    return true;
+  }
   if (!EnsureCudaIpcEvents()) {
     sync_desc->clear();
     return false;
@@ -265,7 +307,19 @@ bool NvSciSyncEngine::ImportSyncObj(const std::vector<uint8_t>& sync_desc) {
                      &handle_size) ||
       !wire::ReadU32(sync_desc.data(), sync_desc.size(), &offset, &reserved) ||
       magic != kSyncDescriptorMagic || version != kSyncDescriptorVersion ||
-      backend != kSyncBackendCudaIpc || peer_engine == 0) {
+      peer_engine == 0) {
+    return false;
+  }
+  if (backend == kSyncBackendHostSynchronized) {
+    if (!host_synchronized_ || event_count != 0 || handle_size != 0 ||
+        sync_desc.size() != offset) {
+      return false;
+    }
+    std::lock_guard<std::mutex> lock(mutex_);
+    imported_host_engines_.insert(peer_engine);
+    return true;
+  }
+  if (backend != kSyncBackendCudaIpc || host_synchronized_) {
     return false;
   }
   if (peer_engine == engine_id_) {
@@ -296,6 +350,7 @@ bool NvSciSyncEngine::ImportSyncObj(const std::vector<uint8_t>& sync_desc) {
   }
 
   std::lock_guard<std::mutex> lock(mutex_);
+  imported_host_engines_.erase(peer_engine);
   auto it = imported_cuda_events_.find(peer_engine);
   if (it != imported_cuda_events_.end()) {
     for (auto* ev : opened_events) {
@@ -318,6 +373,7 @@ void NvSciSyncEngine::ReleaseSyncObj(const std::vector<uint8_t>& sync_desc) {
     return;
   }
   std::lock_guard<std::mutex> lock(mutex_);
+  imported_host_engines_.erase(peer_engine);
   auto it = imported_cuda_events_.find(peer_engine);
   if (it != imported_cuda_events_.end()) {
     for (auto* ev : it->second) {
@@ -350,7 +406,9 @@ bool NvSciSyncEngine::GetSyncObjId(const std::vector<uint8_t>& sync_desc,
          wire::ReadU64(sync_desc.data(), sync_desc.size(), &offset,
                        engine_id) &&
          magic == kSyncDescriptorMagic && version == kSyncDescriptorVersion &&
-         backend == kSyncBackendCudaIpc && *engine_id != 0;
+         (backend == kSyncBackendCudaIpc ||
+          backend == kSyncBackendHostSynchronized) &&
+         *engine_id != 0;
 }
 
 bool NvSciSyncEngine::IsFenceSignaled(const NvSciSyncFence& fence) {
@@ -366,6 +424,14 @@ bool NvSciSyncEngine::IsFenceSignaled(const NvSciSyncFence& fence) {
     return false;
   }
 #if defined(CYBER_USE_CUDA_IPC)
+  if (host_synchronized_) {
+    uint64_t owner = 0;
+    if (!IsHostSynchronizedFence(fence, &owner)) {
+      return false;
+    }
+    return owner == engine_id_ ||
+           imported_host_engines_.find(owner) != imported_host_engines_.end();
+  }
   uint64_t owner = 0;
   uint32_t event_idx = 0;
   if (!LoadFenceOwner(fence, &owner, &event_idx)) {

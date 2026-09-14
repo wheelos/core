@@ -145,7 +145,7 @@ bool NvSciBufPool::Initialize() {
     return true;
   }
 
-  const bool is_integrated = IsIntegratedGpu();
+  const bool use_uma_shm = IsIntegratedGpu() || config_.force_uma_shm;
 
   slots_.reserve(config_.slot_count);
   for (uint32_t i = 0; i < config_.slot_count; ++i) {
@@ -157,9 +157,9 @@ bool NvSciBufPool::Initialize() {
 
     bool allocated = false;
 #if defined(CYBER_USE_CUDA_IPC)
-    if (is_integrated) {
-  std::string shm_name;
-  int fd = CreateUniqueSharedMemory(pool_uid_, i, &shm_name);
+    if (use_uma_shm) {
+      std::string shm_name;
+      int fd = CreateUniqueSharedMemory(pool_uid_, i, &shm_name);
       if (fd >= 0) {
         if (ftruncate(fd, config_.slot_size) == 0) {
           void* h_ptr = mmap(NULL, config_.slot_size, PROT_READ | PROT_WRITE,
@@ -192,9 +192,14 @@ bool NvSciBufPool::Initialize() {
           shm_unlink(shm_name.c_str());
         }
       }
+      if (!allocated) {
+        AERROR << "Failed to allocate mapped POSIX shared memory for GPU slot "
+               << i;
+        return false;
+      }
     }
 
-    if (!allocated) {
+    if (!allocated && !use_uma_shm) {
       void* d_ptr = nullptr;
       cudaError_t err = cudaMalloc(&d_ptr, config_.slot_size);
       if (err == cudaSuccess && d_ptr != nullptr) {
@@ -220,6 +225,15 @@ bool NvSciBufPool::Initialize() {
     slots_.push_back(std::move(entry));
   }
 
+  if (!slots_.empty()) {
+    if (slots_.front()->host_shm_ptr != nullptr) {
+      backend_ = GpuBufferBackend::ORIN_UMA;
+    } else if (slots_.front()->is_cuda_allocated) {
+      backend_ = GpuBufferBackend::CUDA_IPC;
+    } else {
+      backend_ = GpuBufferBackend::SIMULATED;
+    }
+  }
   is_initialized_ = true;
   return true;
 }
@@ -445,6 +459,7 @@ bool NvSciBufPool::ImportBufferInternal(int slot_id,
             entry->is_shm_creator = false;
             entry->is_ipc_opened = false;
             entry->is_cuda_allocated = false;
+            backend_ = GpuBufferBackend::ORIN_UMA;
             return true;
           } else {
             cudaHostUnregister(h_ptr);
@@ -478,6 +493,7 @@ bool NvSciBufPool::ImportBufferInternal(int slot_id,
       entry->dev_ptr = imported_ptr;
       entry->is_ipc_opened = true;
       entry->is_cuda_allocated = false;
+      backend_ = GpuBufferBackend::CUDA_IPC;
       return true;
     } else {
       AWARN << "cudaIpcOpenMemHandle failed (peer process access): "

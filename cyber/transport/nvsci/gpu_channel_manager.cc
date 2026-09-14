@@ -39,10 +39,8 @@ uint64_t NextSessionId() {
   return id == 0 ? sequence : id;
 }
 
-GpuBufferBackend DetectBackend(const GpuBufferDescriptor& descriptor) {
-  if (descriptor.backend != GpuBufferBackend::UNKNOWN) {
-    return descriptor.backend;
-  }
+GpuBufferBackend DetectDescriptorBackend(
+    const GpuBufferDescriptor& descriptor) {
   if (descriptor.nvsci_buf_ipc_desc.size() >= kGpuBufferDescriptorHeaderSize) {
     size_t offset = 0;
     uint32_t magic = 0;
@@ -60,7 +58,11 @@ GpuBufferBackend DetectBackend(const GpuBufferDescriptor& descriptor) {
 }
 
 bool IsSupportedDescriptor(const GpuBufferDescriptor& descriptor) {
-  const auto backend = DetectBackend(descriptor);
+  const auto backend = DetectDescriptorBackend(descriptor);
+  if (descriptor.backend != GpuBufferBackend::UNKNOWN &&
+      descriptor.backend != backend) {
+    return false;
+  }
   if (backend == GpuBufferBackend::CUDA_IPC ||
       backend == GpuBufferBackend::ORIN_UMA) {
     return true;
@@ -97,7 +99,8 @@ GpuChannelSessionPtr GpuChannelManager::GetOrCreateSession(
   }
 
   uint64_t engine_id = sync_engine_id != 0 ? sync_engine_id : channel_id;
-  auto sync_engine = std::make_shared<NvSciSyncEngine>(engine_id);
+  auto sync_engine = std::make_shared<NvSciSyncEngine>(
+      engine_id, pool->GetBackend() == GpuBufferBackend::ORIN_UMA);
   auto session = std::make_shared<GpuChannelSession>(
       channel_id, pool, sync_engine, NextSessionId());
 
@@ -126,6 +129,7 @@ GpuChannelIpcStatus GpuChannelManager::ExportSession(
       static_cast<uint32_t>(session->pool()->GetSlotCount());
   exported.config.slot_size = session->pool()->GetSlotCapacity();
   exported.config.alignment = session->pool()->GetAlignment();
+  exported.backend = session->pool()->GetBackend();
   if (!session->sync_engine()->ExportSyncObj(&exported.producer_sync_desc)) {
     return GpuChannelIpcStatus::kUnsupported;
   }
@@ -133,7 +137,6 @@ GpuChannelIpcStatus GpuChannelManager::ExportSession(
   if (status != GpuChannelIpcStatus::kSuccess) {
     return status;
   }
-  exported.backend = exported.buffers.front().backend;
   *descriptor = std::move(exported);
   return GpuChannelIpcStatus::kSuccess;
 }
@@ -203,7 +206,7 @@ GpuChannelIpcStatus GpuChannelManager::ExportSession(
       descriptors->clear();
       return GpuChannelIpcStatus::kExportFailed;
     }
-    descriptor.backend = DetectBackend(descriptor);
+    descriptor.backend = DetectDescriptorBackend(descriptor);
     if (!IsSupportedDescriptor(descriptor)) {
       descriptors->clear();
       return GpuChannelIpcStatus::kUnsupported;
@@ -322,6 +325,8 @@ GpuChannelIpcStatus GpuChannelManager::CreateImportedSession(
   for (size_t i = 0; i < descriptor.buffers.size(); ++i) {
     const auto& buffer = descriptor.buffers[i];
     if (buffer.slot_id != i || buffer.capacity != descriptor.config.slot_size ||
+        buffer.backend != descriptor.backend ||
+        DetectDescriptorBackend(buffer) != descriptor.backend ||
         !IsSupportedDescriptor(buffer) ||
         !pool->ImportBufferStrict(static_cast<int>(i),
                                   buffer.nvsci_buf_ipc_desc)) {
@@ -332,7 +337,8 @@ GpuChannelIpcStatus GpuChannelManager::CreateImportedSession(
   const uint64_t engine_id = sync_engine_id != 0
                                  ? sync_engine_id
                                  : expected_channel ^ descriptor.session_id;
-  auto sync_engine = std::make_shared<NvSciSyncEngine>(engine_id);
+  auto sync_engine = std::make_shared<NvSciSyncEngine>(
+      engine_id, descriptor.backend == GpuBufferBackend::ORIN_UMA);
   if (!sync_engine->ImportSyncObj(descriptor.producer_sync_desc)) {
     return GpuChannelIpcStatus::kImportFailed;
   }
@@ -357,7 +363,10 @@ GpuChannelIpcStatus GpuChannelManager::CreateImportedSession(
   }
   for (size_t i = 0; i < descriptors.size(); ++i) {
     const auto& descriptor = descriptors[i];
+    const auto actual_backend = DetectDescriptorBackend(descriptor);
     if (descriptor.slot_id != i || descriptor.capacity != config.slot_size ||
+        (i > 0 && actual_backend !=
+                      DetectDescriptorBackend(descriptors.front())) ||
         !IsSupportedDescriptor(descriptor) ||
         !pool->ImportBufferStrict(static_cast<int>(i),
                                   descriptor.nvsci_buf_ipc_desc)) {
@@ -369,7 +378,12 @@ GpuChannelIpcStatus GpuChannelManager::CreateImportedSession(
 
   const uint64_t channel_id = static_cast<uint64_t>(common::Hash(channel_name));
   const uint64_t engine_id = sync_engine_id != 0 ? sync_engine_id : channel_id;
-  auto sync_engine = std::make_shared<NvSciSyncEngine>(engine_id);
+  const bool host_synchronized =
+      !descriptors.empty() &&
+      DetectDescriptorBackend(descriptors.front()) ==
+          GpuBufferBackend::ORIN_UMA;
+  auto sync_engine =
+      std::make_shared<NvSciSyncEngine>(engine_id, host_synchronized);
   if (!producer_sync_desc.empty() &&
       !sync_engine->ImportSyncObj(producer_sync_desc)) {
     return GpuChannelIpcStatus::kImportFailed;

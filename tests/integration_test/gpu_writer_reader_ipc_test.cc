@@ -222,6 +222,8 @@ TEST(GpuWriterReaderIpcTest, ForkedWriterAndReaderBootstrapAutomatically) {
   GpuWriterOptions options;
   options.slot_count = 1;
   options.slot_size = 4096;
+  options.force_uma_shm =
+      std::getenv("CYBER_GPU_FORCE_UMA_SHM") != nullptr;
   cudaStream_t writer_stream = nullptr;
   ASSERT_EQ(cudaStreamCreateWithFlags(&writer_stream, cudaStreamNonBlocking),
             cudaSuccess);
@@ -247,6 +249,12 @@ TEST(GpuWriterReaderIpcTest, ForkedWriterAndReaderBootstrapAutomatically) {
     GTEST_SKIP() << "CUDA IPC export is unavailable on this host.";
   }
   ASSERT_EQ(export_status, GpuChannelIpcStatus::kSuccess);
+  if (options.force_uma_shm) {
+    ASSERT_EQ(descriptor.backend, GpuBufferBackend::ORIN_UMA);
+    for (const auto& buffer : descriptor.buffers) {
+      ASSERT_EQ(buffer.backend, GpuBufferBackend::ORIN_UMA);
+    }
+  }
   const uint8_t start = 1;
   ASSERT_TRUE(WriteAll(descriptor_pipe[1], &start, sizeof(start)));
   close(descriptor_pipe[1]);

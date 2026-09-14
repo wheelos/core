@@ -186,6 +186,7 @@ class GpuMsgView {
 
     GpuCompletionPacket ack;
     ack.channel_id = channel_id_;
+    ack.session_id = session_->session_id();
     ack.slot_id = static_cast<uint32_t>(slot_id_);
     ack.seq_num = seq_num_;
     ack.consumer_id = consumer_id_;
@@ -306,16 +307,6 @@ class GpuReader {
       return false;
     }
 
-    if (bootstrap_managed_) {
-      if (!RegisterRemoteSession()) {
-        AERROR << "Failed to register remote GPU consumer for "
-               << channel_name_;
-        return false;
-      }
-    } else {
-      session_->RegisterConsumer(options_.consumer_id);
-    }
-
     proto::RoleAttributes ack_role;
     ack_role.set_channel_name(channel_name_ + "/_gpu_ack");
     ack_role.mutable_qos_profile()->set_depth(
@@ -343,6 +334,18 @@ class GpuReader {
       return false;
     }
 
+    if (bootstrap_managed_) {
+      if (!RegisterRemoteSession()) {
+        AERROR << "Failed to register remote GPU consumer for "
+               << channel_name_;
+        data_reader_ = nullptr;
+        ack_writer_ = nullptr;
+        return false;
+      }
+    } else {
+      session_->RegisterConsumer(options_.consumer_id);
+    }
+
     init_ = true;
     if (bootstrap_managed_) {
       stop_heartbeat_.store(false, std::memory_order_release);
@@ -363,6 +366,7 @@ class GpuReader {
       std::lock_guard<std::mutex> lock(bootstrap_mutex_);
       session = std::move(session_);
     }
+    data_reader_ = nullptr;
     if (session) {
       if (!remote_session_) {
         session->UnregisterConsumer(options_.consumer_id);
@@ -379,7 +383,6 @@ class GpuReader {
         }
       }
     }
-    data_reader_ = nullptr;
     ack_writer_ = nullptr;
     session_request_writer_ = nullptr;
     session_reader_ = nullptr;
@@ -597,7 +600,8 @@ class GpuReader {
              << ")";
       return;
     }
-    if (packet.channel_id != session->channel_id() || packet.seq_num == 0) {
+    if (packet.channel_id != session->channel_id() ||
+        packet.session_id != session->session_id() || packet.seq_num == 0) {
       AERROR
           << "Rejected GPU data control message with invalid packet identity "
           << "on " << channel_name_;

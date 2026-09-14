@@ -101,10 +101,20 @@ TEST(GpuChannelSessionTest, ReapHungConsumer) {
   EXPECT_EQ(session.RecoverQuarantinedSlots(), 0);
   EXPECT_EQ(pool->GetSlotState(0), SlotState::QUARANTINED);
 
-  // Mark fence completed
+  // A producer fence does not prove that the consumer stopped reading.
   sync_engine->MarkFenceCompleted(prefence.fence_id);
+  EXPECT_EQ(session.RecoverQuarantinedSlots(), 0);
 
-  // Recover quarantined slot once fence is signaled
+  GpuCompletionPacket completion;
+  completion.channel_id = session.channel_id();
+  completion.slot_id = static_cast<uint32_t>(slot);
+  completion.seq_num = packet.seq_num;
+  completion.consumer_id = 301;
+  completion.postfence = sync_engine->GenerateSignalFence(nullptr);
+  ASSERT_TRUE(session.OnCompletion(completion));
+  sync_engine->MarkFenceCompleted(completion.postfence.fence_id);
+
+  // Recover only after the consumer completion fence is signaled.
   EXPECT_EQ(session.RecoverQuarantinedSlots(), 1);
   EXPECT_EQ(pool->GetSlotState(0), SlotState::FREE);
 }
@@ -143,6 +153,7 @@ TEST(GpuChannelSessionTest, StrictSequenceMatchingRejectsStaleCompletions) {
 
   // Correct seq_num completes normally
   stale_comp.seq_num = packet.seq_num;
+  stale_comp.postfence = sync_engine->GenerateSignalFence(nullptr);
   EXPECT_TRUE(session.OnCompletion(stale_comp));
   EXPECT_EQ(pool->GetSlotState(0), SlotState::FREE);
 }
@@ -202,7 +213,7 @@ TEST(GpuChannelSessionTest, ReusesSlotOnlyAfterPostFenceCompletes) {
   EXPECT_EQ(session.AcquireSlot(), slot);
 }
 
-TEST(GpuChannelSessionTest, ConsumerCrashAndRestartReclaimsInFlightSlot) {
+TEST(GpuChannelSessionTest, ConsumerUnregisterQuarantinesInFlightSlot) {
   NvSciBufPoolConfig config;
   config.slot_count = 1;
   config.slot_size = 1024;
@@ -218,30 +229,20 @@ TEST(GpuChannelSessionTest, ConsumerCrashAndRestartReclaimsInFlightSlot) {
   ASSERT_TRUE(session.OnPublish(
       first_slot, sync_engine->GenerateSignalFence(nullptr), &first_packet));
 
-  // Process death removes its outstanding ownership. A restarted process may
-  // safely register the same logical consumer and receive a fresh sequence.
+  // Unregister/lease expiry alone cannot prove the consumer GPU stopped.
   session.UnregisterConsumer(601);
-  EXPECT_EQ(pool->GetSlotState(first_slot), SlotState::FREE);
-  EXPECT_TRUE(pool->GetLastPostFences(first_slot).empty());
-  session.RegisterConsumer(601);
+  EXPECT_EQ(pool->GetSlotState(first_slot), SlotState::QUARANTINED);
+  EXPECT_EQ(session.AcquireSlot(), -1);
 
-  const int restarted_slot = session.AcquireSlot();
-  ASSERT_EQ(restarted_slot, 0);
-  GpuTransportPacket restarted_packet;
-  ASSERT_TRUE(session.OnPublish(restarted_slot,
-                                sync_engine->GenerateSignalFence(nullptr),
-                                &restarted_packet));
-  EXPECT_GT(restarted_packet.seq_num, first_packet.seq_num);
-
-  GpuCompletionPacket stale;
-  stale.channel_id = session.channel_id();
-  stale.slot_id = 0;
-  stale.seq_num = first_packet.seq_num;
-  stale.consumer_id = 601;
-  EXPECT_FALSE(session.OnCompletion(stale));
-
-  stale.seq_num = restarted_packet.seq_num;
-  EXPECT_TRUE(session.OnCompletion(stale));
+  GpuCompletionPacket completion;
+  completion.channel_id = session.channel_id();
+  completion.slot_id = 0;
+  completion.seq_num = first_packet.seq_num;
+  completion.consumer_id = 601;
+  completion.postfence = sync_engine->GenerateSignalFence(nullptr);
+  ASSERT_TRUE(session.OnCompletion(completion));
+  sync_engine->MarkFenceCompleted(completion.postfence.fence_id);
+  EXPECT_EQ(session.RecoverQuarantinedSlots(), 1);
   EXPECT_EQ(pool->GetSlotState(0), SlotState::FREE);
 }
 
