@@ -59,6 +59,7 @@ struct GpuWriterOptions {
   uint64_t consumer_lease_timeout_ms = 3000;
   uint64_t quarantine_grace_period_ms = 500;
   uint64_t cleanup_interval_ms = 100;
+  bool force_uma_shm = false;
 };
 
 template <typename MetaT>
@@ -213,6 +214,7 @@ class GpuWriter {
     config.slot_count = options_.slot_count;
     config.slot_size = options_.slot_size;
     config.alignment = options_.alignment;
+    config.force_uma_shm = options_.force_uma_shm;
 
     session_ = GpuChannelManager::Instance()->GetOrCreateSession(
         channel_name_, config, options_.sync_engine_id);
@@ -511,6 +513,24 @@ class GpuWriter {
     }
     GpuCompletionPacket ack;
     if (DecodeGpuAckMessage(msg->message, &ack)) {
+      std::vector<uint8_t> registered_sync;
+      {
+        std::lock_guard<std::mutex> lock(mutex_);
+        const auto descriptor = remote_sync_descriptors_.find(ack.consumer_id);
+        if (descriptor != remote_sync_descriptors_.end()) {
+          registered_sync = descriptor->second;
+        }
+      }
+      if (!registered_sync.empty()) {
+        uint64_t expected_engine = 0;
+        uint64_t fence_engine = 0;
+        if (!session->sync_engine()->GetSyncObjId(registered_sync,
+                                                  &expected_engine) ||
+            !GetNvSciFenceEngineId(ack.postfence, &fence_engine) ||
+            expected_engine != fence_engine) {
+          return;
+        }
+      }
       session->OnCompletion(ack);
       std::lock_guard<std::mutex> lock(mutex_);
       auto it = remote_consumers_.find(ack.consumer_id);
@@ -548,7 +568,6 @@ class GpuWriter {
     GpuConsumerUnregister unregister;
     if (DecodeGpuConsumerUnregister(msg->message, &unregister)) {
       GpuChannelSessionPtr session;
-      std::vector<uint8_t> old_sync_descriptor;
       {
         std::lock_guard<std::mutex> lock(mutex_);
         session = session_;
@@ -557,22 +576,8 @@ class GpuWriter {
           return;
         }
         remote_consumers_.erase(unregister.consumer_id);
-        auto it = remote_sync_descriptors_.find(unregister.consumer_id);
-        if (it != remote_sync_descriptors_.end()) {
-          old_sync_descriptor = std::move(it->second);
-          remote_sync_descriptors_.erase(it);
-        }
       }
       session->UnregisterConsumer(unregister.consumer_id);
-      if (!old_sync_descriptor.empty()) {
-        uint64_t old_engine_id = 0;
-        if (session->sync_engine()->GetSyncObjId(old_sync_descriptor,
-                                                 &old_engine_id) &&
-            session->pool()) {
-          session->pool()->ClearPostFencesForEngine(old_engine_id);
-        }
-        session->sync_engine()->ReleaseSyncObj(old_sync_descriptor);
-      }
       return;
     }
 
@@ -594,6 +599,9 @@ class GpuWriter {
           remote_sync_descriptors_.find(registration.consumer_id);
       already_imported = existing != remote_sync_descriptors_.end() &&
                          existing->second == registration.consumer_sync_desc;
+      if (existing != remote_sync_descriptors_.end() && !already_imported) {
+        return;
+      }
     }
     if (!session || registration.channel_id != session->channel_id() ||
         registration.session_id != session->session_id() ||
@@ -602,27 +610,12 @@ class GpuWriter {
       return;
     }
     session->RegisterConsumer(registration.consumer_id);
-    std::vector<uint8_t> old_sync_descriptor;
     {
       std::lock_guard<std::mutex> lock(mutex_);
       remote_consumers_[registration.consumer_id] =
           std::chrono::steady_clock::now();
-      const auto old = remote_sync_descriptors_.find(registration.consumer_id);
-      if (old != remote_sync_descriptors_.end() &&
-          old->second != registration.consumer_sync_desc) {
-        old_sync_descriptor = old->second;
-      }
       remote_sync_descriptors_[registration.consumer_id] =
           registration.consumer_sync_desc;
-    }
-    if (!old_sync_descriptor.empty()) {
-      uint64_t old_engine_id = 0;
-      if (session->sync_engine()->GetSyncObjId(old_sync_descriptor,
-                                               &old_engine_id) &&
-          session->pool()) {
-        session->pool()->ClearPostFencesForEngine(old_engine_id);
-      }
-      session->sync_engine()->ReleaseSyncObj(old_sync_descriptor);
     }
     if (ack_writer) {
       ack_writer->Write(std::make_shared<message::RawMessage>(
@@ -637,8 +630,6 @@ class GpuWriter {
     while (!stop_maintenance_.load(std::memory_order_acquire)) {
       std::this_thread::sleep_for(interval);
       GpuChannelSessionPtr session;
-      std::vector<uint64_t> expired;
-      std::vector<std::vector<uint8_t>> expired_sync_descriptors;
       const auto now = std::chrono::steady_clock::now();
       {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -650,12 +641,6 @@ class GpuWriter {
                                                                     it->second);
           if (age.count() >=
               static_cast<int64_t>(options_.consumer_lease_timeout_ms)) {
-            expired.push_back(it->first);
-            auto sync_it = remote_sync_descriptors_.find(it->first);
-            if (sync_it != remote_sync_descriptors_.end()) {
-              expired_sync_descriptors.push_back(std::move(sync_it->second));
-              remote_sync_descriptors_.erase(sync_it);
-            }
             it = remote_consumers_.erase(it);
           } else {
             ++it;
@@ -665,17 +650,9 @@ class GpuWriter {
       if (!session) {
         continue;
       }
-      for (uint64_t consumer_id : expired) {
-        session->UnregisterConsumer(consumer_id);
-      }
-      for (const auto& descriptor : expired_sync_descriptors) {
-        uint64_t engine_id = 0;
-        if (session->sync_engine()->GetSyncObjId(descriptor, &engine_id) &&
-            session->pool()) {
-          session->pool()->ClearPostFencesForEngine(engine_id);
-        }
-        session->sync_engine()->ReleaseSyncObj(descriptor);
-      }
+      // A missing heartbeat does not prove that the remote GPU stopped using
+      // mapped shared memory. Keep the consumer in the ownership set so future
+      // publications cannot be reused without its completion.
       session->ReapHungSlots(options_.consumer_lease_timeout_ms * 1000000ULL);
       session->RecoverQuarantinedSlots();
     }

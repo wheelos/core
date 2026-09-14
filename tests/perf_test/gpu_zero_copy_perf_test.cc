@@ -315,6 +315,7 @@ TEST(GpuZeroCopyPerfTest, FanoutStress) {
       ASSERT_TRUE(view.WaitUntilReady(context.consumer_stream));
       ASSERT_TRUE(view.SignalCompletion(context.consumer_stream));
     }
+    ASSERT_EQ(cudaStreamSynchronize(context.consumer_stream), cudaSuccess);
   }
 
   ASSERT_EQ(cudaStreamSynchronize(context.producer_stream), cudaSuccess);
@@ -470,6 +471,15 @@ TEST(GpuZeroCopyPerfTest, TimeoutQuarantineAndRecovery) {
   EXPECT_EQ(context.session->RecoverQuarantinedSlots(), 0U);
 
   context.sync_engine->MarkFenceCompleted(packet.prefence.fence_id);
+  EXPECT_EQ(context.session->RecoverQuarantinedSlots(), 0U);
+  GpuCompletionPacket completion;
+  completion.channel_id = packet.channel_id;
+  completion.slot_id = packet.slot_id;
+  completion.seq_num = packet.seq_num;
+  completion.consumer_id = 205;
+  completion.postfence = context.sync_engine->GenerateSignalFence(nullptr);
+  ASSERT_TRUE(context.session->OnCompletion(completion));
+  context.sync_engine->MarkFenceCompleted(completion.postfence.fence_id);
   EXPECT_EQ(context.session->RecoverQuarantinedSlots(), 1U);
   EXPECT_EQ(context.pool->GetSlotState(0), SlotState::FREE);
   DestroyGpu(&context);

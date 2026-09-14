@@ -21,6 +21,7 @@
 #include <cerrno>
 #include <cstring>
 
+#include <cuda_runtime.h>
 #include <gtest/gtest.h>
 
 namespace apollo {
@@ -98,6 +99,7 @@ TEST(NvSciBufPoolTest, OrinSharedMemoryIsPrivateAndUnlinkedOnDestruction) {
   NvSciBufPoolConfig config;
   config.slot_count = 1;
   config.slot_size = 4096;
+  config.force_uma_shm = true;
 
   std::string shm_name;
   {
@@ -110,9 +112,7 @@ TEST(NvSciBufPoolTest, OrinSharedMemoryIsPrivateAndUnlinkedOnDestruction) {
     uint32_t magic = 0;
     uint32_t name_size = 0;
     std::memcpy(&magic, descriptor.data(), sizeof(magic));
-    if (magic != kOrinUmaBufferMagic) {
-      GTEST_SKIP() << "Orin UMA shared memory is not active.";
-    }
+    ASSERT_EQ(magic, kOrinUmaBufferMagic);
     std::memcpy(&name_size, descriptor.data() + 12, sizeof(name_size));
     ASSERT_EQ(descriptor.size(), kGpuBufferDescriptorHeaderSize + name_size);
     shm_name.assign(
@@ -132,6 +132,49 @@ TEST(NvSciBufPoolTest, OrinSharedMemoryIsPrivateAndUnlinkedOnDestruction) {
   errno = 0;
   EXPECT_EQ(shm_open(shm_name.c_str(), O_RDWR | O_CLOEXEC, 0), -1);
   EXPECT_EQ(errno, ENOENT);
+}
+
+TEST(NvSciBufPoolTest, UmaSharedMemoryIsGpuAndCpuCoherent) {
+  int device_count = 0;
+  if (cudaGetDeviceCount(&device_count) != cudaSuccess || device_count == 0) {
+    GTEST_SKIP() << "A CUDA device is required for mapped shared memory.";
+  }
+
+  NvSciBufPoolConfig config;
+  config.slot_count = 1;
+  config.slot_size = 4096;
+  config.force_uma_shm = true;
+  NvSciBufPool pool(config);
+  ASSERT_TRUE(pool.Initialize());
+  ASSERT_EQ(pool.GetBackend(), GpuBufferBackend::ORIN_UMA);
+
+  std::vector<uint8_t> descriptor;
+  ASSERT_TRUE(pool.ExportBuffer(0, &descriptor));
+  uint32_t name_size = 0;
+  std::memcpy(&name_size, descriptor.data() + 12, sizeof(name_size));
+  const std::string shm_name(
+      reinterpret_cast<const char*>(descriptor.data() +
+                                    kGpuBufferDescriptorHeaderSize),
+      name_size);
+  const int fd = shm_open(shm_name.c_str(), O_RDWR | O_CLOEXEC, 0);
+  ASSERT_GE(fd, 0);
+  void* mapping =
+      mmap(nullptr, config.slot_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+  ASSERT_NE(mapping, MAP_FAILED);
+
+  ASSERT_EQ(cudaMemset(pool.GetDevicePtr(0), 0x4c, config.slot_size),
+            cudaSuccess);
+  EXPECT_EQ(static_cast<uint8_t*>(mapping)[config.slot_size - 1], 0x4c);
+
+  static_cast<uint8_t*>(mapping)[0] = 0x7e;
+  uint8_t value = 0;
+  ASSERT_EQ(cudaMemcpy(&value, pool.GetDevicePtr(0), sizeof(value),
+                       cudaMemcpyDeviceToHost),
+            cudaSuccess);
+  EXPECT_EQ(value, 0x7e);
+
+  munmap(mapping, config.slot_size);
+  close(fd);
 }
 
 TEST(NvSciBufPoolTest, QuarantineAndUnquarantine) {

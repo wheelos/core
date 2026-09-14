@@ -217,7 +217,7 @@ cc_test(
     srcs = ["nvsci_sync_engine_test.cc"],
     deps = [
         ":nvsci_sync_engine",
-        "@com_google_googletest//:gtest_main",
+        "@com_google_googletest//:gtest",
     ],
 )
 

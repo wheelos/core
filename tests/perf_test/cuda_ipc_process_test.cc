@@ -75,8 +75,10 @@ int RunChild(int control_fd, int descriptor_fd) {
   NvSciBufPoolConfig config;
   config.slot_count = 1;
   config.slot_size = 4096;
+  config.force_uma_shm = true;
   auto pool = std::make_shared<NvSciBufPool>(config);
-  if (!pool->Initialize() || !pool->ImportBuffer(0, descriptor)) {
+  if (!pool->Initialize() || !pool->ImportBufferStrict(0, descriptor) ||
+      pool->GetBackend() != GpuBufferBackend::ORIN_UMA) {
     return 12;
   }
 
@@ -124,6 +126,7 @@ TEST(CudaIpcProcessTest, ExportImportAndReadAcrossProcesses) {
   NvSciBufPoolConfig config;
   config.slot_count = 1;
   config.slot_size = 4096;
+  config.force_uma_shm = true;
   auto pool = std::make_shared<NvSciBufPool>(config);
   ASSERT_TRUE(pool->Initialize());
   ASSERT_EQ(cudaMemset(pool->GetDevicePtr(0), 0x5a, config.slot_size),

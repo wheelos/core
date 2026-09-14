@@ -40,6 +40,7 @@ class INvSciBufPool {
   virtual size_t GetSlotCount() const = 0;
   virtual size_t GetSlotCapacity() const = 0;
   virtual uint32_t GetAlignment() const = 0;
+  virtual GpuBufferBackend GetBackend() const = 0;
   virtual SlotState GetSlotState(int slot_id) const = 0;
   virtual bool ExportBuffer(int slot_id, std::vector<uint8_t>* ipc_desc) = 0;
   virtual bool ImportBuffer(int slot_id,
@@ -67,6 +68,7 @@ class NvSciBufPool : public INvSciBufPool {
   size_t GetSlotCount() const override { return config_.slot_count; }
   size_t GetSlotCapacity() const override { return config_.slot_size; }
   uint32_t GetAlignment() const override { return config_.alignment; }
+  GpuBufferBackend GetBackend() const override { return backend_; }
   SlotState GetSlotState(int slot_id) const override;
   bool ExportBuffer(int slot_id, std::vector<uint8_t>* ipc_desc) override;
   bool ImportBuffer(int slot_id, const std::vector<uint8_t>& ipc_desc) override;
@@ -101,6 +103,7 @@ class NvSciBufPool : public INvSciBufPool {
   mutable std::mutex mutex_;
   uint32_t next_slot_hint_ = 0;
   bool is_initialized_ = false;
+  GpuBufferBackend backend_ = GpuBufferBackend::UNKNOWN;
 
   bool ImportBufferInternal(int slot_id, const std::vector<uint8_t>& ipc_desc,
                             bool strict);

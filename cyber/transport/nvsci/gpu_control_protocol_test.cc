@@ -31,6 +31,7 @@ struct TestMeta {
 GpuTransportPacket TestPacket() {
   GpuTransportPacket packet;
   packet.channel_id = 7;
+  packet.session_id = 9;
   packet.seq_num = 11;
   packet.slot_id = 1;
   packet.prefence.fence_id = 42;
@@ -48,6 +49,7 @@ TEST(GpuControlProtocolTest, RoundTripsDataAndAck) {
   std::string decoded_metadata;
   EXPECT_TRUE(DecodeGpuDataMessage(wire, &decoded, &decoded_metadata));
   EXPECT_EQ(decoded.channel_id, packet.channel_id);
+  EXPECT_EQ(decoded.session_id, packet.session_id);
   EXPECT_EQ(decoded.seq_num, packet.seq_num);
   EXPECT_EQ(decoded.slot_id, packet.slot_id);
   EXPECT_EQ(decoded.prefence, packet.prefence);
@@ -55,6 +57,7 @@ TEST(GpuControlProtocolTest, RoundTripsDataAndAck) {
 
   GpuCompletionPacket ack;
   ack.channel_id = packet.channel_id;
+  ack.session_id = packet.session_id;
   ack.seq_num = packet.seq_num;
   ack.slot_id = packet.slot_id;
   ack.consumer_id = 99;
@@ -62,13 +65,14 @@ TEST(GpuControlProtocolTest, RoundTripsDataAndAck) {
   auto ack_wire = EncodeGpuAckMessage(ack);
   GpuCompletionPacket decoded_ack;
   EXPECT_TRUE(DecodeGpuAckMessage(ack_wire, &decoded_ack));
+  EXPECT_EQ(decoded_ack.session_id, ack.session_id);
   EXPECT_EQ(decoded_ack.consumer_id, ack.consumer_id);
   EXPECT_EQ(decoded_ack.postfence, ack.postfence);
 }
 
 TEST(GpuControlProtocolTest, RejectsUnsupportedVersionAndTrailingBytes) {
   auto wire = EncodeGpuDataMessage(TestPacket(), {});
-  wire[4] = 2;
+  wire[4] = 99;
 
   GpuTransportPacket decoded;
   GpuControlDecodeError error = GpuControlDecodeError::kNone;
@@ -83,7 +87,7 @@ TEST(GpuControlProtocolTest, RejectsUnsupportedVersionAndTrailingBytes) {
 
 TEST(GpuControlProtocolTest, RejectsInvalidMetadataBoundsAndFence) {
   auto wire = EncodeGpuDataMessage(TestPacket(), {});
-  wire[28] = 1;
+  wire[36] = 1;
 
   GpuTransportPacket decoded;
   GpuControlDecodeError error = GpuControlDecodeError::kNone;
@@ -102,14 +106,15 @@ TEST(GpuControlProtocolTest, UsesStableLittleEndianGoldenEncoding) {
   const std::string encoded = EncodeGpuDataMessage(packet, "xy");
 
   std::string expected(
-      "\x44\x55\x50\x47\x01\x00\x00\x00"
+      "\x44\x55\x50\x47\x02\x00\x00\x00"
       "\x07\x00\x00\x00\x00\x00\x00\x00"
+      "\x09\x00\x00\x00\x00\x00\x00\x00"
       "\x0b\x00\x00\x00\x00\x00\x00\x00"
       "\x01\x00\x00\x00\x02\x00\x00\x00"
       "\x08\x07\x06\x05\x04\x03\x02\x01"
       "\x2a\x00\x00\x00\x00\x00\x00\x00"
       "\x00\x00\x00\x00\x00\x00\x00\x00",
-      56);
+      64);
   expected.append(48, '\0');
   expected.append("xy");
   EXPECT_EQ(encoded, expected);
@@ -117,14 +122,15 @@ TEST(GpuControlProtocolTest, UsesStableLittleEndianGoldenEncoding) {
 
   GpuCompletionPacket ack;
   ack.channel_id = 7;
+  ack.session_id = 9;
   ack.seq_num = 11;
   ack.slot_id = 1;
   ack.consumer_id = 0x0102030405060708ULL;
   ack.postfence.fence_id = 43;
   const std::string encoded_ack = EncodeGpuAckMessage(ack);
   EXPECT_EQ(encoded_ack.size(), kGpuAckWireSize);
-  EXPECT_EQ(static_cast<uint8_t>(encoded_ack[28]), 0x08);
-  EXPECT_EQ(static_cast<uint8_t>(encoded_ack[35]), 0x01);
+  EXPECT_EQ(static_cast<uint8_t>(encoded_ack[36]), 0x08);
+  EXPECT_EQ(static_cast<uint8_t>(encoded_ack[43]), 0x01);
 }
 
 TEST(GpuControlProtocolTest, RoundTripsSessionDescriptor) {
