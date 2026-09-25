@@ -1,3 +1,8 @@
+---
+name: review
+description: Review code, configuration, and Bazel BUILD changes for reproducible issues, caller behavior, tests, and runtime configuration. Use when reviewing a change or preparing it for submission.
+---
+
 # Review
 
 ## When

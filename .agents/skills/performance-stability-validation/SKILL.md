@@ -1,3 +1,8 @@
+---
+name: performance-stability-validation
+description: Validate clean-container performance, long-running pub/sub stability, packet integrity, and memory leaks. Use when a change needs performance or runtime stability acceptance.
+---
+
 # Performance and stability validation
 
 ## When

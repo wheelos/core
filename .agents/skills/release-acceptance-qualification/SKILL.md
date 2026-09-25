@@ -1,3 +1,8 @@
+---
+name: release-acceptance-qualification
+description: Qualify a WheelOS release candidate across packaging, installation, runtime tools and examples, performance, stress, and leak gates. Use for end-to-end release acceptance.
+---
+
 # Release Acceptance and Qualification
 
 ## When

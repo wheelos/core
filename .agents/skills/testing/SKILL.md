@@ -1,3 +1,8 @@
+---
+name: testing
+description: Choose and run repository Bazel tests for runtime, transport, message, example, and integration changes. Use when changing code or tests and validation is needed.
+---
+
 # Testing
 
 ## When

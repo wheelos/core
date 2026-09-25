@@ -1,3 +1,8 @@
+---
+name: release
+description: Build and validate WheelOS release packages and deliverables. Use for release workflow changes or when coordinating release preparation; use the dedicated validation skills for detailed acceptance procedures.
+---
+
 # Release
 
 ## When

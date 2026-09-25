@@ -1,3 +1,8 @@
+---
+name: build-release-validation
+description: Validate Bazel builds, the Ubuntu 22.04 baseline, and complete native and pycyber release artifacts. Use for build, packaging, or release artifact verification.
+---
+
 # Build and release validation
 
 ## When
