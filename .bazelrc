@@ -19,9 +19,17 @@ common:lockfile-check --lockfile_mode=error
 common:lockfile-update --lockfile_mode=update
 
 # Compilation modes
+build --@rules_cuda//cuda:enable=false
+
 build:release --compilation_mode=opt --strip=always --copt=-O3
 build:debug --compilation_mode=dbg --copt=-g --copt=-O0
 build:ci --config=release
+build:cuda_toolkit --@rules_cuda//cuda:enable=true
+build:cuda_toolkit --define=with_cuda=true
+build:cuda --config=cuda_toolkit
+build:cuda --define=use_cuda_ipc=true
+build:orin --config=cuda_toolkit
+build:orin --define=use_nvsci=true
 test:ci --test_output=errors
 
 try-import %workspace%/.bazelrc.user

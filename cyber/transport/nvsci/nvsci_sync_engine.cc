@@ -48,6 +48,7 @@ void StoreFenceOwner(uint64_t engine_id, uint32_t event_idx,
   }
 }
 
+#if defined(CYBER_USE_CUDA_IPC)
 bool LoadFenceOwner(const NvSciSyncFence& fence, uint64_t* engine_id,
                     uint32_t* event_idx = nullptr) {
   if (!GetNvSciFenceEngineId(fence, engine_id)) {
@@ -68,6 +69,7 @@ bool IsHostSynchronizedFence(const NvSciSyncFence& fence, uint64_t* owner) {
          static_cast<uint32_t>(fence.fence_id >> 32) ==
              static_cast<uint32_t>(*owner);
 }
+#endif
 
 }  // namespace
 

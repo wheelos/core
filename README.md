@@ -178,30 +178,29 @@ There are additional related examples under `examples/timer_component_example`, 
 
 # Documentation
 
-The repository separates operational documentation from generated API reference docs.
+Start with the [documentation index](docs/README.md) for the complete, categorized
+guide list.
 
-- [Documentation index](docs/README.md)
-- [Installation and setup](docs/getting-started/installation.md)
-- [Quick start](docs/getting-started/quickstart.md)
-- [Deployment options](docs/guides/build-and-run.md)
-- [Publish/Subscribe Basics](docs/guides/pubsub-basics.md)
-- [Service and Client](docs/guides/service-client.md)
-- [Python Quick Start](docs/guides/python-quickstart.md)
-- [Release and verification](docs/guides/release-and-verification.md)
-- [Performance testing](docs/guides/performance-testing.md)
-- [Secondary development and integration](docs/guides/secondary-development.md)
-- [Component development](docs/guides/component-development.md)
-- [Tools and monitoring](docs/guides/tools-and-monitoring.md)
-- [Topology and transport](docs/guides/topology-and-transport.md)
-- [Common issues](docs/troubleshooting/common-issues.md)
-- [Generated API reference](docs/reference/api.md)
-- [Doxygen/Sphinx documentation index](docs/doxy-docs/source/index.md)
-- [C++ API](docs/doxy-docs/source/cpp-api.md)
-- [Python API](docs/doxy-docs/source/python-api.md)
-- [Terms](docs/doxy-docs/source/terms.md)
-- [Common component example](examples/common_component_example/README.md)
-- [Timer component example](examples/timer_component_example/README.md)
-- [Project repository](https://github.com/wheelos/core)
-- [Repository context index](.github/context/index.md)
+- **Getting started:** [Installation](docs/getting-started/installation.md) ·
+  [Quick start](docs/getting-started/quickstart.md) ·
+  [Deployment options](docs/guides/build-and-run.md)
+- **Runtime and applications:** [Pub/Sub](docs/guides/pubsub-basics.md) ·
+  [Service and Client](docs/guides/service-client.md) ·
+  [GPU zero-copy](docs/guides/gpu-zero-copy.md) ·
+  [Record and Replay](docs/guides/record-and-replay.md) ·
+  [Scheduler optimization](docs/guides/scheduler-optimization.md)
+- **Development and operations:** [Component development](docs/guides/component-development.md) ·
+  [Secondary development and integration](docs/guides/secondary-development.md) ·
+  [Performance testing](docs/guides/performance-testing.md) ·
+  [Release validation](docs/guides/release-validation.md) ·
+  [Common issues](docs/troubleshooting/common-issues.md)
+- **Reference:** [Generated API](docs/reference/api.md) ·
+  [Doxygen/Sphinx index](docs/doxy-docs/source/index.md) ·
+  [C++ API](docs/doxy-docs/source/cpp-api.md) ·
+  [Python API](docs/doxy-docs/source/python-api.md) ·
+  [Terms](docs/doxy-docs/source/terms.md)
+- **Examples:** [Common component](examples/common_component_example/README.md) ·
+  [Timer component](examples/timer_component_example/README.md)
 
-The operational documentation is the recommended entry point for installation and runtime usage; the generated API docs remain the code-level reference.
+The guides are the recommended entry point for installation and runtime usage;
+generated API documentation remains the code-level reference.

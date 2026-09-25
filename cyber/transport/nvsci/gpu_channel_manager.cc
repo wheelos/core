@@ -14,10 +14,16 @@
 
 #include "cyber/transport/nvsci/gpu_channel_manager.h"
 
+#include <fcntl.h>
+#include <sys/file.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include <atomic>
+#include <cerrno>
 #include <chrono>
+#include <cstdlib>
+#include <cstring>
 #include <utility>
 
 #include "cyber/common/util.h"
@@ -29,6 +35,95 @@ namespace transport {
 namespace {
 
 std::atomic<uint64_t> g_session_sequence{1};
+
+void CloseWriterLock(int lock_fd) {
+  if (lock_fd >= 0 && ::close(lock_fd) != 0) {
+    AERROR << "Failed to close GPU writer lock: " << std::strerror(errno);
+  }
+}
+
+bool IsSafeDirectory(int fd, mode_t forbidden_permissions) {
+  struct stat info{};
+  return ::fstat(fd, &info) == 0 && S_ISDIR(info.st_mode) &&
+         info.st_uid == ::geteuid() &&
+         (info.st_mode & forbidden_permissions) == 0;
+}
+
+int AcquireWriterLock(const std::string& channel_name) {
+  const char* base = std::getenv("XDG_RUNTIME_DIR");
+  if (base == nullptr || *base == '\0') {
+    base = std::getenv("HOME");
+  }
+  if (base == nullptr || *base != '/') {
+    AERROR << "GPU writer lock requires an absolute XDG_RUNTIME_DIR or HOME";
+    return -1;
+  }
+  const int base_fd =
+      ::open(base, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+  if (base_fd < 0 || !IsSafeDirectory(base_fd, S_IWGRP | S_IWOTH)) {
+    AERROR << "Unsafe GPU writer lock base directory " << base;
+    CloseWriterLock(base_fd);
+    return -1;
+  }
+  constexpr char kLockDirectory[] = "cyber_gpu_writer";
+  if (::mkdirat(base_fd, kLockDirectory, 0700) != 0 && errno != EEXIST) {
+    const int error = errno;
+    CloseWriterLock(base_fd);
+    AERROR << "Failed to create GPU writer lock directory: "
+           << std::strerror(error);
+    return -1;
+  }
+  const int dir_fd = ::openat(base_fd, kLockDirectory,
+                              O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+  CloseWriterLock(base_fd);
+  if (dir_fd < 0 || !IsSafeDirectory(dir_fd, S_IRWXG | S_IRWXO)) {
+    AERROR << "Unsafe GPU writer lock directory under " << base;
+    CloseWriterLock(dir_fd);
+    return -1;
+  }
+
+  const std::string lock_name =
+      std::to_string(common::Hash(channel_name)) + ".lock";
+  const int lock_fd = ::openat(dir_fd, lock_name.c_str(),
+                               O_CREAT | O_CLOEXEC | O_NOFOLLOW | O_RDWR, 0600);
+  const int open_error = errno;
+  CloseWriterLock(dir_fd);
+  if (lock_fd < 0) {
+    AERROR << "Failed to open GPU writer lock for " << channel_name << ": "
+           << std::strerror(open_error);
+    return -1;
+  }
+
+  struct stat lock_stat{};
+  if (::fstat(lock_fd, &lock_stat) != 0) {
+    const int error = errno;
+    CloseWriterLock(lock_fd);
+    AERROR << "Failed to inspect GPU writer lock for " << channel_name << ": "
+           << std::strerror(error);
+    return -1;
+  }
+  if (!S_ISREG(lock_stat.st_mode) || lock_stat.st_uid != ::geteuid() ||
+      lock_stat.st_nlink != 1 ||
+      (lock_stat.st_mode & (S_IRWXG | S_IRWXO)) != 0) {
+    CloseWriterLock(lock_fd);
+    AERROR << "Unsafe GPU writer lock file for " << channel_name;
+    return -1;
+  }
+
+  if (::flock(lock_fd, LOCK_EX | LOCK_NB) != 0) {
+    const int error = errno;
+    CloseWriterLock(lock_fd);
+    if (error == EWOULDBLOCK || error == EAGAIN) {
+      AWARN << "GPU channel " << channel_name
+            << " already has a writer in another process";
+    } else {
+      AERROR << "Failed to acquire GPU writer lock for " << channel_name << ": "
+             << std::strerror(error);
+    }
+    return -1;
+  }
+  return lock_fd;
+}
 
 uint64_t NextSessionId() {
   const uint64_t now = static_cast<uint64_t>(
@@ -162,7 +257,12 @@ bool GpuChannelManager::ClaimWriterSession(
       writer_sessions_.find(channel_name) != writer_sessions_.end()) {
     return false;
   }
-  writer_sessions_[channel_name] = session->session_id();
+  const int lock_fd = AcquireWriterLock(channel_name);
+  if (lock_fd < 0) {
+    return false;
+  }
+  writer_sessions_.emplace(channel_name,
+                           WriterSessionLease{session->session_id(), lock_fd});
   return true;
 }
 
@@ -170,15 +270,33 @@ void GpuChannelManager::ReleaseWriterSession(const std::string& channel_name,
                                              uint64_t session_id) {
   std::lock_guard<std::mutex> lock(mutex_);
   const auto owner = writer_sessions_.find(channel_name);
-  if (owner == writer_sessions_.end() || owner->second != session_id) {
+  if (owner == writer_sessions_.end() ||
+      owner->second.session_id != session_id) {
     return;
   }
+  CloseWriterLock(owner->second.lock_fd);
   writer_sessions_.erase(owner);
   const auto session = sessions_.find(channel_name);
   if (session != sessions_.end() &&
       session->second->session_id() == session_id) {
     sessions_.erase(session);
   }
+  latest_import_tokens_.erase(channel_name);
+}
+
+void GpuChannelManager::DiscardUnclaimedSession(
+    const std::string& channel_name, const GpuChannelSessionPtr& session) {
+  if (channel_name.empty() || !session) {
+    return;
+  }
+  std::lock_guard<std::mutex> lock(mutex_);
+  const auto current = sessions_.find(channel_name);
+  if (current == sessions_.end() || current->second != session ||
+      writer_sessions_.find(channel_name) != writer_sessions_.end() ||
+      session->GetConsumerCount() != 0) {
+    return;
+  }
+  sessions_.erase(current);
   latest_import_tokens_.erase(channel_name);
 }
 
@@ -365,8 +483,8 @@ GpuChannelIpcStatus GpuChannelManager::CreateImportedSession(
     const auto& descriptor = descriptors[i];
     const auto actual_backend = DetectDescriptorBackend(descriptor);
     if (descriptor.slot_id != i || descriptor.capacity != config.slot_size ||
-        (i > 0 && actual_backend !=
-                      DetectDescriptorBackend(descriptors.front())) ||
+        (i > 0 &&
+         actual_backend != DetectDescriptorBackend(descriptors.front())) ||
         !IsSupportedDescriptor(descriptor) ||
         !pool->ImportBufferStrict(static_cast<int>(i),
                                   descriptor.nvsci_buf_ipc_desc)) {
@@ -379,9 +497,8 @@ GpuChannelIpcStatus GpuChannelManager::CreateImportedSession(
   const uint64_t channel_id = static_cast<uint64_t>(common::Hash(channel_name));
   const uint64_t engine_id = sync_engine_id != 0 ? sync_engine_id : channel_id;
   const bool host_synchronized =
-      !descriptors.empty() &&
-      DetectDescriptorBackend(descriptors.front()) ==
-          GpuBufferBackend::ORIN_UMA;
+      !descriptors.empty() && DetectDescriptorBackend(descriptors.front()) ==
+                                  GpuBufferBackend::ORIN_UMA;
   auto sync_engine =
       std::make_shared<NvSciSyncEngine>(engine_id, host_synchronized);
   if (!producer_sync_desc.empty() &&
@@ -395,13 +512,20 @@ GpuChannelIpcStatus GpuChannelManager::CreateImportedSession(
 void GpuChannelManager::RemoveSession(const std::string& channel_name) {
   std::lock_guard<std::mutex> lock(mutex_);
   sessions_.erase(channel_name);
-  writer_sessions_.erase(channel_name);
+  const auto owner = writer_sessions_.find(channel_name);
+  if (owner != writer_sessions_.end()) {
+    CloseWriterLock(owner->second.lock_fd);
+    writer_sessions_.erase(owner);
+  }
   latest_import_tokens_.erase(channel_name);
 }
 
 void GpuChannelManager::Clear() {
   std::lock_guard<std::mutex> lock(mutex_);
   sessions_.clear();
+  for (const auto& writer : writer_sessions_) {
+    CloseWriterLock(writer.second.lock_fd);
+  }
   writer_sessions_.clear();
   latest_import_tokens_.clear();
 }

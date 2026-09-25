@@ -88,8 +88,7 @@ class INvSciSyncEngine {
 class NvSciSyncEngine : public INvSciSyncEngine {
  public:
   NvSciSyncEngine();
-  explicit NvSciSyncEngine(uint64_t engine_id,
-                           bool host_synchronized = false);
+  explicit NvSciSyncEngine(uint64_t engine_id, bool host_synchronized = false);
   ~NvSciSyncEngine() override;
 
   NvSciSyncFence GenerateSignalFence(void* stream_ptr) override;
@@ -105,6 +104,7 @@ class NvSciSyncEngine : public INvSciSyncEngine {
   void PruneSignaledEvents();
 
  private:
+  static constexpr size_t kEventRingSize = 16;
   uint64_t engine_id_ = 0;
   std::atomic<uint64_t> fence_seq_{1};
   mutable std::mutex mutex_;
@@ -113,7 +113,6 @@ class NvSciSyncEngine : public INvSciSyncEngine {
   std::unordered_set<uint64_t> imported_host_engines_;
   bool host_synchronized_ = false;
 #if defined(CYBER_USE_CUDA_IPC)
-  static constexpr size_t kEventRingSize = 16;
   bool EnsureCudaIpcEvents();
   std::array<cudaEvent_t, kEventRingSize> cuda_events_{};
   std::array<bool, kEventRingSize> event_recorded_{};

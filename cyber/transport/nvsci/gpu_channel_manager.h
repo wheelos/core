@@ -51,10 +51,14 @@ class GpuChannelManager {
 
   GpuChannelSessionPtr GetSession(const std::string& channel_name) const;
 
+  // Reserves a writer channel for this session in this process and on this
+  // host. The reservation is held until ReleaseWriterSession.
   bool ClaimWriterSession(const std::string& channel_name,
                           const GpuChannelSessionPtr& session);
   void ReleaseWriterSession(const std::string& channel_name,
                             uint64_t session_id);
+  void DiscardUnclaimedSession(const std::string& channel_name,
+                               const GpuChannelSessionPtr& session);
 
   // Exports the pool's CUDA IPC handles for one-time cross-process setup.
   // This deliberately rejects the host-memory simulation and NvSci fallback:
@@ -92,12 +96,17 @@ class GpuChannelManager {
   void Clear();
 
  private:
+  struct WriterSessionLease {
+    uint64_t session_id = 0;
+    int lock_fd = -1;
+  };
+
   GpuChannelManager() = default;
   ~GpuChannelManager() = default;
 
   mutable std::mutex mutex_;
   std::unordered_map<std::string, GpuChannelSessionPtr> sessions_;
-  std::unordered_map<std::string, uint64_t> writer_sessions_;
+  std::unordered_map<std::string, WriterSessionLease> writer_sessions_;
   std::unordered_map<std::string, uint64_t> latest_import_tokens_;
   uint64_t next_import_token_ = 1;
 

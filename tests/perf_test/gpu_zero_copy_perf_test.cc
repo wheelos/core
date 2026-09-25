@@ -14,10 +14,14 @@
  * limitations under the License.
  *****************************************************************************/
 
+#include <sys/stat.h>
+
 #include <algorithm>
 #include <array>
+#include <cerrno>
 #include <chrono>
 #include <cstdint>
+#include <cstdlib>
 #include <iomanip>
 #include <iostream>
 #include <memory>
@@ -536,6 +540,12 @@ TEST(GpuZeroCopyPerfTest, ResourceLifetimeLeakageProbe) {
 }
 
 TEST(GpuZeroCopyPerfTest, FrameworkWriterReaderEndToEndPressure) {
+  const char* test_tmpdir = std::getenv("TEST_TMPDIR");
+  if (test_tmpdir != nullptr) {
+    const std::string lock_base = std::string(test_tmpdir) + "/gpu_writer_test";
+    ASSERT_TRUE(::mkdir(lock_base.c_str(), 0700) == 0 || errno == EEXIST);
+    ASSERT_EQ(::setenv("XDG_RUNTIME_DIR", lock_base.c_str(), 1), 0);
+  }
   int device_count = 0;
   if (cudaGetDeviceCount(&device_count) != cudaSuccess || device_count == 0) {
     GTEST_SKIP() << "A CUDA device is required for framework stress test.";

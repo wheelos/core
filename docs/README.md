@@ -9,12 +9,11 @@ This repository has two documentation layers:
 
 1. [Installation and setup](getting-started/installation.md)
 2. [Quick start](getting-started/quickstart.md)
-3. [GPU zero-copy usage guide](guides/gpu-zero-copy.md)
-4. [Deployment options](guides/build-and-run.md)
+3. [Deployment options](guides/build-and-run.md)
 
 ## Guides
 
-### Examples and usage guides
+### Application workflows
 
 - [Publish/Subscribe Basics](guides/pubsub-basics.md)
 - [Service and Client](guides/service-client.md)
@@ -23,16 +22,23 @@ This repository has two documentation layers:
 - [Python Quick Start](guides/python-quickstart.md)
 - [GPU zero-copy usage guide](guides/gpu-zero-copy.md)
 - [Zero-Copy and Sensor Data](guides/zero-copy-and-sensor-data.md)
-
-### Additional operational guides
-
-- [Secondary development and integration](guides/secondary-development.md)
-- [Release and verification](guides/release-and-verification.md)
-- [Release validation](guides/release-validation.md)
-- [Performance testing](guides/performance-testing.md)
 - [Component development](guides/component-development.md)
-- [Tools and monitoring](guides/tools-and-monitoring.md)
+
+### Build, deployment, and integration
+
+- [Source build and run](guides/source-build-and-run.md)
+- [Package installation and run](guides/package-installation.md)
+- [Secondary development and integration](guides/secondary-development.md)
+- [Deployment options](guides/build-and-run.md)
+- [Release and verification](guides/release-and-verification.md)
+- [Release validation in a clean x86 container](guides/release-validation.md)
+
+### Runtime operations and performance
+
 - [Topology and transport](guides/topology-and-transport.md)
+- [Tools and monitoring](guides/tools-and-monitoring.md)
+- [Scheduler strategy discovery and optimization](guides/scheduler-optimization.md)
+- [Performance testing](guides/performance-testing.md)
 - [Common issues](troubleshooting/common-issues.md)
 
 ## Examples

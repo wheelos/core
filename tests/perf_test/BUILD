@@ -1,4 +1,5 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_test")
+load("@rules_cuda//cuda:defs.bzl", "requires_cuda")
 load("@rules_python//python:defs.bzl", "py_test")
 
 package(default_visibility = ["//visibility:public"])
@@ -135,7 +136,7 @@ cc_test(
     name = "gpu_zero_copy_perf_test",
     size = "small",
     srcs = ["gpu_zero_copy_perf_test.cc"],
-    linkopts = ["-lcudart"],
+    target_compatible_with = requires_cuda(),
     deps = [
         "//cyber:cyber_core",
         "//cyber/transport/nvsci:gpu_channel_session",
@@ -150,8 +151,8 @@ cc_test(
     name = "cuda_ipc_process_test",
     size = "medium",
     srcs = ["cuda_ipc_process_test.cc"],
-    linkopts = ["-lcudart"],
     tags = ["local"],
+    target_compatible_with = requires_cuda(),
     deps = [
         "//cyber/transport/nvsci:nvsci_buf_pool",
         "@com_google_googletest//:gtest_main",

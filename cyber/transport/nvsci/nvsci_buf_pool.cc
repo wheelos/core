@@ -42,6 +42,7 @@ namespace {
 
 static std::atomic<uint64_t> g_pool_instance_counter{1};
 
+#if defined(CYBER_USE_CUDA_IPC)
 static int CreateUniqueSharedMemory(uint64_t pool_uid, uint32_t slot_id,
                                     std::string* shm_name) {
   if (shm_name == nullptr) {
@@ -67,7 +68,6 @@ static int CreateUniqueSharedMemory(uint64_t pool_uid, uint32_t slot_id,
 }
 
 static bool IsIntegratedGpu() {
-#if defined(CYBER_USE_CUDA_IPC)
   static const bool is_integrated = []() {
     int count = 0;
     if (cudaGetDeviceCount(&count) != cudaSuccess || count <= 0) {
@@ -84,10 +84,8 @@ static bool IsIntegratedGpu() {
     return false;
   }();
   return is_integrated;
-#else
-  return false;
-#endif
 }
+#endif
 
 }  // namespace
 
@@ -145,7 +143,9 @@ bool NvSciBufPool::Initialize() {
     return true;
   }
 
+#if defined(CYBER_USE_CUDA_IPC)
   const bool use_uma_shm = IsIntegratedGpu() || config_.force_uma_shm;
+#endif
 
   slots_.reserve(config_.slot_count);
   for (uint32_t i = 0; i < config_.slot_count; ++i) {

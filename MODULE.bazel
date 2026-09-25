@@ -6,6 +6,7 @@ module(
 
 bazel_dep(name = "bazel_skylib", version = "1.7.1")
 bazel_dep(name = "rules_cc", version = "0.0.9")
+bazel_dep(name = "rules_cuda", version = "0.3.0")
 bazel_dep(name = "rules_pkg", version = "0.10.1")
 bazel_dep(name = "rules_proto", version = "6.0.2")
 bazel_dep(name = "pybind11_bazel", version = "2.13.6")
@@ -38,3 +39,10 @@ bazel_dep(name = "wheelos_fastdds", version = "2.14.6.bcr.3", repo_name = "fastd
 bazel_dep(name = "iceoryx", version = "2.95.4")
 bazel_dep(name = "liburing", version = "2.14.bcr.1")
 bazel_dep(name = "yaml-cpp", version = "0.9.0")
+
+cuda = use_extension("@rules_cuda//cuda:extensions.bzl", "toolchain")
+cuda.toolkit(
+    name = "cuda",
+    toolkit_path = "/usr/local/cuda",
+)
+use_repo(cuda, "cuda")

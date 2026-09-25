@@ -1,6 +1,30 @@
 load("@rules_pkg//:pkg.bzl", "pkg_deb", "pkg_tar")
 load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_files", "strip_prefix")
+load("@bazel_skylib//lib:selects.bzl", "selects")
 load("//tools/sdk:cc_headers.bzl", "cc_sdk_headers")
+
+config_setting(
+    name = "cuda_enabled",
+    values = {"define": "with_cuda=true"},
+)
+
+config_setting(
+    name = "cuda_ipc_enabled",
+    values = {"define": "use_cuda_ipc=true"},
+)
+
+config_setting(
+    name = "nvsci_enabled",
+    values = {"define": "use_nvsci=true"},
+)
+
+selects.config_setting_group(
+    name = "gpu_platform_enabled",
+    match_any = [
+        ":cuda_enabled",
+        ":nvsci_enabled",
+    ],
+)
 
 cc_sdk_headers(
     name = "wheelos_cyber_headers",

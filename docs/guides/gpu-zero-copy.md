@@ -13,8 +13,9 @@ copying the image payload through a CPU message buffer. It uses the
 
 ## Prerequisites
 
-Use a host with a supported CUDA runtime and an available CUDA device. Install
-the repository build dependencies first:
+The default Bazel configuration is CPU-only and does not require CUDA headers
+or libraries. GPU targets are enabled explicitly on a CUDA host. Install the
+repository build dependencies first:
 
 ```bash
 sudo bash scripts/deploy/build.sh
@@ -26,11 +27,22 @@ see [Zero-Copy and Sensor Data](zero-copy-and-sensor-data.md).
 
 ## Build the examples
 
-From the repository root:
+From the repository root, use `--config=cuda` for x86 with CUDA IPC. It enables
+the repository's `rules_cuda` toolchain and expects the CUDA toolkit at
+`/usr/local/cuda` (the path configured in `MODULE.bazel`):
 
 ```bash
-bazel build //examples:gpu_talker //examples:gpu_listener
+bazel build --config=cuda \
+  //examples:gpu_talker \
+  //examples:gpu_listener \
+  //examples:gpu_inference_talker \
+  //examples:gpu_inference_listener
 ```
+
+On a target configured for NvSci, use `--config=orin` instead; the target
+NvSci SDK libraries must be installed. CUDA-only GPU targets are marked
+incompatible in the default CPU build, so commands such as `bazel build
+//cyber/...` do not try to compile CUDA examples or tests.
 
 Before running binaries from `bazel-bin`, source the runtime environment:
 
@@ -95,6 +107,59 @@ directly for inference, preprocessing, encoding, or another GPU operation.
 Do not copy the payload to a CPU buffer unless the application explicitly
 needs a CPU representation.
 
+## Image-to-inference example
+
+`gpu_inference_talker` and `gpu_inference_listener` form a finite publisher and
+a long-running consumer on `camera/inference`. The publisher accepts a binary
+P6 PPM image with 8-bit RGB channels, uploads it to a pinned host staging
+buffer, then copies it into each loaned GPU slot. After publication, the
+listener runs a small two-class linear classifier directly on
+`GpuMsgView::device_ptr()`; it copies only the small inference result back to
+the CPU. This is a lightweight CUDA-kernel example, not a PyTorch model.
+
+Create a small red test image:
+
+```bash
+python3 - <<'PY'
+with open("/tmp/red.ppm", "wb") as image:
+    image.write(b"P6\n224 224\n255\n")
+    image.write(bytes((255, 0, 0)) * (224 * 224))
+PY
+```
+
+Start the listener first, then publish 20 frames:
+
+```bash
+# Terminal 1
+source scripts/env/runtime.bash
+./bazel-bin/examples/gpu_inference_listener 1
+
+# Terminal 2
+source scripts/env/runtime.bash
+./bazel-bin/examples/gpu_inference_talker /tmp/red.ppm 20
+```
+
+The two processes must overlap during startup: the listener bootstraps its GPU
+session from the publisher, and the publisher waits for listener registration.
+Both wait up to 30 seconds, so launch the publisher soon after starting the
+listener rather than waiting for the listener's ready log first.
+The example requires a registered consumer for each publish and waits for an
+ACK of the first frame before sending the rest. That bounded data-plane
+handshake detects a listener that is registered but not yet receiving data,
+instead of relying on a fixed discovery delay.
+With the runtime environment above, GLOG output is written under `data/log`.
+
+Class `1` corresponds to red-dominant input; class `0` corresponds to dark
+input. The listener reports the class, channel means, GPU kernel time, and
+end-to-end age. Press `Ctrl+C` in the listener after the sender exits. The
+sender waits for a registered consumer and for all published slots to be
+returned before exiting.
+
+The image file is uploaded once per frame on the producer. That H2D operation
+is input acquisition, not a transport copy. On the consumer, the full image
+is never copied: the classifier receives the imported slot pointer directly,
+and only its compact result is copied to host memory.
+
 For the complete ownership sequence, the example demonstrates:
 
 1. The talker borrows a slot with `GpuWriter::Loan()`.
@@ -137,6 +202,9 @@ acceptable.
 - **Size the pool for in-flight work.** With `DROP`, a full pool drops frames.
   A slow or disconnected consumer can keep slots unavailable until timeout
   handling quarantines them.
+- **Keep producer writes on the loan's stream.** Dropping an unpublished loan
+  records a producer fence before its slot becomes reusable; GPU work submitted
+  on other streams must be synchronized by the application first.
 - **Shut down in order.** Stop publishing, shut down the reader/writer, wait
   for the configured CUDA streams, and only then destroy the streams.
 - **Account for platform behavior.** Discrete GPU mode uses CUDA IPC for

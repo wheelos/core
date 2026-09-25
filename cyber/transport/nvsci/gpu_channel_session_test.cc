@@ -70,6 +70,121 @@ TEST(GpuChannelSessionTest, FanoutAndCompletion) {
   EXPECT_EQ(pool->GetSlotState(0), SlotState::FREE);
 }
 
+TEST(GpuChannelSessionTest, PublishCanRequireRegisteredConsumer) {
+  NvSciBufPoolConfig config;
+  config.slot_count = 1;
+  config.slot_size = 1024;
+  auto pool = std::make_shared<NvSciBufPool>(config);
+  ASSERT_TRUE(pool->Initialize());
+
+  auto sync_engine = std::make_shared<NvSciSyncEngine>(20);
+  GpuChannelSession session(1007, pool, sync_engine);
+  GpuTransportPacket packet;
+
+  int slot = session.AcquireSlot();
+  ASSERT_EQ(slot, 0);
+  const auto producer_fence = sync_engine->GenerateSignalFence(nullptr);
+  ASSERT_TRUE(producer_fence.IsValid());
+  EXPECT_FALSE(session.OnPublish(slot, producer_fence, &packet, true));
+  EXPECT_EQ(pool->GetSlotState(slot), SlotState::LOANED);
+  ASSERT_TRUE(pool->ReleaseSlot(slot, producer_fence));
+  sync_engine->MarkFenceCompleted(producer_fence.fence_id);
+
+  slot = session.AcquireSlot();
+  ASSERT_EQ(slot, 0);
+  EXPECT_TRUE(session.OnPublish(slot, producer_fence, &packet));
+  EXPECT_EQ(pool->GetSlotState(slot), SlotState::FREE);
+
+  session.RegisterConsumer(800);
+  session.UnregisterConsumer(800);
+  slot = session.AcquireSlot();
+  ASSERT_EQ(slot, 0);
+  EXPECT_FALSE(session.OnPublish(slot, producer_fence, &packet, true));
+  ASSERT_TRUE(pool->ReleaseSlot(slot, NvSciSyncFence{}));
+
+  session.RegisterConsumer(801);
+  slot = session.AcquireSlot();
+  ASSERT_EQ(slot, 0);
+  ASSERT_TRUE(session.OnPublish(slot, producer_fence, &packet, true));
+  EXPECT_EQ(pool->GetSlotState(slot), SlotState::IN_USE);
+
+  GpuCompletionPacket completion;
+  completion.channel_id = session.channel_id();
+  completion.slot_id = static_cast<uint32_t>(slot);
+  completion.seq_num = packet.seq_num;
+  completion.consumer_id = 801;
+  completion.postfence = sync_engine->GenerateSignalFence(nullptr);
+  ASSERT_TRUE(session.OnCompletion(completion));
+  EXPECT_EQ(pool->GetSlotState(slot), SlotState::FREE);
+}
+
+TEST(GpuChannelSessionTest, DelayedFanoutCompletionsGateMultipleSlots) {
+  NvSciBufPoolConfig config;
+  config.slot_count = 2;
+  config.slot_size = 1024;
+  auto pool = std::make_shared<NvSciBufPool>(config);
+  ASSERT_TRUE(pool->Initialize());
+
+  auto sync_engine = std::make_shared<NvSciSyncEngine>(21);
+  GpuChannelSession session(1008, pool, sync_engine);
+  session.RegisterConsumer(901);
+  session.RegisterConsumer(902);
+
+  const int first_slot = session.AcquireSlot();
+  const int second_slot = session.AcquireSlot();
+  ASSERT_EQ(first_slot, 0);
+  ASSERT_EQ(second_slot, 1);
+  GpuTransportPacket first_packet;
+  GpuTransportPacket second_packet;
+  ASSERT_TRUE(session.OnPublish(
+      first_slot, sync_engine->GenerateSignalFence(nullptr), &first_packet));
+  ASSERT_TRUE(session.OnPublish(
+      second_slot, sync_engine->GenerateSignalFence(nullptr), &second_packet));
+  EXPECT_EQ(session.AcquireSlot(), -1);
+
+  auto complete_for = [&](const GpuTransportPacket& packet,
+                          uint64_t consumer_id, NvSciSyncFence* postfence) {
+    GpuCompletionPacket completion;
+    completion.channel_id = session.channel_id();
+    completion.slot_id = packet.slot_id;
+    completion.seq_num = packet.seq_num;
+    completion.consumer_id = consumer_id;
+    completion.postfence = sync_engine->GenerateSignalFence(nullptr);
+    *postfence = completion.postfence;
+    return session.OnCompletion(completion);
+  };
+
+  NvSciSyncFence first_reader_first_slot;
+  NvSciSyncFence first_reader_second_slot;
+  EXPECT_TRUE(complete_for(first_packet, 901, &first_reader_first_slot));
+  EXPECT_TRUE(complete_for(second_packet, 901, &first_reader_second_slot));
+  EXPECT_EQ(pool->GetSlotState(first_slot), SlotState::IN_USE);
+  EXPECT_EQ(pool->GetSlotState(second_slot), SlotState::IN_USE);
+
+  NvSciSyncFence second_reader_first_slot;
+  EXPECT_TRUE(complete_for(first_packet, 902, &second_reader_first_slot));
+  EXPECT_EQ(pool->GetSlotState(first_slot), SlotState::FREE);
+  EXPECT_EQ(pool->GetSlotState(second_slot), SlotState::IN_USE);
+  EXPECT_EQ(session.AcquireSlot(), -1);
+
+  sync_engine->MarkFenceCompleted(first_reader_first_slot.fence_id);
+  sync_engine->MarkFenceCompleted(second_reader_first_slot.fence_id);
+  const int first_reused_slot = session.AcquireSlot();
+  ASSERT_EQ(first_reused_slot, first_slot);
+
+  NvSciSyncFence second_reader_second_slot;
+  EXPECT_TRUE(complete_for(second_packet, 902, &second_reader_second_slot));
+  EXPECT_EQ(pool->GetSlotState(second_slot), SlotState::FREE);
+  EXPECT_EQ(session.AcquireSlot(), -1);
+
+  sync_engine->MarkFenceCompleted(first_reader_second_slot.fence_id);
+  sync_engine->MarkFenceCompleted(second_reader_second_slot.fence_id);
+  const int second_reused_slot = session.AcquireSlot();
+  ASSERT_EQ(second_reused_slot, second_slot);
+  ASSERT_TRUE(pool->ReleaseSlot(first_reused_slot, NvSciSyncFence{}));
+  ASSERT_TRUE(pool->ReleaseSlot(second_reused_slot, NvSciSyncFence{}));
+}
+
 TEST(GpuChannelSessionTest, ReapHungConsumer) {
   NvSciBufPoolConfig config;
   config.slot_count = 1;

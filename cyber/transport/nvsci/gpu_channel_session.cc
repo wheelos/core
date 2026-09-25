@@ -96,7 +96,8 @@ size_t GpuChannelSession::GetConsumerCount() const {
 }
 
 bool GpuChannelSession::OnPublish(int slot_id, const NvSciSyncFence& prefence,
-                                  GpuTransportPacket* out_packet) {
+                                  GpuTransportPacket* out_packet,
+                                  bool require_consumer) {
   if (!pool_ || slot_id < 0 || !out_packet) {
     return false;
   }
@@ -107,6 +108,9 @@ bool GpuChannelSession::OnPublish(int slot_id, const NvSciSyncFence& prefence,
       std::chrono::duration_cast<std::chrono::nanoseconds>(now).count());
 
   const int32_t consumer_count = static_cast<int32_t>(consumers_.size());
+  if (require_consumer && consumer_count == 0) {
+    return false;
+  }
   // If no consumers registered, mark ref_count = 1 so slot can be released
   // immediately
   const int32_t effective_ref = (consumer_count > 0) ? consumer_count : 1;

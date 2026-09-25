@@ -6,9 +6,11 @@
  *****************************************************************************/
 
 #include <poll.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include <cerrno>
 #include <chrono>
 #include <cstdint>
 #include <cstdlib>
@@ -129,6 +131,16 @@ int RunReader(int descriptor_fd, int result_fd) {
     return 17;
   }
 
+  GpuWriterOptions duplicate_writer_options;
+  duplicate_writer_options.slot_count = 1;
+  duplicate_writer_options.slot_size = 4096;
+  duplicate_writer_options.stream = streams[0];
+  auto duplicate_writer = CreateGpuWriter<IpcMeta>(
+      node, "test/gpu_cross_process", duplicate_writer_options);
+  if (duplicate_writer) {
+    return 18;
+  }
+
   const uint8_t ready = kChildReady;
   if (!WriteAll(result_fd, &ready, sizeof(ready))) {
     return 15;
@@ -160,6 +172,12 @@ TEST(GpuWriterReaderIpcTest, ForkedWriterAndReaderBootstrapAutomatically) {
   if (std::getenv("CYBER_GPU_IPC_E2E") == nullptr) {
     GTEST_SKIP()
         << "Set CYBER_GPU_IPC_E2E=1 to run the process-level RTPS test.";
+  }
+  const char* test_tmpdir = std::getenv("TEST_TMPDIR");
+  if (test_tmpdir != nullptr) {
+    const std::string lock_base = std::string(test_tmpdir) + "/gpu_writer_test";
+    ASSERT_TRUE(::mkdir(lock_base.c_str(), 0700) == 0 || errno == EEXIST);
+    ASSERT_EQ(::setenv("XDG_RUNTIME_DIR", lock_base.c_str(), 1), 0);
   }
   // Use a test-local DDS domain so unrelated Cyber processes cannot exhaust
   // the shared participant-id range or collide on their UDP ports.
@@ -222,8 +240,7 @@ TEST(GpuWriterReaderIpcTest, ForkedWriterAndReaderBootstrapAutomatically) {
   GpuWriterOptions options;
   options.slot_count = 1;
   options.slot_size = 4096;
-  options.force_uma_shm =
-      std::getenv("CYBER_GPU_FORCE_UMA_SHM") != nullptr;
+  options.force_uma_shm = std::getenv("CYBER_GPU_FORCE_UMA_SHM") != nullptr;
   cudaStream_t writer_stream = nullptr;
   ASSERT_EQ(cudaStreamCreateWithFlags(&writer_stream, cudaStreamNonBlocking),
             cudaSuccess);

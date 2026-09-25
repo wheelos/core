@@ -60,6 +60,8 @@ struct GpuWriterOptions {
   uint64_t quarantine_grace_period_ms = 500;
   uint64_t cleanup_interval_ms = 100;
   bool force_uma_shm = false;
+  // Reject a publish atomically if no consumer is registered for the session.
+  bool require_consumer = false;
 };
 
 template <typename MetaT>
@@ -85,12 +87,7 @@ class GpuLoan {
     }
   }
 
-  ~GpuLoan() {
-    if (!published_ && slot_id_ >= 0 && session_ && session_->pool()) {
-      NvSciSyncFence empty_fence{};
-      session_->pool()->ReleaseSlot(slot_id_, empty_fence);
-    }
-  }
+  ~GpuLoan() { ReleaseUnpublished(); }
 
   GpuLoan(const GpuLoan&) = delete;
   GpuLoan& operator=(const GpuLoan&) = delete;
@@ -112,10 +109,7 @@ class GpuLoan {
 
   GpuLoan& operator=(GpuLoan&& other) noexcept {
     if (this != &other) {
-      if (!published_ && slot_id_ >= 0 && session_ && session_->pool()) {
-        NvSciSyncFence empty_fence{};
-        session_->pool()->ReleaseSlot(slot_id_, empty_fence);
-      }
+      ReleaseUnpublished();
       slot_id_ = other.slot_id_;
       dev_ptr_ = other.dev_ptr_;
       capacity_ = other.capacity_;
@@ -173,6 +167,24 @@ class GpuLoan {
   template <typename>
   friend class GpuWriter;
 
+  void ReleaseUnpublished() {
+    if (published_ || slot_id_ < 0 || !session_ || !session_->pool()) {
+      return;
+    }
+    NvSciSyncFence fence{};
+    if (stream_ != nullptr && session_->sync_engine()) {
+      fence = session_->sync_engine()->GenerateSignalFence(stream_);
+      if (!fence.IsValid()) {
+        AERROR << "Failed to fence abandoned GPU loan; retaining slot "
+               << slot_id_;
+        return;
+      }
+    }
+    if (!session_->pool()->ReleaseSlot(slot_id_, fence)) {
+      AERROR << "Failed to release abandoned GPU loan for slot " << slot_id_;
+    }
+  }
+
   int slot_id_ = -1;
   void* dev_ptr_ = nullptr;
   size_t capacity_ = 0;
@@ -216,8 +228,9 @@ class GpuWriter {
     config.alignment = options_.alignment;
     config.force_uma_shm = options_.force_uma_shm;
 
-    session_ = GpuChannelManager::Instance()->GetOrCreateSession(
-        channel_name_, config, options_.sync_engine_id);
+    auto* channel_manager = GpuChannelManager::Instance();
+    session_ = channel_manager->GetOrCreateSession(channel_name_, config,
+                                                   options_.sync_engine_id);
     if (!session_) {
       AERROR << "Failed to initialize GpuChannelSession for " << channel_name_;
       return false;
@@ -225,11 +238,15 @@ class GpuWriter {
     if (!session_->pool() ||
         session_->pool()->GetSlotCount() != options_.slot_count ||
         session_->pool()->GetSlotCapacity() != options_.slot_size ||
-        session_->pool()->GetAlignment() != options_.alignment ||
-        !GpuChannelManager::Instance()->ClaimWriterSession(channel_name_,
-                                                           session_)) {
-      AERROR << "GPU channel already has a writer or incompatible pool: "
+        session_->pool()->GetAlignment() != options_.alignment) {
+      AERROR << "GPU channel has an incompatible pool: " << channel_name_;
+      session_ = nullptr;
+      return false;
+    }
+    if (!channel_manager->ClaimWriterSession(channel_name_, session_)) {
+      AERROR << "GPU channel already has a writer on this host: "
              << channel_name_;
+      channel_manager->DiscardUnclaimedSession(channel_name_, session_);
       session_ = nullptr;
       return false;
     }
@@ -305,6 +322,8 @@ class GpuWriter {
     std::shared_ptr<GpuControlSubscription> ack_reader;
     std::shared_ptr<GpuControlSubscription> session_request_reader;
     std::shared_ptr<GpuControlSubscription> registration_reader;
+    std::shared_ptr<Writer<message::RawMessage>> session_writer;
+    std::shared_ptr<Writer<message::RawMessage>> registration_ack_writer;
     stop_maintenance_.store(true, std::memory_order_release);
     if (maintenance_thread_.joinable()) {
       maintenance_thread_.join();
@@ -319,10 +338,10 @@ class GpuWriter {
       init_ = false;
       data_writer = std::move(data_writer_);
       ack_reader = std::move(ack_reader_);
-      session_writer_ = nullptr;
+      session_writer = std::move(session_writer_);
       session_request_reader = std::move(session_request_reader_);
       registration_reader = std::move(registration_reader_);
-      registration_ack_writer_ = nullptr;
+      registration_ack_writer = std::move(registration_ack_writer_);
       remote_consumers_.clear();
       remote_sync_descriptors_.clear();
       if (writer_session_owned_ && session_) {
@@ -332,6 +351,12 @@ class GpuWriter {
       writer_session_owned_ = false;
       session_ = nullptr;
     }
+    registration_reader.reset();
+    session_request_reader.reset();
+    ack_reader.reset();
+    registration_ack_writer.reset();
+    session_writer.reset();
+    data_writer.reset();
     if (release_writer_session) {
       GpuChannelManager::Instance()->ReleaseWriterSession(channel_name_,
                                                           session_id);
@@ -480,7 +505,12 @@ class GpuWriter {
 
     // 3. Update session in-flight slot tracking
     GpuTransportPacket packet;
-    if (!session->OnPublish(loan.slot_id_, prefence, &packet)) {
+    if (!session->OnPublish(loan.slot_id_, prefence, &packet,
+                            options_.require_consumer)) {
+      const auto pool = session->pool();
+      if (pool && pool->ReleaseSlot(loan.slot_id_, prefence)) {
+        loan.published_ = true;
+      }
       return false;
     }
 

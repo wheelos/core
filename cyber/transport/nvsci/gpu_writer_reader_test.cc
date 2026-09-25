@@ -12,8 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <sys/stat.h>
+
+#include <atomic>
+#include <cerrno>
 #include <chrono>
 #include <cstdint>
+#include <cstdlib>
 #include <memory>
 #include <thread>
 
@@ -38,6 +43,13 @@ struct TestFrameMeta {
 class GpuWriterReaderTest : public ::testing::Test {
  protected:
   void SetUp() override {
+    const char* test_tmpdir = std::getenv("TEST_TMPDIR");
+    if (test_tmpdir != nullptr) {
+      const std::string lock_base =
+          std::string(test_tmpdir) + "/gpu_writer_test";
+      ASSERT_TRUE(::mkdir(lock_base.c_str(), 0700) == 0 || errno == EEXIST);
+      ASSERT_EQ(::setenv("XDG_RUNTIME_DIR", lock_base.c_str(), 1), 0);
+    }
     apollo::cyber::Init("gpu_writer_reader_test");
     writer_node_ = apollo::cyber::CreateNode("test_writer_node");
     reader_node_ = apollo::cyber::CreateNode("test_reader_node");
@@ -164,7 +176,8 @@ TEST_F(GpuWriterReaderTest, EndToEndPublishAndReceive) {
   EXPECT_EQ(session->pool()->GetSlotState(0), SlotState::FREE);
 }
 
-TEST_F(GpuWriterReaderTest, BackpressureDropPolicy) {
+TEST_F(GpuWriterReaderTest,
+       BackpressureDropPolicyRejectsLoanWhenSlotIsBorrowed) {
   const std::string channel = "test/gpu_backpressure_channel";
 
   GpuWriterOptions w_opts;
@@ -182,12 +195,130 @@ TEST_F(GpuWriterReaderTest, BackpressureDropPolicy) {
   auto loan2 = writer->Loan();
   EXPECT_FALSE(loan2.has_value());
 
-  // Dropping loan1 without publishing cancels and frees the slot
+  // Dropping loan1 without publishing cancels and frees the slot.
   loan1.reset();
 
   auto loan3 = writer->Loan();
-  EXPECT_TRUE(loan3.has_value());
-  EXPECT_FALSE(writer->Publish(std::move(*loan3)));
+  ASSERT_TRUE(loan3.has_value());
+  loan3.reset();
+}
+
+TEST_F(GpuWriterReaderTest, AbandonedLoanWaitsForProducerStreamBeforeReuse) {
+  if (!writer_stream_) {
+    GTEST_SKIP() << "CUDA device is unavailable";
+  }
+  GpuWriterOptions options;
+  options.slot_count = 1;
+  options.slot_size = 1024;
+  options.stream = writer_stream_;
+  const std::string channel = "test/gpu_abandoned_loan";
+  auto writer = CreateGpuWriter<TestFrameMeta>(writer_node_, channel, options);
+  ASSERT_NE(writer, nullptr);
+  auto session = GpuChannelManager::Instance()->GetSession(channel);
+  ASSERT_NE(session, nullptr);
+  ASSERT_EQ(session->pool()->GetBackend(), GpuBufferBackend::CUDA_IPC);
+
+  auto loan = writer->Loan();
+  ASSERT_TRUE(loan.has_value());
+  std::atomic<bool> release{false};
+  std::atomic<bool> entered{false};
+  struct StreamDelay {
+    std::atomic<bool>* release;
+    std::atomic<bool>* entered;
+  } delay{&release, &entered};
+  struct ReleaseStreamOnExit {
+    std::atomic<bool>* release;
+    cudaStream_t stream;
+    ~ReleaseStreamOnExit() {
+      release->store(true);
+      cudaStreamSynchronize(stream);
+    }
+  } release_guard{&release, writer_stream_};
+  ASSERT_EQ(cudaLaunchHostFunc(
+                writer_stream_,
+                [](void* data) {
+                  auto* state = static_cast<StreamDelay*>(data);
+                  state->entered->store(true);
+                  const auto deadline = std::chrono::steady_clock::now() +
+                                        std::chrono::seconds(5);
+                  while (!state->release->load() &&
+                         std::chrono::steady_clock::now() < deadline) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                  }
+                },
+                &delay),
+            cudaSuccess);
+  ASSERT_EQ(cudaMemsetAsync(loan->device_ptr(), 0x7b, options.slot_size,
+                            writer_stream_),
+            cudaSuccess);
+  loan.reset();
+
+  EXPECT_EQ(session->pool()->GetSlotState(0), SlotState::FREE);
+  EXPECT_FALSE(session->pool()->GetLastPostFences(0).empty());
+  EXPECT_EQ(session->AcquireSlot(), -1);
+  release.store(true);
+  ASSERT_EQ(cudaStreamSynchronize(writer_stream_), cudaSuccess);
+  EXPECT_TRUE(entered.load());
+  const int reused = session->AcquireSlot();
+  ASSERT_EQ(reused, 0);
+  ASSERT_TRUE(session->pool()->ReleaseSlot(reused, NvSciSyncFence{}));
+}
+
+TEST_F(GpuWriterReaderTest, BackpressureTimeoutWaitsForSlotThenFails) {
+  const std::string channel = "test/gpu_backpressure_timeout_channel";
+  GpuWriterOptions options;
+  options.slot_count = 1;
+  options.slot_size = 1024;
+  options.backpressure = GpuBackpressurePolicy::TIMEOUT;
+  options.timeout_ms = 30;
+  options.force_uma_shm = true;
+
+  auto writer = CreateGpuWriter<TestFrameMeta>(writer_node_, channel, options);
+  ASSERT_NE(writer, nullptr);
+  auto session = GpuChannelManager::Instance()->GetSession(channel);
+  ASSERT_NE(session, nullptr);
+
+  const int held_slot = session->pool()->AcquireSlot();
+  ASSERT_EQ(held_slot, 0);
+  const auto start = std::chrono::steady_clock::now();
+  EXPECT_FALSE(writer->Loan().has_value());
+  const auto elapsed = std::chrono::steady_clock::now() - start;
+  EXPECT_GE(elapsed, std::chrono::milliseconds(20));
+  EXPECT_LT(elapsed, std::chrono::seconds(5));
+
+  ASSERT_TRUE(session->pool()->ReleaseSlot(held_slot, NvSciSyncFence{}));
+  auto recovered_loan = writer->Loan();
+  ASSERT_TRUE(recovered_loan.has_value());
+  recovered_loan.reset();
+}
+
+TEST_F(GpuWriterReaderTest, RequireConsumerRejectsPublishWithoutRegistration) {
+  if (!writer_stream_) {
+    GTEST_SKIP() << "CUDA device is unavailable";
+  }
+
+  const std::string channel = "test/gpu_require_consumer_channel";
+  GpuWriterOptions options;
+  options.slot_count = 1;
+  options.slot_size = 1024;
+  options.stream = writer_stream_;
+  options.require_consumer = true;
+  options.force_uma_shm = true;
+
+  auto writer = CreateGpuWriter<TestFrameMeta>(writer_node_, channel, options);
+  ASSERT_NE(writer, nullptr);
+  auto session = GpuChannelManager::Instance()->GetSession(channel);
+  ASSERT_NE(session, nullptr);
+  ASSERT_EQ(session->GetConsumerCount(), 0U);
+
+  auto loan = writer->Loan();
+  ASSERT_TRUE(loan.has_value());
+  ASSERT_EQ(session->pool()->GetSlotState(0), SlotState::LOANED);
+
+  EXPECT_FALSE(writer->Publish(std::move(*loan)));
+  loan.reset();
+  EXPECT_EQ(session->pool()->GetSlotState(0), SlotState::FREE);
+  EXPECT_FALSE(session->pool()->GetLastPostFences(0).empty());
 }
 
 TEST_F(GpuWriterReaderTest, OneWriterFansOutToMultipleReadersOnSameNode) {
@@ -265,6 +396,154 @@ TEST_F(GpuWriterReaderTest, OneWriterFansOutToMultipleReadersOnSameNode) {
   if (second_reader_stream) {
     cudaStreamDestroy(second_reader_stream);
   }
+}
+
+TEST_F(GpuWriterReaderTest, DelayedReadersBackpressureAcrossMultipleSlots) {
+  if (!writer_stream_ || !reader_stream_) {
+    GTEST_SKIP() << "CUDA device is unavailable";
+  }
+
+  const std::string channel = "test/gpu_multi_slot_backpressure_channel";
+  GpuWriterOptions writer_options;
+  writer_options.slot_count = 2;
+  writer_options.slot_size = 1024;
+  writer_options.stream = writer_stream_;
+  writer_options.backpressure = GpuBackpressurePolicy::DROP;
+  writer_options.force_uma_shm = true;
+  auto writer =
+      CreateGpuWriter<TestFrameMeta>(writer_node_, channel, writer_options);
+  ASSERT_NE(writer, nullptr);
+
+  std::atomic<uint32_t> first_count{0};
+  std::atomic<uint32_t> second_count{0};
+  std::atomic<bool> hold_callbacks{false};
+  std::atomic<bool> release_callbacks{false};
+  std::shared_ptr<GpuReader<TestFrameMeta>> first_reader;
+  std::shared_ptr<GpuReader<TestFrameMeta>> second_reader;
+  struct ReleaseCallbacksOnExit {
+    std::atomic<bool>* release;
+    ~ReleaseCallbacksOnExit() { release->store(true); }
+  } release_guard{&release_callbacks};
+
+  const auto block_callback =
+      [&hold_callbacks, &release_callbacks](std::atomic<uint32_t>* count) {
+        return [&hold_callbacks, &release_callbacks,
+                count](GpuMsgView<TestFrameMeta>&) {
+          count->fetch_add(1);
+          if (!hold_callbacks.load()) {
+            return;
+          }
+          const auto deadline =
+              std::chrono::steady_clock::now() + std::chrono::seconds(5);
+          while (!release_callbacks.load() &&
+                 std::chrono::steady_clock::now() < deadline) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+          }
+        };
+      };
+
+  GpuReaderOptions reader_options;
+  reader_options.stream = reader_stream_;
+  first_reader = CreateGpuReader<TestFrameMeta>(
+      reader_node_, channel, reader_options, block_callback(&first_count));
+  second_reader = CreateGpuReader<TestFrameMeta>(
+      reader_node_, channel, reader_options, block_callback(&second_count));
+  ASSERT_NE(first_reader, nullptr);
+  ASSERT_NE(second_reader, nullptr);
+
+  auto session = GpuChannelManager::Instance()->GetSession(channel);
+  ASSERT_NE(session, nullptr);
+  for (int attempt = 0;
+       attempt < 500 &&
+       (session->GetConsumerCount() != 2 || !writer->HasReader() ||
+        !first_reader->HasWriter() || !second_reader->HasWriter());
+       ++attempt) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  ASSERT_EQ(session->GetConsumerCount(), 2U);
+  ASSERT_TRUE(writer->HasReader());
+  ASSERT_TRUE(first_reader->HasWriter());
+  ASSERT_TRUE(second_reader->HasWriter());
+  std::this_thread::sleep_for(std::chrono::milliseconds(250));
+
+  auto warmup_loan = writer->Loan();
+  ASSERT_TRUE(warmup_loan.has_value());
+  warmup_loan->metadata().frame_id = 0;
+  ASSERT_TRUE(writer->Publish(std::move(*warmup_loan)));
+
+  for (int attempt = 0;
+       attempt < 200 && (first_count.load() != 1 || second_count.load() != 1);
+       ++attempt) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  ASSERT_EQ(first_count.load(), 1U);
+  ASSERT_EQ(second_count.load(), 1U);
+
+  for (int attempt = 0;
+       attempt < 500 && session->pool()->GetSlotState(0) != SlotState::FREE;
+       ++attempt) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  ASSERT_EQ(session->pool()->GetSlotState(0), SlotState::FREE);
+
+  const int held_spare_slot = session->AcquireSlot();
+  ASSERT_EQ(held_spare_slot, 1);
+  bool warmup_slot_reused = false;
+  for (int attempt = 0; attempt < 500; ++attempt) {
+    auto reusable_loan = writer->Loan();
+    if (reusable_loan.has_value()) {
+      reusable_loan.reset();
+      warmup_slot_reused = true;
+      break;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  ASSERT_TRUE(warmup_slot_reused);
+  ASSERT_TRUE(session->pool()->ReleaseSlot(held_spare_slot, NvSciSyncFence{}));
+
+  hold_callbacks.store(true);
+  for (uint32_t frame_id = 1; frame_id < 3; ++frame_id) {
+    auto loan = writer->Loan();
+    ASSERT_TRUE(loan.has_value());
+    loan->metadata().frame_id = frame_id;
+    ASSERT_TRUE(writer->Publish(std::move(*loan)));
+  }
+
+  for (int attempt = 0;
+       attempt < 200 && (first_count.load() < 2 || second_count.load() < 2);
+       ++attempt) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  ASSERT_EQ(first_count.load(), 2U);
+  ASSERT_EQ(second_count.load(), 2U);
+  EXPECT_EQ(session->pool()->GetSlotState(0), SlotState::IN_USE);
+  EXPECT_EQ(session->pool()->GetSlotState(1), SlotState::IN_USE);
+  EXPECT_FALSE(writer->Loan().has_value());
+
+  release_callbacks.store(true);
+  for (int attempt = 0;
+       attempt < 500 && (first_count.load() != 3 || second_count.load() != 3 ||
+                         session->pool()->GetSlotState(0) != SlotState::FREE ||
+                         session->pool()->GetSlotState(1) != SlotState::FREE);
+       ++attempt) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  EXPECT_EQ(first_count.load(), 3U);
+  EXPECT_EQ(second_count.load(), 3U);
+  EXPECT_EQ(session->pool()->GetSlotState(0), SlotState::FREE);
+  EXPECT_EQ(session->pool()->GetSlotState(1), SlotState::FREE);
+
+  bool reusable_slot_acquired = false;
+  for (int attempt = 0; attempt < 500; ++attempt) {
+    auto reusable_loan = writer->Loan();
+    if (reusable_loan.has_value()) {
+      reusable_loan.reset();
+      reusable_slot_acquired = true;
+      break;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  EXPECT_TRUE(reusable_slot_acquired);
 }
 
 TEST_F(GpuWriterReaderTest, RejectsSecondWriterForSameChannel) {

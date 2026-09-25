@@ -1,4 +1,5 @@
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+load("@rules_cuda//cuda:defs.bzl", "requires_cuda")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -26,12 +27,18 @@ cc_library(
     ],
     defines = select({
         ":use_nvsci_enabled": ["CYBER_USE_NVSCI=1"],
-        "//conditions:default": ["CYBER_USE_CUDA_IPC=1"],
+        "//conditions:default": [],
+    }) + select({
+        "//:cuda_ipc_enabled": ["CYBER_USE_CUDA_IPC=1"],
+        "//conditions:default": [],
     }),
     deps = [
         ":nvsci_types",
         "//cyber/common:log",
-    ],
+    ] + select({
+        "//:gpu_platform_enabled": ["@cuda//:cuda_runtime"],
+        "//conditions:default": [],
+    }),
 )
 
 cc_library(
@@ -40,26 +47,28 @@ cc_library(
     hdrs = ["nvsci_buf_pool.h"],
     defines = select({
         ":use_nvsci_enabled": ["CYBER_USE_NVSCI=1"],
-        "//conditions:default": ["CYBER_USE_CUDA_IPC=1"],
+        "//conditions:default": [],
+    }) + select({
+        "//:cuda_ipc_enabled": ["CYBER_USE_CUDA_IPC=1"],
+        "//conditions:default": [],
     }),
-    linkopts = select({
-        ":use_nvsci_enabled": [
-            "-lnvscibuf",
-            "-lnvscisync",
-            "-lrt",
-            "-lcudart",
-        ],
-        "//conditions:default": [
-            "-lrt",
-            "-lcudart",
-        ],
-    }),
+    linkopts = ["-lrt"] +
+               select({
+                   ":use_nvsci_enabled": [
+                       "-lnvscibuf",
+                       "-lnvscisync",
+                   ],
+                   "//conditions:default": [],
+               }),
     deps = [
         ":gpu_wire",
         ":nvsci_types",
         ":orin_nvsci_backend",
         "//cyber/common:log",
-    ],
+    ] + select({
+        "//:gpu_platform_enabled": ["@cuda//:cuda_runtime"],
+        "//conditions:default": [],
+    }),
 )
 
 cc_library(
@@ -68,25 +77,27 @@ cc_library(
     hdrs = ["nvsci_sync_engine.h"],
     defines = select({
         ":use_nvsci_enabled": ["CYBER_USE_NVSCI=1"],
-        "//conditions:default": ["CYBER_USE_CUDA_IPC=1"],
+        "//conditions:default": [],
+    }) + select({
+        "//:cuda_ipc_enabled": ["CYBER_USE_CUDA_IPC=1"],
+        "//conditions:default": [],
     }),
-    linkopts = select({
-        ":use_nvsci_enabled": [
-            "-lnvscibuf",
-            "-lnvscisync",
-            "-lrt",
-            "-lcudart",
-        ],
-        "//conditions:default": [
-            "-lrt",
-            "-lcudart",
-        ],
-    }),
+    linkopts = ["-lrt"] +
+               select({
+                   ":use_nvsci_enabled": [
+                       "-lnvscibuf",
+                       "-lnvscisync",
+                   ],
+                   "//conditions:default": [],
+               }),
     deps = [
         ":gpu_wire",
         ":nvsci_types",
         ":orin_nvsci_backend",
-    ],
+    ] + select({
+        "//:gpu_platform_enabled": ["@cuda//:cuda_runtime"],
+        "//conditions:default": [],
+    }),
 )
 
 cc_library(
@@ -143,6 +154,7 @@ cc_library(
         ":nvsci_buf_pool",
         ":nvsci_sync_engine",
         "//cyber/common:macros",
+        "//cyber/common:log",
         "//cyber/common:util",
     ],
 )
@@ -182,7 +194,7 @@ cc_test(
     name = "gpu_writer_reader_test",
     size = "small",
     srcs = ["gpu_writer_reader_test.cc"],
-    linkopts = ["-lcudart"],
+    target_compatible_with = requires_cuda(),
     deps = [
         ":gpu_reader",
         ":gpu_writer",
@@ -205,6 +217,7 @@ cc_test(
     name = "nvsci_buf_pool_test",
     size = "small",
     srcs = ["nvsci_buf_pool_test.cc"],
+    target_compatible_with = requires_cuda(),
     deps = [
         ":nvsci_buf_pool",
         "@com_google_googletest//:gtest_main",
@@ -215,6 +228,7 @@ cc_test(
     name = "nvsci_sync_engine_test",
     size = "small",
     srcs = ["nvsci_sync_engine_test.cc"],
+    target_compatible_with = requires_cuda(),
     deps = [
         ":nvsci_sync_engine",
         "@com_google_googletest//:gtest",
@@ -228,6 +242,17 @@ cc_test(
     deps = [
         ":gpu_channel_session",
         "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "gpu_channel_manager_test",
+    size = "small",
+    srcs = ["gpu_channel_manager_test.cc"],
+    deps = [
+        ":gpu_channel_manager",
+        "//cyber/common:util",
+        "@com_google_googletest//:gtest",
     ],
 )
 

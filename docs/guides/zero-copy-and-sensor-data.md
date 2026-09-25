@@ -116,15 +116,16 @@ The ownership contract is:
 Run the hardware-backed regression matrix with:
 
 ```bash
-bazel test --cache_test_results=no \
+bazel test --config=cuda --cache_test_results=no \
   //cyber/transport/nvsci:nvsci_buf_pool_test \
   //cyber/transport/nvsci:nvsci_sync_engine_test \
+  //cyber/transport/nvsci:gpu_channel_manager_test \
   //cyber/transport/nvsci:gpu_channel_session_test \
   //cyber/transport/nvsci:gpu_writer_reader_test \
   //tests/perf_test:cuda_ipc_process_test \
   //tests/perf_test:gpu_zero_copy_perf_test
 
-bazel test --cache_test_results=no \
+bazel test --config=cuda --cache_test_results=no \
   --test_env=CYBER_GPU_IPC_E2E=1 \
   --test_env=CYBER_GPU_FORCE_UMA_SHM=1 \
   //tests/integration_test:gpu_writer_reader_ipc_test
@@ -132,6 +133,8 @@ bazel test --cache_test_results=no \
 
 `CYBER_GPU_FORCE_UMA_SHM` is a validation switch for exercising the Orin
 memory path on a non-integrated CUDA GPU. Orin selects the path automatically.
+The default build is CPU-only; use `--config=cuda` for x86 CUDA IPC and
+`--config=orin` when building against a target NvSci SDK.
 
 ### Common API and ownership rules
 
@@ -153,6 +156,16 @@ explicit for the writer. A loan is writable only by its writer until
 `Publish` succeeds. A received view is read-only until its callback completes
 and `Done`/RAII completion has sent an ACK. The writer must not reuse a slot
 until every consumer registered for that publication has completed.
+
+Each GPU channel has one writer per host and supports multiple readers. A
+second writer for the same channel is rejected, including when it starts in a
+different process; use distinct channel names for independent publishers.
+The reservation uses a lock file under the current user's private
+`XDG_RUNTIME_DIR/cyber_gpu_writer` (or `HOME/cyber_gpu_writer` when
+`XDG_RUNTIME_DIR` is unset). The base must be owned by the effective UID and
+must not be writable by other users; the lock directory is private to that
+UID. Writers that must coordinate need the same shared filesystem location
+for this directory, including when they run in separate containers.
 
 Timeout, unregister, or process disappearance is not itself a completion
 proof. The affected slot enters quarantine and remains unavailable until a

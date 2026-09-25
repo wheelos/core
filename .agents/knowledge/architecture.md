@@ -16,6 +16,17 @@ discovery, or transport.
 - The transport layer supports INTRA, SHM, RTPS, and HYBRID; the transport
   configuration selects the default.
 - Service discovery manages topology separately from data transport.
+- The optional `cyber/transport/nvsci` GPU channel supports one writer per
+  channel per host and multiple readers. `GpuChannelManager` holds a process
+  lease backed by `flock` in a validated user-private directory under
+  `XDG_RUNTIME_DIR` (falling back to `HOME`); processes that must coordinate
+  across containers need that directory on the same shared filesystem. This
+  lock is setup/lifecycle coordination, not part of the frame data path.
+- GPU slot ownership is fence-based: producer writes must be ordered on the
+  loan's CUDA stream, unpublished loans fence that stream before returning the
+  slot, and readers acknowledge only after their consumer-stream work is
+  queued. Timeout or consumer loss quarantines outstanding slots rather than
+  proving GPU work has completed.
 - Fast-DDS participant teardown requires strict phased unpairing: for each
   domain participant, all Subscribers (readers) must be removed first before
   Publishers (writers) are removed, followed by removing the Participant itself.
@@ -33,5 +44,8 @@ discovery, or transport.
 - `cyber/node/`
 - `cyber/mainboard/`
 - `cyber/transport/`
+- `cyber/transport/nvsci/gpu_channel_manager.*`
+- `cyber/transport/nvsci/gpu_channel_session.*`
+- `cyber/transport/nvsci/gpu_writer.h`
 - `cyber/service_discovery/`
 - `cyber/scheduler/`

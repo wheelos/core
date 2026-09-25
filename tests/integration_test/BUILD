@@ -1,4 +1,5 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
+load("@rules_cuda//cuda:defs.bzl", "requires_cuda")
 load("@rules_python//python:defs.bzl", "py_test")
 
 cc_library(
@@ -143,8 +144,8 @@ cc_test(
     name = "gpu_writer_reader_ipc_test",
     size = "medium",
     srcs = ["gpu_writer_reader_ipc_test.cc"],
-    linkopts = ["-lcudart"],
     tags = ["local"],
+    target_compatible_with = requires_cuda(),
     deps = [
         "//cyber:cyber_core",
         "//cyber/transport/nvsci:gpu_reader",
@@ -157,7 +158,6 @@ cc_test(
     name = "gpu_channel_ipc_session_test",
     size = "small",
     srcs = ["gpu_channel_ipc_session_test.cc"],
-    linkopts = ["-lcudart"],
     deps = [
         "//cyber/transport/nvsci:gpu_channel_manager",
         "//cyber/transport/nvsci:gpu_control_protocol",
@@ -169,7 +169,7 @@ cc_test(
     name = "gpu_zero_copy_integration_test",
     size = "small",
     srcs = ["gpu_zero_copy_integration_test.cc"],
-    linkopts = ["-lcudart"],
+    target_compatible_with = requires_cuda(),
     deps = [
         "//cyber/transport/nvsci:gpu_channel_session",
         "//cyber/transport/nvsci:gpu_loaned_message",
@@ -181,7 +181,6 @@ cc_test(
     name = "nvsci_integration_test",
     size = "small",
     srcs = ["nvsci_integration_test.cc"],
-    linkopts = ["-lcudart"],
     deps = [
         "//cyber/transport/nvsci:gpu_channel_session",
         "//cyber/transport/nvsci:gpu_loaned_message",

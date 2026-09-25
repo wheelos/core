@@ -55,9 +55,11 @@ class GpuChannelSession {
    * @brief Called by Producer to publish a loaned slot.
    *
    * Automatically initializes refcounts for all currently registered consumers.
+   * If require_consumer is true and none are registered, the slot remains
+   * loaned and the caller must release it with the producer fence.
    */
   bool OnPublish(int slot_id, const NvSciSyncFence& prefence,
-                 GpuTransportPacket* out_packet);
+                 GpuTransportPacket* out_packet, bool require_consumer = false);
 
   /**
    * @brief Rolls back a publish that could not be sent to consumers.

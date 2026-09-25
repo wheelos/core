@@ -8,6 +8,10 @@
  * http://www.apache.org/licenses/LICENSE-2.0
  *****************************************************************************/
 
+#include <sys/stat.h>
+
+#include <cerrno>
+#include <cstdlib>
 #include <cstring>
 #include <vector>
 
@@ -100,6 +104,12 @@ TEST(GpuChannelIpcSessionTest, FullSessionDescriptorIsVersionedAndComplete) {
 }
 
 TEST(GpuChannelIpcSessionTest, WriterOwnershipIsExclusiveAndIdentityScoped) {
+  const char* test_tmpdir = std::getenv("TEST_TMPDIR");
+  if (test_tmpdir != nullptr) {
+    const std::string lock_base = std::string(test_tmpdir) + "/gpu_writer_test";
+    ASSERT_TRUE(::mkdir(lock_base.c_str(), 0700) == 0 || errno == EEXIST);
+    ASSERT_EQ(::setenv("XDG_RUNTIME_DIR", lock_base.c_str(), 1), 0);
+  }
   auto* manager = GpuChannelManager::Instance();
   manager->Clear();
   NvSciBufPoolConfig config;
