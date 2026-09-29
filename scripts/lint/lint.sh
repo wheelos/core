@@ -3,84 +3,168 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
-source "${ROOT_DIR}/scripts/deps/installer_base.sh"
+cd "${ROOT_DIR}"
 
-PYTHON_LINT_FLAG=0
 CPP_LINT_FLAG=0
+PYTHON_LINT_FLAG=0
+SHELL_LINT_FLAG=0
+DIFF_BASE=""
 
-function print_usage() {
-  echo "Usage: $0 [Options]"
-  echo "Options:"
-  echo "  --py        Lint Python files"
-  echo "  --cpp       Lint C++/BUILD files"
-  echo "  -a|--all    Lint all supported C++ and Python files"
-  echo "  -h|--help   Show this message and exit"
+print_usage() {
+  cat <<EOF
+Usage: $0 [Options]
+Options:
+  --cpp             Check C++ formatting and Bazel formatting/lint
+  --py              Check Python formatting and lint
+  --sh              Check shell scripts with ShellCheck
+  --diff <commit>   Check only files changed from <commit> to the working tree
+  -a|--all          Run all supported checks (default)
+  -h|--help         Show this message and exit
+EOF
 }
 
-function run_cpp_lint() {
-  if command -v bazel >/dev/null 2>&1; then
-    bazel test --config=ci //cyber/...
+require_command() {
+  if ! command -v "$1" >/dev/null 2>&1; then
+    echo "Required command '$1' was not found." >&2
+    return 1
+  fi
+}
+
+collect_files() {
+  local pattern="$1"
+  local result_name="$2"
+  local -n result="${result_name}"
+  local -a paths=()
+
+  if [[ -n "${DIFF_BASE}" ]]; then
+    git rev-parse --verify "${DIFF_BASE}^{commit}" >/dev/null
+    mapfile -d '' -t paths < <(
+      git diff --name-only --diff-filter=ACMRTUXB -z "${DIFF_BASE}" --
+    )
   else
-    info "bazel not installed; skipping Bazel test step."
+    mapfile -d '' -t paths < <(git ls-files -z)
   fi
 
-  if command -v buildifier >/dev/null 2>&1; then
-    find "${ROOT_DIR}" \( -path "${ROOT_DIR}/.git" -o -path "${ROOT_DIR}/bazel-*" \) -prune -o \
-      \( -name BUILD -o -name '*.bazel' -o -name '*.bzl' \) -type f -print0 \
-      | xargs -0 -r buildifier -lint=fix
-  else
-    info "buildifier not installed; skipping BUILD formatting lint."
+  local path
+  for path in "${paths[@]}"; do
+    if [[ "${path}" =~ ${pattern} && -f "${path}" ]]; then
+      result+=("${path}")
+    fi
+  done
+}
+
+run_cpp_lint() {
+  local -a cpp_files=()
+  local -a bazel_files=()
+  collect_files '\.(c|cc|cpp|cu|h|hh|hpp|hxx|cxx)$' cpp_files
+  collect_files '(^|/)BUILD(\.bazel)?$|\.bzl$|\.bazel$' bazel_files
+
+  if [[ "${#cpp_files[@]}" -gt 0 ]]; then
+    local clang_format_cmd="${CLANG_FORMAT_CMD:-clang-format}"
+    require_command "${clang_format_cmd}"
+    printf 'Checking C++ formatting (%s files)\n' "${#cpp_files[@]}"
+    printf '%s\0' "${cpp_files[@]}" |
+      xargs -0 -r "${clang_format_cmd}" --dry-run --Werror
+  fi
+
+  if [[ "${#bazel_files[@]}" -gt 0 ]]; then
+    require_command buildifier
+    printf 'Checking Bazel formatting and lint (%s files)\n' "${#bazel_files[@]}"
+    printf '%s\0' "${bazel_files[@]}" |
+      xargs -0 -r buildifier -mode=check -lint=warn
   fi
 }
 
-function run_py_lint() {
-  if ! command -v flake8 >/dev/null 2>&1; then
-    warning "Command 'flake8' not found. Install it via: python3 -m pip install flake8"
-    exit 1
+run_python_lint() {
+  local -a python_files=()
+  collect_files '\.py$' python_files
+  if [[ "${#python_files[@]}" -eq 0 ]]; then
+    return 0
   fi
 
-  find "${ROOT_DIR}" \( -path "${ROOT_DIR}/.git" -o -path "${ROOT_DIR}/bazel-*" \) -prune -o \
-    -type f -name '*.py' -print0 \
-    | xargs -0 -r flake8
+  require_command black
+  require_command isort
+  require_command flake8
+  printf 'Checking Python formatting and lint (%s files)\n' "${#python_files[@]}"
+  black --check "${python_files[@]}"
+  isort --check-only --profile black "${python_files[@]}"
+  flake8 "${python_files[@]}"
 }
 
-function parse_cmdline_args() {
+run_shell_lint() {
+  local -a shell_files=()
+  collect_files '\.(sh|bashrc)$' shell_files
+  if [[ "${#shell_files[@]}" -eq 0 ]]; then
+    return 0
+  fi
+
+  require_command shellcheck
+  printf 'Checking shell scripts (%s files)\n' "${#shell_files[@]}"
+  shellcheck -x --shell=bash "${shell_files[@]}"
+}
+
+parse_args() {
   if [[ "$#" -eq 0 ]]; then
     CPP_LINT_FLAG=1
     PYTHON_LINT_FLAG=1
-    return 0
+    SHELL_LINT_FLAG=1
+    return
   fi
 
   while [[ "$#" -gt 0 ]]; do
     case "$1" in
-      --py)
-        PYTHON_LINT_FLAG=1
-        ;;
-      --cpp)
-        CPP_LINT_FLAG=1
+      --cpp) CPP_LINT_FLAG=1 ;;
+      --py) PYTHON_LINT_FLAG=1 ;;
+      --sh) SHELL_LINT_FLAG=1 ;;
+      --diff)
+        if [[ "$#" -lt 2 || "$2" == -* ]]; then
+          echo "--diff requires a commitish argument." >&2
+          return 1
+        fi
+        DIFF_BASE="$2"
+        shift
         ;;
       -a|--all)
-        PYTHON_LINT_FLAG=1
         CPP_LINT_FLAG=1
+        PYTHON_LINT_FLAG=1
+        SHELL_LINT_FLAG=1
         ;;
       -h|--help)
         print_usage
         exit 0
         ;;
       *)
-        warning "Unknown option: $1"
+        echo "Unknown option: $1" >&2
         print_usage
-        exit 1
+        return 1
         ;;
     esac
     shift
   done
+
+  if [[ "${CPP_LINT_FLAG}" -eq 0 &&
+        "${PYTHON_LINT_FLAG}" -eq 0 &&
+        "${SHELL_LINT_FLAG}" -eq 0 ]]; then
+    print_usage
+    echo "Select at least one lint check." >&2
+    return 1
+  fi
 }
 
-function main() {
-  parse_cmdline_args "$@"
-  [[ "${CPP_LINT_FLAG}" -eq 1 ]] && run_cpp_lint
-  [[ "${PYTHON_LINT_FLAG}" -eq 1 ]] && run_py_lint
+main() {
+  parse_args "$@"
+
+  if [[ "${CPP_LINT_FLAG}" -eq 1 ]]; then
+    run_cpp_lint
+  fi
+  if [[ "${PYTHON_LINT_FLAG}" -eq 1 ]]; then
+    run_python_lint
+  fi
+  if [[ "${SHELL_LINT_FLAG}" -eq 1 ]]; then
+    run_shell_lint
+  fi
+
+  echo "All selected lint checks passed."
 }
 
 main "$@"

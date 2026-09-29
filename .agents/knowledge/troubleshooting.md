@@ -13,9 +13,13 @@ checks fail.
   order described by `.agents/skills/release/SKILL.md`; do not treat partial
   success as release success.
 - Source `scripts/env/runtime.bash` before running tools from `bazel-bin`.
-- The lint entry point depends on `scripts/deps/installer_base.sh`; missing
-  `flake8` is an explicit failure, while missing Bazel or buildifier causes the
-  corresponding C++ check to be skipped.
+- `scripts/lint/lint.sh` does not build or test with Bazel; its C++/Bazel checks
+  require clang-format and Buildifier, Python checks require Black, isort, and
+  Flake8, and shell checks require ShellCheck. Missing tools fail explicitly.
+- Bazel Python tests use the hermetic Python toolchain; pass `PYTHONUSERBASE`
+  through `--test_env` when tests need packages installed for that interpreter.
+- GitHub lint checks changed files; use `bash scripts/lint/lint.sh --all` for a
+  full-tree check. Full-tree checks may surface pre-existing lint debt.
 - The Ubuntu baseline covers `//cyber`, `//:wheelos_core`, and integration
   regression; distinguish compile, test, and environment failures.
 - Fast-DDS exit exceptions (such as heap-use-after-free or dangling proxy access

@@ -1,0 +1,48 @@
+name: WheelOS Lint
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23.x"
+
+      - name: Install Python lint tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install black==24.4.2 flake8==7.0.0 isort==5.13.2
+
+      - name: Install native lint tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y clang-format-14 shellcheck
+          go install github.com/bazelbuild/buildtools/buildifier@v7.1.2
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Lint changed files
+        env:
+          CLANG_FORMAT_CMD: clang-format-14
+          LINT_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: bash scripts/lint/lint.sh --all --diff "$LINT_BASE"

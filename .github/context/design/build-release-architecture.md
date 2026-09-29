@@ -33,6 +33,7 @@
 
 ## CI policy
 
-- `c-cpp.yml` should run the baseline script directly instead of duplicating Bazel commands inline.
-- `release-pycyber.yml` should verify the lockfile before building wheel artifacts.
+- `core-ci.yml` runs the Ubuntu 22.04 compile and regression baseline; configure it as a required PR check.
+- `lint.yml` checks changed files; configure it as a required PR check and expand it to the full tree after existing lint debt is addressed.
+- `release-pycyber.yml` builds and validates wheels for relevant PRs, and publishes only on `wheelos_core-v*` tags.
 - Release jobs should keep `fetch-depth: 0` so `setuptools_scm` can resolve tag-derived versions.

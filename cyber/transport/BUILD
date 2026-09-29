@@ -7,9 +7,9 @@ cc_library(
     srcs = ["transport.cc"],
     hdrs = ["transport.h"],
     deps = [
+        ":iceoryx_runtime",
         "//cyber/service_discovery:role",
         "//cyber/task",
-        ":iceoryx_runtime",
         "//cyber/transport/dispatcher:intra_dispatcher",
         "//cyber/transport/dispatcher:rtps_dispatcher",
         "//cyber/transport/dispatcher:shm_dispatcher",
@@ -21,8 +21,8 @@ cc_library(
         "//cyber/transport/rtps:sub_listener",
         "//cyber/transport/rtps:underlay_message",
         "//cyber/transport/rtps:underlay_message_type",
-        "//cyber/transport/transmitter",
         "//cyber/transport/shm:profile",
+        "//cyber/transport/transmitter",
         "@fastdds",
     ],
 )
@@ -51,6 +51,10 @@ cc_test(
     name = "transport_test",
     size = "small",
     srcs = ["transport_test.cc"],
+    tags = [
+        "exclusive",
+        "local",
+    ],
     deps = [
         "//cyber:cyber_core",
         "//cyber/proto:unit_test_cc_proto",

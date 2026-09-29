@@ -30,6 +30,9 @@ TEST_ENV_ARGS=()
 if [[ -v CYBER_RECORD_PLAY_FIXTURE ]]; then
   TEST_ENV_ARGS+=("--test_env=CYBER_RECORD_PLAY_FIXTURE=$CYBER_RECORD_PLAY_FIXTURE")
 fi
+if [[ -n "${PYTHONUSERBASE:-}" ]]; then
+  TEST_ENV_ARGS+=("--test_env=PYTHONUSERBASE=$PYTHONUSERBASE")
+fi
 bazel test --config=ci --distdir="$DISTDIR" \
   "${TEST_ENV_ARGS[@]}" \
   //tests/integration_test:core_tool_matrix_tests
