@@ -7,6 +7,7 @@ SKIP_BASELINE=false
 SKIP_CORE_PACKAGE=false
 SKIP_PYCYBER=false
 SKIP_AUDITWHEEL=false
+PUBLISH=false
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -16,8 +17,9 @@ while [ "$#" -gt 0 ]; do
     --skip-core-package) SKIP_CORE_PACKAGE=true; shift ;;
     --skip-pycyber) SKIP_PYCYBER=true; shift ;;
     --skip-auditwheel) SKIP_AUDITWHEEL=true; shift ;;
+    --publish) PUBLISH=true; shift ;;
     -h|--help)
-      echo "Usage: $0 [--outdir DIR] [--distdir DIR] [--skip-baseline] [--skip-core-package] [--skip-pycyber] [--skip-auditwheel]"
+      echo "Usage: $0 [--publish] [--outdir DIR] [--distdir DIR] [--skip-baseline] [--skip-core-package] [--skip-pycyber] [--skip-auditwheel]"
       exit 0
       ;;
     *)
@@ -30,6 +32,11 @@ done
 REPO_ROOT=$(git rev-parse --show-toplevel)
 cd "$REPO_ROOT"
 
+VERSION_CHECK_ARGS=(--release)
+if [ "$PUBLISH" = true ]; then
+  VERSION_CHECK_ARGS+=(--publish)
+fi
+CORE_VERSION=$(python3 scripts/release/check_release_version.py "${VERSION_CHECK_ARGS[@]}")
 CORE_PACKAGE_BUILT=false
 if [ "$SKIP_BASELINE" = false ]; then
   bash scripts/release/ubuntu2204_baseline.sh --distdir "$DISTDIR"
@@ -62,6 +69,7 @@ if [ "$SKIP_CORE_PACKAGE" = false ]; then
     echo "Configured //:wheelos_core output does not exist: $CORE_DEB" >&2
     exit 1
   fi
+  python3 scripts/release/check_release_version.py --deb "$CORE_DEB" >/dev/null
 
   bash scripts/release/validate_runtime_bundle.sh \
     --deb "$CORE_DEB" \
@@ -71,15 +79,21 @@ fi
 
 if [ "$SKIP_PYCYBER" = false ]; then
   PYCYBER_ARGS=(--outdir "$OUTDIR/pycyber")
+  if [ "$PUBLISH" = true ]; then
+    PYCYBER_ARGS+=(--publish)
+  fi
   if [ "$SKIP_AUDITWHEEL" = true ]; then
     PYCYBER_ARGS+=(--skip-auditwheel)
   fi
   bash scripts/release/build_and_package_pycyber.sh "${PYCYBER_ARGS[@]}"
+  python3 scripts/release/check_release_version.py "${VERSION_CHECK_ARGS[@]}" \
+    --wheelhouse "$OUTDIR/pycyber" >/dev/null
 fi
 
 {
   echo "generated_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo "git_sha=$(git rev-parse HEAD)"
+  echo "core_version=$CORE_VERSION"
   echo "bazel_version=$(bazel --version)"
   echo "core_artifacts:"
   find "$OUTDIR/core" -maxdepth 1 -type f -printf '  %f\n' | sort

@@ -9,6 +9,7 @@ SKIP_AUDITWHEEL=false
 SKIP_VALIDATE=false
 SKIP_SDIST=false
 SKIP_BUILD=false
+PUBLISH=false
 OUTDIR="packaging/pycyber/wheelhouse"
 
 while [ $# -gt 0 ]; do
@@ -17,8 +18,9 @@ while [ $# -gt 0 ]; do
     --skip-validate) SKIP_VALIDATE=true; shift ;;
     --skip-sdist) SKIP_SDIST=true; shift ;;
     --skip-build) SKIP_BUILD=true; shift ;;
+    --publish) PUBLISH=true; shift ;;
     --outdir) OUTDIR="$2"; shift 2 ;;
-    -h|--help) echo "Usage: $0 [--skip-auditwheel] [--skip-validate] [--skip-sdist] [--skip-build] [--outdir DIR]"; exit 0 ;;
+    -h|--help) echo "Usage: $0 [--publish] [--skip-auditwheel] [--skip-validate] [--skip-sdist] [--skip-build] [--outdir DIR]"; exit 0 ;;
     *) echo "Unknown arg: $1"; exit 1 ;;
   esac
 done
@@ -28,6 +30,11 @@ echo "Starting pycyber build+package at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 REPO_ROOT=$(git rev-parse --show-toplevel)
 cd "$REPO_ROOT"
 
+VERSION_CHECK_ARGS=(--release)
+if [ "$PUBLISH" = true ]; then
+  VERSION_CHECK_ARGS+=(--publish)
+fi
+python3 scripts/release/check_release_version.py "${VERSION_CHECK_ARGS[@]}" >/dev/null
 PYTHON_BIN=${PYTHON:-python3}
 PYTHON_BIN="$("$PYTHON_BIN" -c 'import sys; print(sys.executable)')"
 VENV_DIR=packaging/pycyber/.venv
@@ -79,29 +86,15 @@ git fetch --tags --prune origin || true
 
 # Keep Python artifacts on the same release line as the Bzlmod module and
 # native runtime. Untagged commits are deliberately marked as prereleases.
-CORE_VERSION="$(sed -nE 's/^[[:space:]]*version = "([^"]+)".*/\1/p' MODULE.bazel | head -n 1)"
-if [ -z "$CORE_VERSION" ]; then
-  echo "Unable to determine wheelos_core version from MODULE.bazel" >&2
-  exit 1
-fi
-
-if [ -n "${PYCYBER_VERSION:-}" ]; then
-  VERSION="$PYCYBER_VERSION"
-  TAG="PYCYBER_VERSION"
-elif git describe --exact-match --tags --match "wheelos_core-v${CORE_VERSION}" >/dev/null 2>&1; then
-  VERSION="$CORE_VERSION"
-  TAG="wheelos_core-v${CORE_VERSION}"
-else
-  TAG="N/A"
-  VERSION="${CORE_VERSION}.dev$(git rev-list --count HEAD)+g$(git rev-parse --short HEAD)"
-fi
-echo "Detected version: $VERSION (tag: ${TAG:-N/A})"
+VERSION="$(python3 scripts/release/check_release_version.py \
+  "${VERSION_CHECK_ARGS[@]}" --python-version)"
+echo "Detected pycyber version: $VERSION"
 export SETUPTOOLS_SCM_PRETEND_VERSION="$VERSION"
 
 # Ensure Python build tools are available
 echo "Installing/ensuring Python build tools (build, auditwheel, twine, setuptools_scm)..."
 "$PYTHON_BIN" -m pip install --upgrade pip
-"$PYTHON_BIN" -m pip install --upgrade build auditwheel twine setuptools_scm
+"$PYTHON_BIN" -m pip install --upgrade build auditwheel twine setuptools_scm 'patchelf>=0.14.5'
 
 # Check patchelf on Linux for auditwheel
 if [ "$(uname -s)" = "Linux" ]; then
@@ -152,7 +145,7 @@ if [ "$SKIP_AUDITWHEEL" = false ] && [ "$(uname -s)" = "Linux" ]; then
   echo "Running auditwheel repair for Linux wheels..."
   for whl in "${DIST_WHEELS[@]}"; do
     echo "Repairing $whl"
-    "$PYTHON_BIN" -m auditwheel repair "$whl" -w "$WHEELHOUSE_DIR" || { echo "auditwheel repair failed for $whl" >&2; exit 1; }
+    PATH="$REPO_ROOT/$VENV_DIR/bin:$PATH" "$PYTHON_BIN" -m auditwheel repair "$whl" -w "$WHEELHOUSE_DIR" || { echo "auditwheel repair failed for $whl" >&2; exit 1; }
   done
   REPAIRED_WHEELS=("$WHEELHOUSE_DIR"/*.whl)
   if [ ${#REPAIRED_WHEELS[@]} -eq 0 ]; then
@@ -176,6 +169,8 @@ if [ ${#DIST_UPLOADS[@]} -eq 0 ]; then
   echo "No distribution artifacts found in $WHEELHOUSE_DIR" >&2
   exit 1
 fi
+python3 scripts/release/check_release_version.py "${VERSION_CHECK_ARGS[@]}" \
+  --wheelhouse "$WHEELHOUSE_DIR" >/dev/null
 
 # Run twine check
 echo "Running twine check on artifacts..."

@@ -9,6 +9,8 @@ on:
       - "scripts/release/build_and_package_pycyber.sh"
       - "scripts/release/build_release_artifacts.sh"
       - "scripts/release/check_bzlmod_lockfile.sh"
+      - "scripts/release/check_release_version.py"
+      - "scripts/release/release_scripts_test.py"
       - "scripts/release/generate_pycyber_api_docs.py"
       - "scripts/release/install_and_generate_docs.sh"
       - "scripts/release/build_pycyber.py"
@@ -28,6 +30,8 @@ on:
       - "scripts/release/build_and_package_pycyber.sh"
       - "scripts/release/build_release_artifacts.sh"
       - "scripts/release/check_bzlmod_lockfile.sh"
+      - "scripts/release/check_release_version.py"
+      - "scripts/release/release_scripts_test.py"
       - "scripts/release/generate_pycyber_api_docs.py"
       - "scripts/release/install_and_generate_docs.sh"
       - "scripts/release/build_pycyber.py"
@@ -74,12 +78,18 @@ jobs:
       - name: Check Bzlmod lockfile
         run: bash scripts/release/check_bzlmod_lockfile.sh --check
 
+      - name: Check release scripts
+        run: bazel test //scripts/release:release_scripts_test --test_output=errors
+
       - name: Build and package pycyber
         shell: bash
         run: |
           args=()
           if [[ "${{ matrix.skip_sdist }}" == "true" ]]; then
             args+=(--skip-sdist)
+          fi
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            args+=(--publish)
           fi
           PYTHON=python3.10 bash scripts/release/build_and_package_pycyber.sh "${args[@]}"
 
@@ -124,15 +134,22 @@ jobs:
     permissions:
       id-token: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - uses: actions/download-artifact@v4
         with:
           pattern: pycyber-*
-          path: dist
+          path: ${{ runner.temp }}/pycyber-dist
           merge-multiple: true
 
       - name: Show collected distributions
-        run: ls -1 dist
+        run: ls -1 "$RUNNER_TEMP/pycyber-dist"
+
+      - name: Verify artifacts against release tag
+        run: python3 scripts/release/check_release_version.py --publish --wheelhouse "$RUNNER_TEMP/pycyber-dist"
 
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          packages-dir: dist
+          packages-dir: ${{ runner.temp }}/pycyber-dist

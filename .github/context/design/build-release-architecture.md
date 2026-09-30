@@ -24,6 +24,22 @@
   output; validation must not rebuild or query a different configuration.
 - Python packaging is anchored on Bazel-built extension modules plus staged Python sources and generated protobuf output.
 - Release artifacts should be assembled only after the Ubuntu 22.04 baseline passes.
+- `MODULE.bazel` is the release version input. `check_release_version.py`
+  rejects mismatched Debian versions or tagged release identities before
+  packaging and checks built Debian names/metadata and every pycyber
+  artifact's filename and embedded wheel/sdist metadata. Untagged builds
+  derive a `.dev` version unless `PYCYBER_VERSION` explicitly overrides it;
+  overrides are development-only and cannot publish without a matching tag
+  and release version.
+- Native and Python artifact scripts support `--publish` to require the
+  matching `wheelos_core-v<version>` tag at HEAD and a clean worktree. CI enables it for tagged
+  wheel builds and checks the downloaded wheels again before PyPI publication;
+  ordinary development builds do not need tags. A development manifest's
+  `git_sha` identifies HEAD, not any uncommitted changes in the built package.
+- `//scripts/release:release_scripts_test` exercises mismatch and artifact
+  guards in a Bazel sandbox. The Ubuntu baseline also runs Writer/Reader and
+  queue characterization tests alongside the existing runtime matrix; the
+  pycyber release workflow runs the script tests before accepting artifacts.
 
 ## Lockfile policy
 

@@ -22,6 +22,7 @@ done
 REPO_ROOT=$(git rev-parse --show-toplevel)
 cd "$REPO_ROOT"
 
+python3 scripts/release/check_release_version.py --release
 bash scripts/release/check_bzlmod_lockfile.sh --check
 
 bazel build --config=ci --distdir="$DISTDIR" //cyber //:wheelos_core
@@ -32,6 +33,18 @@ if [[ -v CYBER_RECORD_PLAY_FIXTURE ]]; then
 fi
 bazel test --config=ci --distdir="$DISTDIR" \
   "${TEST_ENV_ARGS[@]}" \
+  //scripts/release:release_scripts_test \
+  //cyber/node:writer_test \
+  //cyber/node:writer_reader_test \
+  //cyber/data:all_latest_test \
+  //cyber/data:channel_buffer_test \
+  //cyber/data:data_visitor_test \
+  //cyber/component:component_test \
+  //cyber/metrics:metrics_test \
+  //tests/perf_test:runtime_metrics_hot_path_benchmark_test \
+  //tests/perf_test:runtime_metrics_pubsub_benchmark_test \
+  //tests/perf_test:runtime_metrics_compare_test \
+  //tests/perf_test:runtime_metrics_snapshot_benchmark_test \
   //tests/integration_test:core_tool_matrix_tests
 
 if [ "$RUN_PYCYBER" = true ]; then
