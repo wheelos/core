@@ -141,6 +141,23 @@ cc_test(
 )
 
 cc_test(
+    name = "runtime_metrics_test",
+    size = "medium",
+    timeout = "moderate",
+    srcs = ["runtime_metrics_test.cc"],
+    data = ["//cyber:cyber_conf"],
+    tags = ["local"],
+    deps = [
+        "//cyber:cyber_core",
+        "//cyber/metrics",
+        "//cyber/proto:unit_test_cc_proto",
+        "//cyber/scheduler:choreography_context",
+        "//cyber/scheduler:processor",
+        "@com_google_googletest//:gtest",
+    ],
+)
+
+cc_test(
     name = "gpu_writer_reader_ipc_test",
     size = "medium",
     srcs = ["gpu_writer_reader_ipc_test.cc"],
@@ -205,6 +222,7 @@ test_suite(
     name = "core_tool_matrix_tests",
     tests = [
         ":core_transport_matrix_test",
+        ":runtime_metrics_test",
         ":examples_regression_tests",
         "//cyber/python/cyber_py3/examples:examples_smoke_test",
         "//cyber/python/cyber_py3/test:cyber_test",

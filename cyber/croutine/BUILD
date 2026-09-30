@@ -19,6 +19,7 @@ cc_library(
         "//cyber/croutine:routine_factory",
         "//cyber/croutine:swap",
         "//cyber/event:perf_event_cache",
+        "//cyber/metrics",
         "//cyber/time",
     ],
 )

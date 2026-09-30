@@ -147,6 +147,78 @@ TEST(AllLatestTest, four_channels) {
   EXPECT_EQ(std::string("3-0"), m3->message);
 }
 
+TEST(AllLatestTest, MetricsCountFusedWorkNotAuxiliaryHistory) {
+  metrics::Registry::Instance().Configure(metrics::Mode::Basic);
+  auto metric = metrics::Registry::Instance().RegisterConsumer(
+      "/fusion", "two-input-component");
+  ASSERT_TRUE(metric);
+  auto first = new CacheBuffer<std::shared_ptr<RawMessage>>(2);
+  auto second = new CacheBuffer<std::shared_ptr<RawMessage>>(2);
+  ChannelBuffer<RawMessage> first_channel(1, first);
+  ChannelBuffer<RawMessage> second_channel(2, second);
+  fusion::AllLatest<RawMessage, RawMessage> fusion(first_channel,
+                                                   second_channel, metric);
+  first->Fill(std::make_shared<RawMessage>("ignored"));
+  second->Fill(std::make_shared<RawMessage>("aux-1"));
+  second->Fill(std::make_shared<RawMessage>("aux-2"));
+  EXPECT_EQ(metric->Snapshot().enqueue_count, 0);
+  first->Fill(std::make_shared<RawMessage>("main-1"));
+  std::shared_ptr<RawMessage> main;
+  std::shared_ptr<RawMessage> aux;
+  uint64_t next = 0;
+  ASSERT_TRUE(fusion.Fusion(&next, main, aux));
+  EXPECT_EQ(main->message, "main-1");
+  EXPECT_EQ(aux->message, "aux-2");
+  ++next;
+  for (int i = 2; i <= 4; ++i) {
+    first->Fill(std::make_shared<RawMessage>("main-" + std::to_string(i)));
+  }
+  EXPECT_EQ(metric->Snapshot().queue_depth, 2);
+  EXPECT_EQ(metric->Snapshot().drop_count[0], 1);
+  ASSERT_TRUE(fusion.Fusion(&next, main, aux));
+  EXPECT_EQ(main->message, "main-4");
+  EXPECT_EQ(aux->message, "aux-2");
+  auto snapshot = metric->Snapshot();
+  EXPECT_EQ(snapshot.enqueue_count, 4);
+  EXPECT_EQ(snapshot.dequeue_count, 2);
+  EXPECT_EQ(snapshot.drop_count[0], 1);
+  EXPECT_EQ(snapshot.drop_count[1], 1);
+  EXPECT_EQ(snapshot.queue_depth, 0);
+  metrics::Registry::Instance().Configure(metrics::Mode::Off);
+}
+
+TEST(AllLatestTest, DestructionDetachesPrimaryCallback) {
+  auto first = new CacheBuffer<std::shared_ptr<RawMessage>>(2);
+  auto second = new CacheBuffer<std::shared_ptr<RawMessage>>(2);
+  auto third = new CacheBuffer<std::shared_ptr<RawMessage>>(2);
+  auto fourth = new CacheBuffer<std::shared_ptr<RawMessage>>(2);
+  ChannelBuffer<RawMessage> first_channel(1, first);
+  ChannelBuffer<RawMessage> second_channel(2, second);
+  ChannelBuffer<RawMessage> third_channel(3, third);
+  ChannelBuffer<RawMessage> fourth_channel(4, fourth);
+  {
+    fusion::AllLatest<RawMessage, RawMessage> fusion(first_channel,
+                                                     second_channel);
+  }
+  first->Fill(std::make_shared<RawMessage>("after-two"));
+  ASSERT_FALSE(first->Empty());
+  EXPECT_EQ(first->Back()->message, "after-two");
+  {
+    fusion::AllLatest<RawMessage, RawMessage, RawMessage> fusion(
+        first_channel, second_channel, third_channel);
+  }
+  first->Fill(std::make_shared<RawMessage>("after-three"));
+  ASSERT_FALSE(first->Empty());
+  EXPECT_EQ(first->Back()->message, "after-three");
+  {
+    fusion::AllLatest<RawMessage, RawMessage, RawMessage, RawMessage> fusion(
+        first_channel, second_channel, third_channel, fourth_channel);
+  }
+  first->Fill(std::make_shared<RawMessage>("after-four"));
+  ASSERT_FALSE(first->Empty());
+  EXPECT_EQ(first->Back()->message, "after-four");
+}
+
 }  // namespace data
 }  // namespace cyber
 }  // namespace apollo

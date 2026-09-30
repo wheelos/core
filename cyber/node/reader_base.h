@@ -26,6 +26,7 @@
 #include "cyber/common/macros.h"
 #include "cyber/common/util.h"
 #include "cyber/event/perf_event_cache.h"
+#include "cyber/metrics/metrics.h"
 #include "cyber/transport/transport.h"
 
 namespace apollo {
@@ -207,11 +208,15 @@ auto ReceiverManager<MessageT>::GetReceiver(
   // so reader for datacache we use map to keep one instance for per channel
   const std::string& channel_name = role_attr.channel_name();
   if (receiver_map_.count(channel_name) == 0) {
+    auto metric = metrics::Registry::Instance().RegisterReceiver(channel_name);
     receiver_map_[channel_name] =
         transport::Transport::Instance()->CreateReceiver<MessageT>(
-            role_attr, [](const std::shared_ptr<MessageT>& msg,
+            role_attr, [metric](const std::shared_ptr<MessageT>& msg,
                           const transport::MessageInfo& msg_info,
                           const proto::RoleAttributes& reader_attr) {
+              if (metric) {
+                metric->RecordReceive();
+              }
               (void)msg_info;
               (void)reader_attr;
               PerfEventCache::Instance()->AddTransportEvent(

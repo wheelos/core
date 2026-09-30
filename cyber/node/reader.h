@@ -32,6 +32,7 @@
 #include "cyber/common/global_data.h"
 #include "cyber/croutine/routine_factory.h"
 #include "cyber/data/data_visitor.h"
+#include "cyber/metrics/metrics.h"
 #include "cyber/node/reader_base.h"
 #include "cyber/scheduler/scheduler_factory.h"
 #include "cyber/service_discovery/topology_manager.h"
@@ -63,6 +64,8 @@ const uint32_t DEFAULT_PENDING_QUEUE_SIZE = 1;
  * default set to 1, So, If you handle slower than writer sending, older
  * messages that are not handled will be lost. You can increase
  * `pending_queue_size` to resolve this problem.
+ * The first queue fetch takes the newest available message. Shutdown waits
+ * for an executing callback to finish; callbacks have no enforced timeout.
  */
 template <typename MessageT>
 class Reader : public ReaderBase {
@@ -219,6 +222,7 @@ class Reader : public ReaderBase {
   CallbackFunc<MessageT> reader_func_;
   ReceiverPtr receiver_ = nullptr;
   std::string croutine_name_;
+  std::shared_ptr<metrics::Endpoint> callback_metric_;
 
   BlockerPtr blocker_ = nullptr;
 
@@ -263,15 +267,20 @@ bool Reader<MessageT>::Init() {
   if (reader_func_ != nullptr) {
     func = [this](const std::shared_ptr<MessageT>& msg) {
       this->Enqueue(msg);
-      this->reader_func_(msg);
+      metrics::MeasureCallback(callback_metric_, [this, &msg] {
+        this->reader_func_(msg);
+      });
     };
   } else {
     func = [this](const std::shared_ptr<MessageT>& msg) { this->Enqueue(msg); };
   }
   auto sched = scheduler::Instance();
   croutine_name_ = role_attr_.node_name() + "_" + role_attr_.channel_name();
+  callback_metric_ = metrics::Registry::Instance().RegisterConsumer(
+      role_attr_.channel_name(), croutine_name_);
   auto dv = std::make_shared<data::DataVisitor<MessageT>>(
-      role_attr_.channel_id(), pending_queue_size_);
+      role_attr_.channel_id(), pending_queue_size_, croutine_name_,
+      callback_metric_);
   // Using factory to wrap templates.
   croutine::RoutineFactory factory =
       croutine::CreateRoutineFactory<MessageT>(std::move(func), dv);
@@ -303,6 +312,7 @@ void Reader<MessageT>::Shutdown() {
   if (!croutine_name_.empty()) {
     scheduler::Instance()->RemoveTask(croutine_name_);
   }
+  callback_metric_.reset();
 }
 
 template <typename MessageT>

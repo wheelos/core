@@ -21,6 +21,7 @@
 #include "gtest/gtest.h"
 
 #include "cyber/init.h"
+#include "cyber/metrics/metrics.h"
 #include "cyber/message/raw_message.h"
 
 namespace apollo {
@@ -136,6 +137,35 @@ TEST(CommonComponentFail, init) {
       Component_A<RawMessage, RawMessage, RawMessage, RawMessage>>();
   EXPECT_FALSE(comA->Initialize(compcfg));
   EXPECT_FALSE(comA->Process(msg_str1, msg_str2, msg_str3, msg_str4));
+}
+
+TEST(CommonComponent, ProcessFailureIsCountedOnce) {
+  metrics::Registry::Instance().Configure(metrics::Mode::Basic);
+  ret_init = true;
+  ret_proc = false;
+  ComponentConfig config;
+  config.set_name("metrics_component_process_failure");
+  config.add_readers()->set_channel("/metrics/component/process");
+  auto component = std::make_shared<Component_C<RawMessage>>();
+  ASSERT_TRUE(component->Initialize(config));
+  auto message = std::make_shared<RawMessage>("test");
+  EXPECT_FALSE(component->Process(message));
+  ret_proc = true;
+  EXPECT_TRUE(component->Process(message));
+
+  bool found = false;
+  for (const auto& endpoint : metrics::Registry::Instance().Snapshot().endpoints) {
+    if (endpoint.consumer == config.name() + ":component") {
+      found = true;
+      EXPECT_EQ(endpoint.callback_count, 2);
+      EXPECT_EQ(endpoint.callback_completed_count, 2);
+      EXPECT_EQ(endpoint.callback_error_count, 1);
+      EXPECT_EQ(endpoint.callback_latency.count, 2);
+    }
+  }
+  EXPECT_TRUE(found);
+  component->Shutdown();
+  metrics::Registry::Instance().Configure(metrics::Mode::Off);
 }
 
 }  // namespace cyber

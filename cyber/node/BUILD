@@ -66,6 +66,7 @@ cc_library(
     hdrs = ["reader.h"],
     deps = [
         ":reader_base",
+        "//cyber/metrics",
         "//cyber/blocker",
         "//cyber/common:global_data",
         "//cyber/croutine:routine_factory",
@@ -83,6 +84,7 @@ cc_library(
     hdrs = ["reader_base.h"],
     deps = [
         "//cyber/event:perf_event_cache",
+        "//cyber/metrics",
         "//cyber/transport",
     ],
 )
@@ -104,6 +106,7 @@ cc_library(
     deps = [
         ":writer_base",
         "//cyber/common:log",
+        "//cyber/metrics",
         "//cyber/proto:topology_change_cc_proto",
         "//cyber/service_discovery:topology_manager",
         "//cyber/transport",

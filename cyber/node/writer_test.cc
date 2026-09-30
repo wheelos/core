@@ -115,6 +115,31 @@ class BlockingTransmitter : public transport::Transmitter<Chatter> {
   std::shared_ptr<BlockingTransmitState> state_;
 };
 
+class OutcomeTransmitter : public transport::Transmitter<Chatter> {
+ public:
+  explicit OutcomeTransmitter(const proto::RoleAttributes& role)
+      : transport::Transmitter<Chatter>(role) {}
+
+  void Enable() override {}
+  void Disable() override {}
+
+  bool Transmit(const MessagePtr& msg,
+                const transport::MessageInfo&) override {
+    last_message_ = msg;
+    ++calls_;
+    return outcome_;
+  }
+
+  void set_outcome(bool outcome) { outcome_ = outcome; }
+  const MessagePtr& last_message() const { return last_message_; }
+  int calls() const { return calls_; }
+
+ private:
+  bool outcome_ = true;
+  int calls_ = 0;
+  MessagePtr last_message_;
+};
+
 template <typename Operation>
 void VerifyShutdownKeepsInFlightTransmitterAlive(
     const std::string& channel_name, Operation operation) {
@@ -190,6 +215,35 @@ TEST(WriterTest, test2) {
   c->set_seq(3);
   c->set_content("ChatterMsg");
   EXPECT_FALSE(w.Write(c));
+}
+
+TEST(WriterTest, ValueCopiesSharedPointerPreservesIdentityAndResult) {
+  proto::RoleAttributes role;
+  role.set_channel_name("/writer_write_contract");
+  role.set_node_name("writer_write_contract_node");
+  Writer<Chatter> writer(role);
+  ASSERT_TRUE(writer.Init());
+  auto transmitter = std::make_shared<OutcomeTransmitter>(role);
+  WriterTestPeer::SetTransmitter(
+      &writer,
+      std::static_pointer_cast<transport::Transmitter<Chatter>>(transmitter));
+
+  Chatter value;
+  value.set_content("first");
+  EXPECT_TRUE(writer.Write(value));
+  ASSERT_NE(transmitter->last_message(), nullptr);
+  EXPECT_NE(transmitter->last_message().get(), &value);
+  EXPECT_EQ(transmitter->last_message()->content(), value.content());
+
+  auto shared = std::make_shared<Chatter>();
+  shared->set_content("second");
+  transmitter->set_outcome(false);
+  EXPECT_FALSE(writer.Write(shared));
+  EXPECT_EQ(transmitter->last_message(), shared);
+  EXPECT_EQ(transmitter->calls(), 2);
+  writer.Shutdown();
+  EXPECT_FALSE(writer.Write(shared));
+  EXPECT_EQ(transmitter->calls(), 2);
 }
 
 TEST(WriterTest, ShutdownKeepsInFlightSharedWriteTransmitterAlive) {

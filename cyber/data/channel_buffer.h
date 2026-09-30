@@ -63,6 +63,7 @@ bool ChannelBuffer<T>::Fetch(uint64_t* index,
 
   if (*index == 0) {
     *index = buffer_->Tail();
+    buffer_->RecordFetch(*index, 0, metrics::DropReason::InitialSkipToLatest);
   } else if (*index == buffer_->Tail() + 1) {
     return false;
   } else if (*index < buffer_->Head()) {
@@ -70,7 +71,12 @@ bool ChannelBuffer<T>::Fetch(uint64_t* index,
     AWARN << "channel[" << GlobalData::GetChannelById(channel_id_) << "] "
           << "read buffer overflow, drop_message[" << interval << "] pre_index["
           << *index << "] current_index[" << buffer_->Tail() << "] ";
+    const auto skipped = buffer_->Tail() - buffer_->Head();
     *index = buffer_->Tail();
+    buffer_->RecordFetch(*index, skipped,
+                         metrics::DropReason::OverflowSkipToLatest);
+  } else {
+    buffer_->RecordFetch(*index, 0, metrics::DropReason::OverflowSkipToLatest);
   }
   m = buffer_->at(*index);
   return true;

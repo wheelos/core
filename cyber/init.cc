@@ -33,6 +33,7 @@
 #include "cyber/common/global_data.h"
 #include "cyber/data/data_dispatcher.h"
 #include "cyber/logger/async_logger.h"
+#include "cyber/metrics/metrics.h"
 #include "cyber/node/node.h"
 #include "cyber/scheduler/scheduler.h"
 #include "cyber/service_discovery/topology_manager.h"
@@ -111,6 +112,8 @@ void FinishClear(bool full_transport_cleanup) {
     transport::Transport::CleanUp();
     service_discovery::TopologyManager::CleanUp();
   }
+  metrics::Registry::Instance().StopExport();
+  metrics::Registry::Instance().Configure(metrics::Mode::Off);
   StopLogger();
   SetState(STATE_SHUTDOWN);
 }
@@ -147,6 +150,36 @@ bool Init(const char* binary_name) {
   }
 
   InitLogger(binary_name);
+  const auto& metrics_conf =
+      GlobalData::Instance()->Config().runtime_metrics_conf();
+  metrics::Mode metrics_mode = metrics::Mode::Off;
+  switch (metrics_conf.mode()) {
+    case proto::RuntimeMetricsConf::BASIC:
+      metrics_mode = metrics::Mode::Basic;
+      break;
+    case proto::RuntimeMetricsConf::DETAILED:
+      metrics_mode = metrics::Mode::Detailed;
+      break;
+    case proto::RuntimeMetricsConf::OFF:
+      break;
+    default:
+      AERROR << "Unsupported Runtime Metrics mode";
+      StopLogger();
+      return false;
+  }
+  metrics::Registry::Instance().Configure(metrics_mode);
+  if (metrics_mode != metrics::Mode::Off &&
+      !metrics_conf.snapshot_path().empty()) {
+    const auto path = metrics_conf.snapshot_path() + "." +
+                      std::to_string(getpid()) + ".json";
+    if (!metrics::Registry::Instance().StartExport(path)) {
+      AERROR << "Unable to start Runtime Metrics export at " << path
+             << " (parent directory must be private and owned by this user)";
+      metrics::Registry::Instance().Configure(metrics::Mode::Off);
+      StopLogger();
+      return false;
+    }
+  }
   auto thread = const_cast<std::thread*>(async_logger->LogThread());
   scheduler::Instance()->SetInnerThreadAttr("async_log", thread);
   SysMo::Instance();

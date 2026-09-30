@@ -26,6 +26,62 @@ cc_binary(
     ],
 )
 
+cc_binary(
+    name = "runtime_metrics_hot_path_benchmark",
+    srcs = ["runtime_metrics_hot_path_benchmark.cc"],
+    deps = ["//cyber/metrics"],
+)
+
+cc_binary(
+    name = "runtime_metrics_snapshot_benchmark",
+    srcs = ["runtime_metrics_snapshot_benchmark.cc"],
+    deps = ["//cyber/metrics"],
+)
+
+py_test(
+    name = "runtime_metrics_snapshot_benchmark_test",
+    size = "small",
+    srcs = ["runtime_metrics_snapshot_benchmark_test.py"],
+    data = [":runtime_metrics_snapshot_benchmark"],
+)
+
+py_test(
+    name = "runtime_metrics_hot_path_benchmark_test",
+    size = "small",
+    srcs = ["runtime_metrics_hot_path_benchmark_test.py"],
+    data = [":runtime_metrics_hot_path_benchmark"],
+)
+
+cc_binary(
+    name = "runtime_metrics_pubsub_benchmark",
+    srcs = ["runtime_metrics_pubsub_benchmark.cc"],
+    data = ["//cyber:cyber_conf"],
+    deps = [
+        "//cyber:cyber_core",
+        "//cyber/proto:unit_test_cc_proto",
+    ],
+)
+
+py_test(
+    name = "runtime_metrics_pubsub_benchmark_test",
+    size = "medium",
+    srcs = ["runtime_metrics_pubsub_benchmark_test.py"],
+    data = [
+        ":runtime_metrics_pubsub_benchmark",
+        "//cyber:cyber_conf",
+    ],
+)
+
+py_test(
+    name = "runtime_metrics_compare_test",
+    size = "small",
+    srcs = [
+        "runtime_metrics_compare.py",
+        "runtime_metrics_compare_test.py",
+    ],
+    main = "runtime_metrics_compare_test.py",
+)
+
 cc_test(
     name = "benchmark_sequence_tracker_test",
     srcs = [

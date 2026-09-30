@@ -171,6 +171,7 @@ bool SchedulerClassic::NotifyProcessor(uint64_t crid) {
       auto cr = id_cr_[crid];
       if (cr->state() == RoutineState::DATA_WAIT ||
           cr->state() == RoutineState::IO_WAIT) {
+        cr->MarkSchedulingReady();
         cr->SetUpdateFlag();
       }
 
