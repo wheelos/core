@@ -88,6 +88,13 @@ approved only when all three parts pass completely:
 - Validate Component DAG loading and timer components via `mainboard`.
 - Verify the Cyber RT CLI tools (`cyber_channel`, `cyber_node`, `cyber_service`, `cyber_recorder`, `cyber_monitor`, `cyber_launch`).
 
+Use a non-root validation container with private IPC, at least 1 GB
+`/dev/shm`, unlimited memlock and `seccomp=unconfined` for these tests.
+Docker's 64 MB default cannot hold the iceoryx segment; 512 MB has not
+been qualified for concurrent tests. Verify actual record io_uring via
+`record_perf_reader --mode=uring_stream` on a local non-empty fixture:
+Python record success may have used synchronous fallback.
+
 ### Verification Steps & Commands
 
 1. **Python Examples Smoke Test:**
@@ -125,7 +132,7 @@ approved only when all three parts pass completely:
 - Ensure 0 packet loss (`total_loss == 0`) and 100% case success rate across payload matrices (64B to 10MB).
 - Validate zero-copy large payload performance (SHM / Iceoryx zero-copy copy count == 0).
 - Run high-concurrency stress testing (1:N fanout, N:1 fanin, burst matrices, multi-client RPC).
-- Check memory leaks under Valgrind (0 definitely lost bytes, 0 indirectly lost bytes).
+- Check memory leaks under Valgrind (0 definitely, indirectly, and possibly lost bytes).
 
 ### Verification Steps & Commands
 
@@ -159,7 +166,9 @@ approved only when all three parts pass completely:
    bash scripts/release/run_memory_leak_check.sh \
      --outdir artifacts/release-acceptance/memory-leak-record
    ```
-   - Gate criteria: `definitely lost: 0 bytes in 0 blocks`, `indirectly lost: 0 bytes in 0 blocks`.
+   - Gate criteria: `definitely lost`, `indirectly lost`, and `possibly lost`
+     must each be `0 bytes in 0 blocks`. Do not call an upstream
+     possible-loss report a pass without verified, narrowly scoped attribution.
 
 4. **Long-Running Pub/Sub Stress (Release Validation):**
    ```bash

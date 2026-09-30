@@ -89,6 +89,14 @@ ulimits:
     hard: -1
 ```
 
+Use an IPC-private container with at least `--shm-size=1g` for the runtime
+matrix: iceoryx allocates an approximately 284 MB segment, so Docker's
+default 64 MB causes SIGBUS. Use `--security-opt seccomp=unconfined` for
+non-root io_uring validation; a successful record read alone does not prove
+the io_uring path was used. The `record_perf_reader --mode=uring_stream`
+command must complete and report a non-empty result. A 512 MB limit has not
+been qualified for concurrent matrix runs.
+
 Use `--privileged` only when the target also requires other kernel or IPC
 permissions. Keep Bazel analysis and hermetic Python builds as the
 non-root `wheelos` user; running Bazel as root is rejected by `rules_python`.

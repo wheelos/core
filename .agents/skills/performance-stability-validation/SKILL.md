@@ -53,14 +53,24 @@ mkdir -p artifacts/validation
 docker run --rm --user wheelos \
   -e HOME=/home/wheelos -e USER=wheelos \
   -v "$PWD:/workspace" -w /workspace \
-  --network host --ipc private \
-  --ulimit memlock=-1 \
+  --network host --ipc private --shm-size=1g \
+  --ulimit memlock=-1:-1 --security-opt seccomp=unconfined \
   wheelos-core-validation:x86_64 \
   bash -lc 'set -euo pipefail; command -v bazel; bazel --version'
 ```
 
 The validation image includes `valgrind` for the leak gate. Rebuild the image
 if it predates this skill; never silently skip the leak gate.
+Docker's 64 MB default `/dev/shm` cannot hold the iceoryx segment (about
+284 MB). A 512 MB limit has not been qualified for concurrent tests; keep
+the 1 GB setting for the runtime matrix. `seccomp=unconfined` is scoped to
+the validation container so non-root io_uring calls are not silently denied.
+For long builds and runtime matrices, use the retained-container
+`docker create` / `docker start` / `docker wait` procedure in
+`docs/guides/release-validation.md` instead of attached `docker run --rm`.
+Inspect the exit code, `OOMKilled`, and logs before removing the container.
+If the leak check is explicitly waived for a diagnostic run, record its gate
+as **not evaluated**, not passed.
 
 ## Performance gate
 
