@@ -47,8 +47,8 @@ for target in "${targets[@]}"; do
   set +e
   valgrind \
     --leak-check=full \
-    --show-leak-kinds=definite,possible \
-    --errors-for-leak-kinds=definite,indirect \
+    --show-leak-kinds=definite,indirect,possible \
+    --errors-for-leak-kinds=definite,indirect,possible \
     --undef-value-errors=no \
     --suppressions="${REPO_ROOT}/scripts/release/fastdds_valgrind.supp" \
     --log-file="${valgrind_log}" \
