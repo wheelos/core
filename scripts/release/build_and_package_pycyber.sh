@@ -189,7 +189,13 @@ if [ "$SKIP_VALIDATE" = false ]; then
   echo "Running pycyber packaging example coverage..."
   "$PYTHON_BIN" packaging/pycyber/verify_pycyber_examples.py --python "$PYTHON_BIN" --wheel "$VALIDATE_WHEEL" || { echo "Packaging example verification failed" >&2; exit 1; }
   echo "Running pycyber example smoke tests via Bazel..."
-  bazel test --config=ci //cyber/python/cyber_py3/examples:examples_smoke_test --test_output=errors || { echo "Example smoke test failed" >&2; exit 1; }
+  BAZEL_TEST_ENV_ARGS=()
+  if [ -n "${PYTHONUSERBASE:-}" ]; then
+    BAZEL_TEST_ENV_ARGS+=("--test_env=PYTHONUSERBASE=$PYTHONUSERBASE")
+  fi
+  bazel test --config=ci "${BAZEL_TEST_ENV_ARGS[@]}" \
+    //cyber/python/cyber_py3/examples:examples_smoke_test \
+    --test_output=errors || { echo "Example smoke test failed" >&2; exit 1; }
 else
   echo "Skipping validation (--skip-validate)"
 fi
@@ -197,7 +203,7 @@ fi
 # Create SHA256SUMS
 if command -v sha256sum >/dev/null 2>&1; then
   echo "Creating SHA256SUMS in $WHEELHOUSE_DIR"
-  (cd "$WHEELHOUSE_DIR" && sha256sum * > SHA256SUMS) || true
+  (cd "$WHEELHOUSE_DIR" && sha256sum ./* > SHA256SUMS) || true
 else
   echo "sha256sum not found - skipping SHA256SUMS generation"
 fi

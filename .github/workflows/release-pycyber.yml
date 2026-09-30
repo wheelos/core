@@ -1,4 +1,4 @@
-name: pycyber release
+name: PyCyber Verification and Release
 
 on:
   pull_request:
@@ -21,7 +21,6 @@ on:
       - "MODULE.bazel"
       - "MODULE.bazel.lock"
   push:
-    branches: ["main"]
     tags:
       - "wheelos_core-v*"
     paths:
@@ -43,8 +42,15 @@ on:
       - "MODULE.bazel.lock"
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/wheelos_core-v') }}
+
+permissions:
+  contents: read
+
 jobs:
-  build-wheel:
+  build-and-validate-wheel:
     strategy:
       fail-fast: false
       matrix:
@@ -56,6 +62,8 @@ jobs:
             runs_on: ubuntu-22.04-arm
             skip_sdist: true
     runs-on: ${{ matrix.runs_on }}
+    env:
+      PYTHONUSERBASE: ${{ runner.temp }}/wheelos-python-userbase
     steps:
       - uses: actions/checkout@v4
         with:
@@ -65,14 +73,23 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: Install Bazel
-        run: sudo bash scripts/deps/install_bazel.sh
+      - name: Read Bazel version
+        id: bazel-version
+        run: echo "version=$(cat .bazelversion)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Bazel with cache
+        uses: bazel-contrib/setup-bazel@0.15.0
+        with:
+          bazelisk-cache: true
+          disk-cache: ${{ github.workflow }}
+          bazel-version: ${{ steps.bazel-version.outputs.version }}
 
       - name: Install wheel build dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y patchelf
           python -m pip install --upgrade pip
+          python -m pip install --user protobuf==5.29.5
           python -m pip install build auditwheel twine setuptools_scm
 
       - name: Check Bzlmod lockfile
@@ -102,7 +119,7 @@ jobs:
             packaging/pycyber/wheelhouse/*.whl
 
   verify-python-compat:
-    needs: build-wheel
+    needs: build-and-validate-wheel
     strategy:
       fail-fast: false
       matrix:
@@ -127,11 +144,12 @@ jobs:
           wheel="$(ls dist/*.whl | head -n1)"
           python scripts/release/validate_pycyber.py --python python --wheel "$wheel"
 
-  publish:
-    needs: [build-wheel, verify-python-compat]
+  publish-pypi:
+    needs: [build-and-validate-wheel, verify-python-compat]
     if: startsWith(github.ref, 'refs/tags/wheelos_core-v')
     runs-on: ubuntu-22.04
     permissions:
+      contents: read
       id-token: write
     steps:
       - uses: actions/checkout@v4

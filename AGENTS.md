@@ -16,6 +16,8 @@
 - CI baseline: `bash scripts/release/ubuntu2204_baseline.sh`
 - C++/BUILD checks: `bash scripts/lint/lint.sh --cpp`
 - Python checks: `bash scripts/lint/lint.sh --py`
+- Shell checks: `bash scripts/lint/lint.sh --sh`
+- Changed-file checks: `bash scripts/lint/lint.sh --all --diff origin/main`
 
 ## Knowledge
 

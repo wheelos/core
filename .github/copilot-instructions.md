@@ -66,8 +66,9 @@
   bash scripts/lint/lint.sh --py
   bash scripts/lint/lint.sh --sh
   bash scripts/lint/lint.sh -a
+  bash scripts/lint/lint.sh --all --diff origin/main
   ```
-  These scripts are inherited from Apollo tooling and currently source `scripts/apollo.bashrc` and `scripts/apollo_base.sh`, which are not present in this fork. Treat them as intended entrypoints, but confirm/fix their environment before relying on them.
+  C++ checks use clang-format and Buildifier; Python checks use Black, isort, and Flake8; shell checks use ShellCheck. Configure `WheelOS Lint` and `WheelOS Core CI` as required PR checks for changed-file lint and the Ubuntu 22.04 build/integration baseline. PyCyber wheel verification runs for relevant PRs; PyPI publishing runs only for `wheelos_core-v*` tags.
 - Persistent repository context lives under `.github/context/`. Read `.github/context/index.md` before changing build/release flow or middleware roadmap assumptions.
 
 ## High-level architecture
