@@ -239,6 +239,16 @@ def _drain_pty(master_fd):
 
 
 class CyberToolsDiscoveryTest(unittest.TestCase):
+    def test_recorder_help_exits_successfully(self):
+        result = subprocess.run(
+            [_tool_path("cyber_recorder", "cyber_recorder"), "--help"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn("usage: cyber_recorder", result.stdout)
+
     def test_in_process_and_cross_process_discovery(self):
         suffix = str(os.getpid())
         in_process_channel = "/tests/tools/in_process_" + suffix

@@ -429,7 +429,10 @@ bool RunIoUringPingPong(int fd, const std::vector<ChunkMeta>& chunks, uint32_t s
   }
 
   io_uring ring = {};
-  if (io_uring_queue_init(64, &ring, 0) < 0) {
+  const int ring_result = io_uring_queue_init(64, &ring, 0);
+  if (ring_result < 0) {
+    std::cerr << "io_uring_queue_init failed: " << std::strerror(-ring_result)
+              << "\n";
     return false;
   }
 
@@ -448,7 +451,11 @@ bool RunIoUringPingPong(int fd, const std::vector<ChunkMeta>& chunks, uint32_t s
   iovecs[0].iov_len = slot_size;
   iovecs[1].iov_base = slot1;
   iovecs[1].iov_len = slot_size;
-  if (io_uring_register_buffers(&ring, iovecs.data(), iovecs.size()) < 0) {
+  const int register_result =
+      io_uring_register_buffers(&ring, iovecs.data(), iovecs.size());
+  if (register_result < 0) {
+    std::cerr << "io_uring_register_buffers failed: "
+              << std::strerror(-register_result) << "\n";
     free(slot0);
     free(slot1);
     io_uring_queue_exit(&ring);
@@ -576,7 +583,10 @@ bool RunIoUringHysteresisReplay(int fd, const std::vector<ChunkMeta>& chunks, ui
   const uint64_t limit = chunk_limit == 0 ? static_cast<uint64_t>(chunks.size())
                                           : std::min<uint64_t>(chunk_limit, chunks.size());
   io_uring ring = {};
-  if (io_uring_queue_init(64, &ring, 0) < 0) {
+  const int ring_result = io_uring_queue_init(64, &ring, 0);
+  if (ring_result < 0) {
+    std::cerr << "io_uring_queue_init failed: " << std::strerror(-ring_result)
+              << "\n";
     return false;
   }
   void* slot0 = nullptr;
@@ -593,7 +603,11 @@ bool RunIoUringHysteresisReplay(int fd, const std::vector<ChunkMeta>& chunks, ui
   iovecs[0].iov_len = slot_size;
   iovecs[1].iov_base = slot1;
   iovecs[1].iov_len = slot_size;
-  if (io_uring_register_buffers(&ring, iovecs.data(), iovecs.size()) < 0) {
+  const int register_result =
+      io_uring_register_buffers(&ring, iovecs.data(), iovecs.size());
+  if (register_result < 0) {
+    std::cerr << "io_uring_register_buffers failed: "
+              << std::strerror(-register_result) << "\n";
     free(slot0);
     free(slot1);
     io_uring_queue_exit(&ring);

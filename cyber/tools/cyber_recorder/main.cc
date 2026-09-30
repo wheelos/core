@@ -187,6 +187,10 @@ int main(int argc, char** argv) {
     return -1;
   }
   const std::string command(argv[1]);
+  if (command == "-h" || command == "--help") {
+    DisplayUsage(binary);
+    return 0;
+  }
   std::string file_path;
   if (argc >= 3) {
     file_path = std::string(argv[2]);
