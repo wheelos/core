@@ -58,6 +58,11 @@ class HybridTransmitterTestPeer {
     }
     return false;
   }
+
+  template <typename M>
+  static size_t HistorySize(HybridTransmitter<M>* hybrid) {
+    return hybrid->history_->GetSize();
+  }
 };
 
 class BlockingEnableTransmitter : public Transmitter<proto::UnitTest> {
@@ -97,6 +102,26 @@ class BlockingEnableTransmitter : public Transmitter<proto::UnitTest> {
   std::condition_variable condition_;
   bool enable_entered_ = false;
   bool release_enable_ = false;
+};
+
+class OutcomeTransmitter : public Transmitter<proto::UnitTest> {
+ public:
+  OutcomeTransmitter(const RoleAttributes& attr, bool outcome)
+      : Transmitter<proto::UnitTest>(attr), outcome_(outcome) {}
+
+  void Enable() override {}
+  void Disable() override {}
+
+  bool Transmit(const MessagePtr&, const MessageInfo&) override {
+    ++calls_;
+    return outcome_;
+  }
+
+  int calls() const { return calls_; }
+
+ private:
+  bool outcome_;
+  int calls_ = 0;
 };
 
 class HybridTransceiverTest : public ::testing::Test {
@@ -149,6 +174,47 @@ TEST_F(HybridTransceiverTest, constructor) {
   auto& receiver_id = receiver->id();
 
   EXPECT_NE(transmitter_id.ToString(), receiver_id.ToString());
+}
+
+TEST_F(HybridTransceiverTest, WriteResultIsAnyActiveBackendAccepted) {
+  auto hybrid =
+      std::dynamic_pointer_cast<HybridTransmitter<proto::UnitTest>>(
+          transmitter_a_);
+  ASSERT_NE(hybrid, nullptr);
+  auto message = std::make_shared<proto::UnitTest>();
+  EXPECT_TRUE(transmitter_a_->Transmit(message));
+  EXPECT_EQ(HybridTransmitterTestPeer::HistorySize(hybrid.get()), 0u);
+
+  auto same_proc = transmitter_a_->attributes();
+  same_proc.set_id(101);
+  auto diff_host = same_proc;
+  diff_host.set_id(102);
+  diff_host.set_host_ip("203.0.113.42");
+  auto accepted =
+      std::make_shared<OutcomeTransmitter>(same_proc, true);
+  auto rejected =
+      std::make_shared<OutcomeTransmitter>(diff_host, false);
+  HybridTransmitterTestPeer::SetTransmitter(
+      hybrid.get(), same_proc,
+      std::static_pointer_cast<Transmitter<proto::UnitTest>>(accepted));
+  HybridTransmitterTestPeer::SetTransmitter(
+      hybrid.get(), diff_host,
+      std::static_pointer_cast<Transmitter<proto::UnitTest>>(rejected));
+  transmitter_a_->Enable(same_proc);
+  transmitter_a_->Enable(diff_host);
+
+  EXPECT_TRUE(transmitter_a_->Transmit(message));
+  EXPECT_EQ(accepted->calls(), 1);
+  EXPECT_EQ(rejected->calls(), 1);
+
+  transmitter_a_->Disable(same_proc);
+  EXPECT_FALSE(transmitter_a_->Transmit(message));
+  EXPECT_EQ(accepted->calls(), 1);
+  EXPECT_EQ(rejected->calls(), 2);
+
+  transmitter_a_->Disable(diff_host);
+  EXPECT_TRUE(transmitter_a_->Transmit(message));
+  EXPECT_EQ(rejected->calls(), 2);
 }
 
 TEST_F(HybridTransceiverTest, enable_and_disable_with_param_no_relation) {

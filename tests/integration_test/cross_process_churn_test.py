@@ -107,11 +107,11 @@ class _BoundedStderr:
         self._stream.close()
 
 
-def _start(command, **environment):
+def _start(command, *, discard_stdout=False, **environment):
     process = subprocess.Popen(
         command,
         env=_environment(**environment),
-        stdout=subprocess.PIPE,
+        stdout=subprocess.DEVNULL if discard_stdout else subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
     process._churn_stderr = _BoundedStderr(process.stderr)
@@ -480,7 +480,8 @@ scheduler_conf {
                     record_path,
                     "-c",
                     input_channel,
-                ]
+                ],
+                discard_stdout=True,
             )
             _wait_for_line(source, "TOPOLOGY_OBSERVED reader", timeout=15)
             _wait_for_line(
@@ -532,7 +533,8 @@ scheduler_conf {
         try:
             _wait_for_line(ack_reader, "ENDPOINT_CREATED reader")
             player = _start(
-                [self.recorder, "play", "-f", record_path, "--loop"]
+                [self.recorder, "play", "-f", record_path, "--loop"],
+                discard_stdout=True,
             )
             for round_index in range(CHURN_ROUNDS):
                 token = "component-{}".format(round_index)
@@ -544,6 +546,7 @@ scheduler_conf {
                         "-d",
                         str(dag_path),
                     ],
+                    discard_stdout=True,
                     CYBER_TEST_ACK_CHANNEL=ack_channel,
                     CYBER_TEST_COMPONENT_TOKEN=token,
                 )
