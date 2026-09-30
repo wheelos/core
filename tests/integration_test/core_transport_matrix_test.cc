@@ -16,6 +16,8 @@
 #include <condition_variable>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
+#include <iostream>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -164,6 +166,22 @@ TEST(CoreTransportMatrixTest, PodIceoryxLoanRoundTripIsBounded) {
 int main(int argc, char** argv) {
   const auto cyber_path = (std::filesystem::current_path() / "cyber").string();
   setenv("CYBER_PATH", cyber_path.c_str(), 1);
+  if (const char* test_tmpdir = std::getenv("TEST_TMPDIR")) {
+    const auto lock_path =
+        (std::filesystem::path(test_tmpdir) / "iceoryx_roudi.lock").string();
+    std::ofstream lock_file(lock_path);
+    if (!lock_file) {
+      std::cerr << "failed to create iceoryx lock fixture: " << lock_path
+                << '\n';
+      return EXIT_FAILURE;
+    }
+    lock_file.close();
+    std::filesystem::permissions(
+        lock_path, std::filesystem::perms::owner_read |
+                       std::filesystem::perms::group_read |
+                       std::filesystem::perms::others_read);
+    setenv("CYBER_ICEORYX_ROUDI_LOCK", lock_path.c_str(), 1);
+  }
   testing::InitGoogleTest(&argc, argv);
   apollo::cyber::Init(argv[0]);
   const int result = RUN_ALL_TESTS();
