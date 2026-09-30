@@ -19,6 +19,7 @@
 
 #include <deque>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <tuple>
 #include <type_traits>
@@ -44,7 +45,8 @@ class AllLatest : public DataFusion<M0, M1, M2, M3> {
   AllLatest(const ChannelBuffer<M0>& buffer_0,
             const ChannelBuffer<M1>& buffer_1,
             const ChannelBuffer<M2>& buffer_2,
-            const ChannelBuffer<M3>& buffer_3)
+            const ChannelBuffer<M3>& buffer_3,
+            const std::shared_ptr<metrics::Endpoint>& metric = nullptr)
       : buffer_m0_(buffer_0),
         buffer_m1_(buffer_1),
         buffer_m2_(buffer_2),
@@ -52,6 +54,7 @@ class AllLatest : public DataFusion<M0, M1, M2, M3> {
         buffer_fusion_(buffer_m0_.channel_id(),
                        new CacheBuffer<std::shared_ptr<FusionDataType>>(
                            buffer_0.Buffer()->Capacity() - uint64_t(1))) {
+    buffer_fusion_.Buffer()->AttachMetrics(metric);
     buffer_m0_.Buffer()->SetFusionCallback(
         [this](const std::shared_ptr<M0>& m0) {
           std::shared_ptr<M1> m1;
@@ -66,6 +69,12 @@ class AllLatest : public DataFusion<M0, M1, M2, M3> {
           std::lock_guard<std::mutex> lg(buffer_fusion_.Buffer()->Mutex());
           buffer_fusion_.Buffer()->Fill(data);
         });
+  }
+
+  ~AllLatest() override {
+    auto buffer = buffer_m0_.Buffer();
+    std::lock_guard<std::mutex> lock(buffer->Mutex());
+    buffer->SetFusionCallback({});
   }
 
   bool Fusion(uint64_t* index, std::shared_ptr<M0>& m0, std::shared_ptr<M1>& m1,
@@ -97,13 +106,15 @@ class AllLatest<M0, M1, M2, NullType> : public DataFusion<M0, M1, M2> {
  public:
   AllLatest(const ChannelBuffer<M0>& buffer_0,
             const ChannelBuffer<M1>& buffer_1,
-            const ChannelBuffer<M2>& buffer_2)
+            const ChannelBuffer<M2>& buffer_2,
+            const std::shared_ptr<metrics::Endpoint>& metric = nullptr)
       : buffer_m0_(buffer_0),
         buffer_m1_(buffer_1),
         buffer_m2_(buffer_2),
         buffer_fusion_(buffer_m0_.channel_id(),
                        new CacheBuffer<std::shared_ptr<FusionDataType>>(
                            buffer_0.Buffer()->Capacity() - uint64_t(1))) {
+    buffer_fusion_.Buffer()->AttachMetrics(metric);
     buffer_m0_.Buffer()->SetFusionCallback(
         [this](const std::shared_ptr<M0>& m0) {
           std::shared_ptr<M1> m1;
@@ -116,6 +127,12 @@ class AllLatest<M0, M1, M2, NullType> : public DataFusion<M0, M1, M2> {
           std::lock_guard<std::mutex> lg(buffer_fusion_.Buffer()->Mutex());
           buffer_fusion_.Buffer()->Fill(data);
         });
+  }
+
+  ~AllLatest() override {
+    auto buffer = buffer_m0_.Buffer();
+    std::lock_guard<std::mutex> lock(buffer->Mutex());
+    buffer->SetFusionCallback({});
   }
 
   bool Fusion(uint64_t* index, std::shared_ptr<M0>& m0, std::shared_ptr<M1>& m1,
@@ -143,12 +160,14 @@ class AllLatest<M0, M1, NullType, NullType> : public DataFusion<M0, M1> {
 
  public:
   AllLatest(const ChannelBuffer<M0>& buffer_0,
-            const ChannelBuffer<M1>& buffer_1)
+            const ChannelBuffer<M1>& buffer_1,
+            const std::shared_ptr<metrics::Endpoint>& metric = nullptr)
       : buffer_m0_(buffer_0),
         buffer_m1_(buffer_1),
         buffer_fusion_(buffer_m0_.channel_id(),
                        new CacheBuffer<std::shared_ptr<FusionDataType>>(
                            buffer_0.Buffer()->Capacity() - uint64_t(1))) {
+    buffer_fusion_.Buffer()->AttachMetrics(metric);
     buffer_m0_.Buffer()->SetFusionCallback(
         [this](const std::shared_ptr<M0>& m0) {
           std::shared_ptr<M1> m1;
@@ -160,6 +179,12 @@ class AllLatest<M0, M1, NullType, NullType> : public DataFusion<M0, M1> {
           std::lock_guard<std::mutex> lg(buffer_fusion_.Buffer()->Mutex());
           buffer_fusion_.Buffer()->Fill(data);
         });
+  }
+
+  ~AllLatest() override {
+    auto buffer = buffer_m0_.Buffer();
+    std::lock_guard<std::mutex> lock(buffer->Mutex());
+    buffer->SetFusionCallback({});
   }
 
   bool Fusion(uint64_t* index, std::shared_ptr<M0>& m0,

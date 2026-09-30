@@ -12,3 +12,12 @@
 ## Middleware roadmap
 
 - `roadmaps/middleware-evolution.md` — Fast DDS 2.14.x stabilization plan, zero-copy evolution stages, and recommended next milestones.
+- `roadmaps/runtime-contract-evolution.md` — Semantic, lifecycle, compatibility,
+  recovery, low-overhead observability, determinism, and devtools roadmap.
+- `design/runtime-contract-rollout-plan.md` — compatibility-first implementation
+  work packages, invariant behavior, validation gates, and rollback boundaries.
+- `../../docs/guides/runtime-contract-v1.md` — characterized Writer/Reader,
+  queue, callback, and lifecycle behavior with test-backed unsupported boundaries.
+- `design/runtime-metrics-plan.md` — proposed runtime metrics definitions, instrumentation points, staged delivery, and acceptance criteria.
+- `design/runtime-metrics-usage.md` — current opt-in local runtime metrics configuration, output, and limitations.
+- `design/runtime-metrics-performance.md` — hot-path and Node pub/sub comparisons, usage and limits of their conclusions.

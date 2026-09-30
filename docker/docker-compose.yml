@@ -22,6 +22,7 @@ services:
       
     working_dir: /workspace
     ipc: private
+    shm_size: ${SHM_SIZE:-1g}
     network_mode: host
     privileged: true
     ulimits:

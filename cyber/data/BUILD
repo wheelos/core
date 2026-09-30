@@ -19,6 +19,7 @@ cc_library(
 cc_library(
     name = "cache_buffer",
     srcs = ["cache_buffer.h"],
+    deps = ["//cyber/metrics"],
 )
 
 cc_test(
@@ -36,6 +37,7 @@ cc_library(
     hdrs = ["channel_buffer.h"],
     deps = [
         ":data_notifier",
+        "//cyber/metrics",
         "//cyber/proto:component_conf_cc_proto",
     ],
 )
@@ -51,6 +53,7 @@ cc_library(
 cc_library(
     name = "data_visitor",
     hdrs = ["data_visitor.h"],
+    deps = ["//cyber/metrics"],
 )
 
 cc_test(

@@ -24,6 +24,7 @@
 #include <string>
 #include <sys/file.h>
 #include <sys/prctl.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -44,7 +45,6 @@ inline iox::roudi::IceOryxRouDiComponents* g_iceoryx_roudi_components = nullptr;
 inline iox::roudi::RouDi* g_iceoryx_roudi = nullptr;
 inline int g_iceoryx_roudi_lock_fd = -1;
 inline pid_t g_iceoryx_roudi_child_pid = -1;
-inline std::string g_iceoryx_roudi_lock_path;
 
 inline bool IceoryxEnvFlagEnabled(const std::string& name,
                                   bool default_value) {
@@ -88,11 +88,27 @@ inline void EnsureIceoryxRouDiDaemon() {
       (lock_env == nullptr || *lock_env == '\0')
           ? "/tmp/cyber_iceoryx_roudi.lock"
           : lock_env;
-  g_iceoryx_roudi_lock_path = lock_path;
-  g_iceoryx_roudi_lock_fd =
-      ::open(lock_path.c_str(), O_CREAT | O_RDWR, static_cast<mode_t>(0644));
+  // Leave the lock file in place so all processes flock the same inode.
+  constexpr int kReadFlags = O_RDONLY | O_CLOEXEC | O_NOFOLLOW;
+  g_iceoryx_roudi_lock_fd = ::open(lock_path.c_str(), kReadFlags);
+  if (g_iceoryx_roudi_lock_fd < 0 && errno == ENOENT) {
+    g_iceoryx_roudi_lock_fd =
+        ::open(lock_path.c_str(), kReadFlags | O_CREAT | O_EXCL, 0644);
+    if (g_iceoryx_roudi_lock_fd >= 0) {
+      if (::fchmod(g_iceoryx_roudi_lock_fd, 0644) != 0) {
+        AERROR << "failed to set iceoryx RouDi lock permissions, errno: "
+               << errno;
+        ::close(g_iceoryx_roudi_lock_fd);
+        g_iceoryx_roudi_lock_fd = -1;
+        return;
+      }
+    } else if (errno == EEXIST) {
+      g_iceoryx_roudi_lock_fd = ::open(lock_path.c_str(), kReadFlags);
+    }
+  }
   if (g_iceoryx_roudi_lock_fd < 0) {
-    AERROR << "failed to open iceoryx rouDi lock file";
+    AERROR << "failed to open iceoryx RouDi lock file " << lock_path
+           << ", errno: " << errno;
     return;
   }
 
@@ -168,9 +184,6 @@ inline void ShutdownIceoryxRouDiDaemon() {
   for (int i = 0; i < 40; ++i) {
     const pid_t waited = ::waitpid(child_pid, nullptr, WNOHANG);
     if (waited == child_pid || (waited < 0 && errno == ECHILD)) {
-      if (!g_iceoryx_roudi_lock_path.empty()) {
-        ::unlink(g_iceoryx_roudi_lock_path.c_str());
-      }
       return;
     }
     ::usleep(50000);
@@ -180,9 +193,6 @@ inline void ShutdownIceoryxRouDiDaemon() {
     AERROR << "failed to force-stop embedded iceoryx RouDi pid=" << child_pid;
   }
   (void)::waitpid(child_pid, nullptr, 0);
-  if (!g_iceoryx_roudi_lock_path.empty()) {
-    ::unlink(g_iceoryx_roudi_lock_path.c_str());
-  }
 }
 
 }  // namespace transport

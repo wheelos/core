@@ -26,6 +26,7 @@ py_test(
     srcs = ["release_scripts_test.py"],
     data = [
         "build_release_artifacts.sh",
+        "check_release_version.py",
         "run_release_acceptance.sh",
         "ubuntu2204_baseline.sh",
         "validate_runtime_bundle.sh",

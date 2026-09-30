@@ -32,6 +32,7 @@ cc_library(
     deps = [
         "//cyber:binary",
         "//cyber:state",
+        "//cyber/metrics",
         "//cyber/common:file",
         "//cyber/logger:async_logger",
         "//cyber/node",

@@ -144,7 +144,7 @@ bool Component<M0, NullType, NullType, NullType>::Process(
   if (is_shutdown_.load()) {
     return true;
   }
-  return Proc(msg);
+  return metrics::MeasureCallback(metric_, [this, &msg] { return Proc(msg); });
 }
 
 inline bool Component<NullType, NullType, NullType>::Initialize(
@@ -174,6 +174,7 @@ bool Component<M0, NullType, NullType, NullType>::Initialize(
     return false;
   }
 
+  RegisterComponentMetric(config);
   bool is_reality_mode = GlobalData::Instance()->IsRealityMode();
 
   ReaderConfig reader_cfg;
@@ -212,7 +213,8 @@ bool Component<M0, NullType, NullType, NullType>::Initialize(
 
   data::VisitorConfig conf = {readers_[0]->ChannelId(),
                               readers_[0]->PendingQueueSize()};
-  auto dv = std::make_shared<data::DataVisitor<M0>>(conf);
+  auto dv = std::make_shared<data::DataVisitor<M0>>(
+      conf.channel_id, conf.queue_size, "", metric_);
   croutine::RoutineFactory factory =
       croutine::CreateRoutineFactory<M0>(func, dv);
   auto sched = scheduler::Instance();
@@ -225,7 +227,9 @@ bool Component<M0, M1, NullType, NullType>::Process(
   if (is_shutdown_.load()) {
     return true;
   }
-  return Proc(msg0, msg1);
+  return metrics::MeasureCallback(metric_, [this, &msg0, &msg1] {
+    return Proc(msg0, msg1);
+  });
 }
 
 template <typename M0, typename M1>
@@ -244,6 +248,7 @@ bool Component<M0, M1, NullType, NullType>::Initialize(
     return false;
   }
 
+  RegisterComponentMetric(config);
   bool is_reality_mode = GlobalData::Instance()->IsRealityMode();
 
   ReaderConfig reader_cfg;
@@ -309,7 +314,7 @@ bool Component<M0, M1, NullType, NullType>::Initialize(
   for (auto& reader : readers_) {
     config_list.emplace_back(reader->ChannelId(), reader->PendingQueueSize());
   }
-  auto dv = std::make_shared<data::DataVisitor<M0, M1>>(config_list);
+  auto dv = std::make_shared<data::DataVisitor<M0, M1>>(config_list, metric_);
   croutine::RoutineFactory factory =
       croutine::CreateRoutineFactory<M0, M1>(func, dv);
   return sched->CreateTask(factory, node_->Name());
@@ -322,7 +327,9 @@ bool Component<M0, M1, M2, NullType>::Process(const std::shared_ptr<M0>& msg0,
   if (is_shutdown_.load()) {
     return true;
   }
-  return Proc(msg0, msg1, msg2);
+  return metrics::MeasureCallback(metric_, [this, &msg0, &msg1, &msg2] {
+    return Proc(msg0, msg1, msg2);
+  });
 }
 
 template <typename M0, typename M1, typename M2>
@@ -341,6 +348,7 @@ bool Component<M0, M1, M2, NullType>::Initialize(
     return false;
   }
 
+  RegisterComponentMetric(config);
   bool is_reality_mode = GlobalData::Instance()->IsRealityMode();
 
   ReaderConfig reader_cfg;
@@ -419,7 +427,8 @@ bool Component<M0, M1, M2, NullType>::Initialize(
   for (auto& reader : readers_) {
     config_list.emplace_back(reader->ChannelId(), reader->PendingQueueSize());
   }
-  auto dv = std::make_shared<data::DataVisitor<M0, M1, M2>>(config_list);
+  auto dv = std::make_shared<data::DataVisitor<M0, M1, M2>>(config_list,
+                                                            metric_);
   croutine::RoutineFactory factory =
       croutine::CreateRoutineFactory<M0, M1, M2>(func, dv);
   return sched->CreateTask(factory, node_->Name());
@@ -433,7 +442,9 @@ bool Component<M0, M1, M2, M3>::Process(const std::shared_ptr<M0>& msg0,
   if (is_shutdown_.load()) {
     return true;
   }
-  return Proc(msg0, msg1, msg2, msg3);
+  return metrics::MeasureCallback(metric_, [this, &msg0, &msg1, &msg2, &msg3] {
+    return Proc(msg0, msg1, msg2, msg3);
+  });
 }
 
 template <typename M0, typename M1, typename M2, typename M3>
@@ -451,6 +462,7 @@ bool Component<M0, M1, M2, M3>::Initialize(const ComponentConfig& config) {
     return false;
   }
 
+  RegisterComponentMetric(config);
   bool is_reality_mode = GlobalData::Instance()->IsRealityMode();
 
   ReaderConfig reader_cfg;
@@ -542,7 +554,8 @@ bool Component<M0, M1, M2, M3>::Initialize(const ComponentConfig& config) {
   for (auto& reader : readers_) {
     config_list.emplace_back(reader->ChannelId(), reader->PendingQueueSize());
   }
-  auto dv = std::make_shared<data::DataVisitor<M0, M1, M2, M3>>(config_list);
+  auto dv = std::make_shared<data::DataVisitor<M0, M1, M2, M3>>(config_list,
+                                                                metric_);
   croutine::RoutineFactory factory =
       croutine::CreateRoutineFactory<M0, M1, M2, M3>(func, dv);
   return sched->CreateTask(factory, node_->Name());

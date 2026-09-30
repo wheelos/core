@@ -15,11 +15,16 @@
  *****************************************************************************/
 #include "cyber/croutine/croutine.h"
 
+#include <chrono>
+#include <thread>
+#include <vector>
+
 #include "gtest/gtest.h"
 
 #include "cyber/common/global_data.h"
 #include "cyber/cyber.h"
 #include "cyber/init.h"
+#include "cyber/metrics/metrics.h"
 
 namespace apollo {
 namespace cyber {
@@ -47,6 +52,62 @@ TEST(Croutine, croutinetest) {
   EXPECT_EQ(cr->state(), RoutineState::IO_WAIT);
   cr->Stop();
   EXPECT_EQ(cr->Resume(), RoutineState::FINISHED);
+}
+
+TEST(Croutine, SchedulingNotificationCoalescesUntilResume) {
+  auto& registry = metrics::Registry::Instance();
+  registry.Configure(metrics::Mode::Basic);
+  auto endpoint = registry.RegisterTask("coalesced");
+  ASSERT_TRUE(endpoint);
+  CRoutine routine([] {});
+  routine.set_scheduling_metric(endpoint);
+  routine.RecordSchedulingResume();
+  EXPECT_EQ(endpoint->Snapshot().scheduling_latency.count, 0);
+  routine.MarkSchedulingReady();
+  std::this_thread::sleep_for(std::chrono::milliseconds(2));
+  routine.MarkSchedulingReady();
+  routine.RecordSchedulingResume();
+  const auto sample = endpoint->Snapshot().scheduling_latency;
+  ASSERT_EQ(sample.count, 1);
+  ASSERT_TRUE(sample.max_ns);
+  EXPECT_GE(*sample.max_ns, 2000000);
+  routine.RecordSchedulingResume();
+  EXPECT_EQ(endpoint->Snapshot().scheduling_latency.count, 1);
+  registry.Configure(metrics::Mode::Off);
+  routine.MarkSchedulingReady();
+  routine.RecordSchedulingResume();
+  EXPECT_EQ(endpoint->Snapshot().scheduling_latency.count, 1);
+}
+
+TEST(Croutine, StoppedTaskDoesNotReportSchedulingResume) {
+  auto& registry = metrics::Registry::Instance();
+  registry.Configure(metrics::Mode::Basic);
+  auto endpoint = registry.RegisterTask("stopped");
+  ASSERT_TRUE(endpoint);
+  CRoutine routine([] {});
+  routine.set_scheduling_metric(endpoint);
+  routine.MarkSchedulingReady();
+  routine.Stop();
+  EXPECT_EQ(routine.Resume(), RoutineState::FINISHED);
+  EXPECT_EQ(endpoint->Snapshot().scheduling_count, 0);
+  registry.Configure(metrics::Mode::Off);
+}
+
+TEST(Croutine, ConcurrentNotificationsProduceOneWaitSample) {
+  auto& registry = metrics::Registry::Instance();
+  registry.Configure(metrics::Mode::Basic);
+  auto endpoint = registry.RegisterTask("concurrent_notify");
+  ASSERT_TRUE(endpoint);
+  CRoutine routine([] {});
+  routine.set_scheduling_metric(endpoint);
+  std::vector<std::thread> notifiers;
+  for (int i = 0; i < 8; ++i) {
+    notifiers.emplace_back([&] { routine.MarkSchedulingReady(); });
+  }
+  for (auto& notifier : notifiers) notifier.join();
+  routine.RecordSchedulingResume();
+  EXPECT_EQ(endpoint->Snapshot().scheduling_count, 1);
+  registry.Configure(metrics::Mode::Off);
 }
 
 }  // namespace croutine

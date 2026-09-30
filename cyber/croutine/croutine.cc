@@ -79,6 +79,7 @@ RoutineState CRoutine::Resume() {
     return state_;
   }
 
+  RecordSchedulingResume();
   current_routine_ = this;
   SwapContext(GetMainStack(), GetStack());
   current_routine_ = nullptr;
@@ -86,6 +87,40 @@ RoutineState CRoutine::Resume() {
 }
 
 void CRoutine::Stop() { force_stop_ = true; }
+
+void CRoutine::set_scheduling_metric(
+    std::shared_ptr<metrics::Endpoint> metric) {
+  scheduling_metric_ = std::move(metric);
+}
+
+void CRoutine::MarkSchedulingReady() {
+  if (!scheduling_metric_ ||
+      metrics::Registry::Instance().mode() == metrics::Mode::Off) {
+    return;
+  }
+  const auto now = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                       metrics::Clock::now().time_since_epoch())
+                       .count();
+  uint64_t empty = 0;
+  scheduling_ready_ns_.compare_exchange_strong(
+      empty, static_cast<uint64_t>(now), std::memory_order_relaxed);
+}
+
+void CRoutine::RecordSchedulingResume() {
+  if (!scheduling_metric_) return;
+  const auto ready =
+      scheduling_ready_ns_.exchange(0, std::memory_order_relaxed);
+  if (ready == 0) return;
+  const auto now = metrics::Clock::now();
+  const auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                           now.time_since_epoch())
+                           .count() -
+                       static_cast<int64_t>(ready);
+  if (elapsed >= 0) {
+    scheduling_metric_->ObserveSchedulingLatency(
+        std::chrono::nanoseconds(elapsed), now);
+  }
+}
 
 }  // namespace croutine
 }  // namespace cyber

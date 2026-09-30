@@ -29,6 +29,7 @@
 #include "cyber/class_loader/class_loader.h"
 #include "cyber/common/environment.h"
 #include "cyber/common/file.h"
+#include "cyber/metrics/metrics.h"
 #include "cyber/node/node.h"
 #include "cyber/scheduler/scheduler.h"
 
@@ -109,10 +110,16 @@ class ComponentBase : public std::enable_shared_from_this<ComponentBase> {
     }
   }
 
+  void RegisterComponentMetric(const ComponentConfig& config) {
+    metric_ = metrics::Registry::Instance().RegisterConsumer(
+        config.readers(0).channel(), config.name() + ":component");
+  }
+
   std::atomic<bool> is_shutdown_ = {false};
   std::shared_ptr<Node> node_ = nullptr;
   std::string config_file_path_ = "";
   std::vector<std::shared_ptr<ReaderBase>> readers_;
+  std::shared_ptr<metrics::Endpoint> metric_;
 };
 
 }  // namespace cyber

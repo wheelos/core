@@ -49,9 +49,10 @@ bool RecordFileReader::Open(const std::string& path) {
     return false;
   }
 
-  if (io_uring_queue_init(256, &ring_, 0) < 0) {
+  const int ring_result = io_uring_queue_init(256, &ring_, 0);
+  if (ring_result < 0) {
     AWARN << "io_uring_queue_init unavailable, using synchronous reads, file: "
-          << path_;
+          << path_ << ", error: " << std::strerror(-ring_result);
   } else {
     ring_initialized_ = true;
   }

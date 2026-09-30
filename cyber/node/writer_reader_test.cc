@@ -15,6 +15,7 @@
  *****************************************************************************/
 
 #include <memory>
+#include <condition_variable>
 #include <string>
 #include <thread>
 #include <vector>
@@ -26,6 +27,7 @@
 #include "cyber/common/global_data.h"
 #include "cyber/cyber.h"
 #include "cyber/init.h"
+#include "cyber/metrics/metrics.h"
 #include "cyber/node/reader.h"
 #include "cyber/node/writer.h"
 
@@ -44,6 +46,7 @@ TEST(WriterReaderTest, constructor) {
   Reader<proto::UnitTest> reader_a(attr);
   EXPECT_FALSE(reader_a.IsInit());
   EXPECT_EQ(reader_a.GetChannelName(), channel_name);
+  EXPECT_EQ(reader_a.PendingQueueSize(), 1);
 
   attr.set_host_name("caros");
   Writer<proto::UnitTest> writer_b(attr);
@@ -162,6 +165,65 @@ TEST(WriterReaderTest, messaging) {
   writer.Shutdown();
   reader_a.Shutdown();
   reader_b.Shutdown();
+}
+
+TEST(WriterReaderTest, runtime_metrics) {
+  metrics::Registry::Instance().Configure(metrics::Mode::Basic);
+  proto::RoleAttributes attr;
+  attr.set_node_name("metrics_reader");
+  attr.set_channel_name("/writer_reader_metrics");
+  attr.set_channel_id(common::GlobalData::RegisterChannel(attr.channel_name()));
+
+  std::mutex mutex;
+  std::condition_variable received_cv;
+  bool received = false;
+  Reader<proto::UnitTest> reader(
+      attr, [&](const std::shared_ptr<proto::UnitTest>&) {
+        std::lock_guard<std::mutex> lock(mutex);
+        received = true;
+        received_cv.notify_one();
+      });
+  ASSERT_TRUE(reader.Init());
+  attr.set_node_name("metrics_writer");
+  Writer<proto::UnitTest> writer(attr);
+  ASSERT_TRUE(writer.Init());
+  const auto deadline = std::chrono::steady_clock::now() +
+                        std::chrono::seconds(5);
+  while (!writer.HasReader() && std::chrono::steady_clock::now() < deadline) {
+    std::this_thread::yield();
+  }
+  ASSERT_TRUE(writer.HasReader());
+  ASSERT_TRUE(writer.Write(std::make_shared<proto::UnitTest>()));
+  {
+    std::unique_lock<std::mutex> lock(mutex);
+    ASSERT_TRUE(received_cv.wait_until(lock, deadline, [&] { return received; }));
+  }
+
+  metrics::EndpointSnapshot publisher, receiver, consumer;
+  bool complete = false;
+  while (!complete && std::chrono::steady_clock::now() < deadline) {
+    auto snapshot = metrics::Registry::Instance().Snapshot();
+    for (const auto& endpoint : snapshot.endpoints) {
+      if (endpoint.channel != attr.channel_name()) continue;
+      if (endpoint.kind == metrics::Kind::Writer) publisher = endpoint;
+      if (endpoint.kind == metrics::Kind::Receiver) receiver = endpoint;
+      if (endpoint.kind == metrics::Kind::Consumer) consumer = endpoint;
+    }
+    complete = consumer.callback_completed_count == 1;
+    if (!complete) std::this_thread::yield();
+  }
+  EXPECT_TRUE(complete);
+  EXPECT_EQ(publisher.publish_count, 1);
+  EXPECT_EQ(receiver.receive_count, 1);
+  EXPECT_EQ(consumer.enqueue_count, 1);
+  EXPECT_EQ(consumer.dequeue_count, 1);
+  EXPECT_EQ(consumer.callback_count, 1);
+  EXPECT_EQ(consumer.queue_depth, 0);
+  EXPECT_EQ(consumer.queue_latency.count, 1);
+  EXPECT_EQ(consumer.callback_latency.count, 1);
+  writer.Shutdown();
+  reader.Shutdown();
+  metrics::Registry::Instance().Configure(metrics::Mode::Off);
 }
 
 TEST(WriterReaderTest, observe) {

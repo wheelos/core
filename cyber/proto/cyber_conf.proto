@@ -7,9 +7,21 @@ import "cyber/proto/transport_conf.proto";
 import "cyber/proto/run_mode_conf.proto";
 import "cyber/proto/perf_conf.proto";
 
+message RuntimeMetricsConf {
+  enum Mode {
+    OFF = 0;
+    BASIC = 1;
+    DETAILED = 2;
+  }
+  optional Mode mode = 1 [default = OFF];
+  // Absolute path prefix in a private directory; exporter appends .<pid>.json.
+  optional string snapshot_path = 2;
+}
+
 message CyberConfig {
   optional SchedulerConf scheduler_conf = 1;
   optional TransportConf transport_conf = 2;
   optional RunModeConf run_mode_conf = 3;
   optional PerfConf perf_conf = 4;
+  optional RuntimeMetricsConf runtime_metrics_conf = 5;
 }

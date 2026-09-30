@@ -27,6 +27,7 @@
 
 #include "cyber/common/log.h"
 #include "cyber/croutine/detail/routine_context.h"
+#include "cyber/metrics/metrics.h"
 
 namespace apollo {
 namespace cyber {
@@ -56,6 +57,9 @@ class CRoutine {
   // It is caller's responsibility to check if state_ is valid before calling
   // SetUpdateFlag().
   void SetUpdateFlag();
+  void MarkSchedulingReady();
+  void RecordSchedulingResume();
+  void set_scheduling_metric(std::shared_ptr<metrics::Endpoint> metric);
 
   // acquire && release should be called before Resume
   // when work-steal like mechanism used
@@ -109,6 +113,8 @@ class CRoutine {
 
   std::atomic_flag lock_ = ATOMIC_FLAG_INIT;
   std::atomic_flag updated_ = ATOMIC_FLAG_INIT;
+  std::atomic<uint64_t> scheduling_ready_ns_{0};
+  std::shared_ptr<metrics::Endpoint> scheduling_metric_;
 
   bool force_stop_ = false;
 

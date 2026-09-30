@@ -244,6 +244,7 @@ bool SchedulerChoreography::NotifyProcessor(uint64_t crid) {
       pid = cr->processor_id();
       if (cr->state() == RoutineState::DATA_WAIT ||
           cr->state() == RoutineState::IO_WAIT) {
+        cr->MarkSchedulingReady();
         cr->SetUpdateFlag();
       }
     } else {

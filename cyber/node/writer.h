@@ -26,6 +26,7 @@
 #include "cyber/proto/topology_change.pb.h"
 
 #include "cyber/common/log.h"
+#include "cyber/metrics/metrics.h"
 #include "cyber/node/writer_base.h"
 #include "cyber/service_discovery/topology_manager.h"
 #include "cyber/transport/transport.h"
@@ -75,18 +76,23 @@ class Writer : public WriterBase {
   /**
    * @brief Write a MessageT instance
    *
-   * @param msg the message we want to write
-   * @return true if write successfully
-   * @return false if write failed
+   * Copies msg into a shared pointer before submitting it to the transport.
+   * @param msg the message to write
+   * @return the transport's synchronous submission result, not delivery or
+   * callback completion. HYBRID returns true with no active readers or when
+   * at least one active backend accepts the message.
    */
   virtual bool Write(const MessageT& msg);
 
   /**
    * @brief Write a shared ptr of MessageT
    *
-   * @param msg_ptr the message shared ptr we want to write
-   * @return true if write successfully
-   * @return false if write failed
+   * The framework does not copy the message object here; transports may
+   * serialize or copy its contents.
+   * @param msg_ptr the message shared pointer to write
+   * @return the transport's synchronous submission result, not delivery or
+   * callback completion. HYBRID returns true with no active readers or when
+   * at least one active backend accepts the message.
    */
   virtual bool Write(const std::shared_ptr<MessageT>& msg_ptr);
   virtual bool Loan(std::size_t size, LoanedMessage* loaned_msg);
@@ -109,13 +115,18 @@ class Writer : public WriterBase {
   void GetReaders(std::vector<proto::RoleAttributes>* readers) override;
 
  private:
-  TransmitterPtr SnapshotTransmitter();
+  TransmitterPtr SnapshotTransmitter(
+      std::shared_ptr<metrics::Endpoint>* metric = nullptr);
+  static void RecordPublishOutcome(
+      const std::shared_ptr<metrics::Endpoint>& metric,
+      metrics::TimePoint start, bool success);
   ChannelManagerPtr SnapshotChannelManager();
   void JoinTheTopology();
   void LeaveTheTopology();
   void OnChannelChange(const proto::ChangeMsg& change_msg);
 
   TransmitterPtr transmitter_;
+  std::shared_ptr<metrics::Endpoint> metric_;
 
   ChangeConnection change_conn_;
   service_discovery::ChannelManagerPtr channel_manager_;
@@ -146,6 +157,8 @@ bool Writer<MessageT>::Init() {
       return false;
     }
     init_ = true;
+    metric_ = metrics::Registry::Instance().RegisterWriter(
+        role_attr_.channel_name(), role_attr_.node_name());
   }
   this->role_attr_.set_id(transmitter_->id().HashValue());
   channel_manager_ =
@@ -168,13 +181,18 @@ void Writer<MessageT>::Shutdown() {
     std::lock_guard<std::mutex> g(lock_);
     transmitter_ = nullptr;
     channel_manager_ = nullptr;
+    metric_.reset();
   }
 }
 
 template <typename MessageT>
 typename Writer<MessageT>::TransmitterPtr
-Writer<MessageT>::SnapshotTransmitter() {
+Writer<MessageT>::SnapshotTransmitter(
+    std::shared_ptr<metrics::Endpoint>* metric) {
   std::lock_guard<std::mutex> g(lock_);
+  if (metric != nullptr) {
+    *metric = metric_;
+  }
   if (!init_) {
     return nullptr;
   }
@@ -192,18 +210,48 @@ Writer<MessageT>::SnapshotChannelManager() {
 }
 
 template <typename MessageT>
+void Writer<MessageT>::RecordPublishOutcome(
+    const std::shared_ptr<metrics::Endpoint>& metric,
+    metrics::TimePoint start, bool success) {
+  if (!metric) return;
+  const auto end = metrics::Clock::now();
+  if (start == metrics::TimePoint{}) {
+    metric->RecordPublish(success, end);
+  } else {
+    metric->RecordPublish(success, end - start, end);
+  }
+}
+
+template <typename MessageT>
 bool Writer<MessageT>::Write(const MessageT& msg) {
-  auto transmitter = SnapshotTransmitter();
-  RETURN_VAL_IF(transmitter == nullptr, false);
-  auto msg_ptr = std::make_shared<MessageT>(msg);
-  return transmitter->Transmit(msg_ptr);
+  const bool metrics_enabled =
+      metrics::Registry::Instance().mode() != metrics::Mode::Off;
+  const auto start = metrics_enabled ? metrics::Clock::now()
+                                    : metrics::TimePoint{};
+  std::shared_ptr<metrics::Endpoint> metric;
+  auto transmitter =
+      SnapshotTransmitter(metrics_enabled ? &metric : nullptr);
+  bool result = false;
+  if (transmitter != nullptr) {
+    auto msg_ptr = std::make_shared<MessageT>(msg);
+    result = transmitter->Transmit(msg_ptr);
+  }
+  RecordPublishOutcome(metric, start, result);
+  return result;
 }
 
 template <typename MessageT>
 bool Writer<MessageT>::Write(const std::shared_ptr<MessageT>& msg_ptr) {
-  auto transmitter = SnapshotTransmitter();
-  RETURN_VAL_IF(transmitter == nullptr, false);
-  return transmitter->Transmit(msg_ptr);
+  const bool metrics_enabled =
+      metrics::Registry::Instance().mode() != metrics::Mode::Off;
+  const auto start = metrics_enabled ? metrics::Clock::now()
+                                    : metrics::TimePoint{};
+  std::shared_ptr<metrics::Endpoint> metric;
+  auto transmitter =
+      SnapshotTransmitter(metrics_enabled ? &metric : nullptr);
+  const bool result = transmitter != nullptr && transmitter->Transmit(msg_ptr);
+  RecordPublishOutcome(metric, start, result);
+  return result;
 }
 
 template <typename MessageT>
@@ -215,9 +263,17 @@ bool Writer<MessageT>::Loan(std::size_t size, LoanedMessage* loaned_msg) {
 
 template <typename MessageT>
 bool Writer<MessageT>::Publish(LoanedMessage&& loaned_msg) {
-  auto transmitter = SnapshotTransmitter();
-  RETURN_VAL_IF(transmitter == nullptr, false);
-  return transmitter->Publish(std::move(loaned_msg));
+  const bool metrics_enabled =
+      metrics::Registry::Instance().mode() != metrics::Mode::Off;
+  const auto start = metrics_enabled ? metrics::Clock::now()
+                                    : metrics::TimePoint{};
+  std::shared_ptr<metrics::Endpoint> metric;
+  auto transmitter =
+      SnapshotTransmitter(metrics_enabled ? &metric : nullptr);
+  const bool result = transmitter != nullptr &&
+                      transmitter->Publish(std::move(loaned_msg));
+  RecordPublishOutcome(metric, start, result);
+  return result;
 }
 
 template <typename MessageT>
