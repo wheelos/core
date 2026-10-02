@@ -1,6 +1,6 @@
 ---
 name: testing
-description: Choose and run repository Bazel tests for runtime, transport, message, example, and integration changes. Use when changing code or tests and validation is needed.
+description: Choose and run repository Bazel unit, runtime, transport, message, example, and integration tests, including the canonical CI baseline. Use when changing code or tests and validation is needed.
 ---
 
 # Testing
@@ -12,6 +12,17 @@ Read this when changing runtime, transport, message, example, or test code.
 ## Rules / Facts
 
 - Prefer Bazel targets instead of invoking compilers directly.
+- The canonical Ubuntu 22.04 CI build and test entrypoint is
+  `bash scripts/release/ubuntu2204_baseline.sh`. It checks the release version
+  and Bzlmod lockfile, builds `//cyber` and `//:wheelos_core`, and runs the
+  curated unit and integration test matrix, including
+  `//tests/integration_test:core_tool_matrix_tests`.
+- To match GitHub Actions when running Python tests locally, use Python 3.10
+  and an isolated `PYTHONUSERBASE` with `protobuf==5.29.5`; pass that same
+  `PYTHONUSERBASE` to Bazel via `--test_env`. The CI setup is defined in
+  `.github/workflows/core-ci.yml`.
+- `bazel test //...` runs every Bazel test target and is broader than the
+  curated CI baseline; use it when a full repository-wide test run is needed.
 - For small changes, run targets from the nearest `BUILD` file; message changes
   can use `bazel test //cyber/message/...`.
 - After Fast DDS, RTPS, or examples changes, run the durable regression targets:
@@ -24,6 +35,9 @@ Read this when changing runtime, transport, message, example, or test code.
 - Run `source scripts/env/runtime.bash` before using tools from `bazel-bin`.
 - If an integration test has a timing-sensitive failure, rerun only the failed
   target once and distinguish an intermittent failure from a regression.
+- Iceoryx tests use shared `/tmp` and `/dev/shm` resource names. If local tests
+  fail because another user owns stale IPC resources, run them in an
+  IPC-isolated container or namespace; do not remove shared host IPC files.
 
 ## GPU zero-copy
 

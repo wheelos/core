@@ -33,7 +33,11 @@
   ```bash
   bazel build //cyber
   ```
-- Run the test suite used in CI:
+- Run the complete CI build and curated unit/integration test baseline:
+  ```bash
+  bash scripts/release/ubuntu2204_baseline.sh
+  ```
+- For message-only changes, run the focused message tests:
   ```bash
   bazel test //cyber/message/...
   ```

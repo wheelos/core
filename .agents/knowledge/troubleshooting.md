@@ -18,10 +18,18 @@ checks fail.
   Flake8, and shell checks require ShellCheck. Missing tools fail explicitly.
 - Bazel Python tests use the hermetic Python toolchain; pass `PYTHONUSERBASE`
   through `--test_env` when tests need packages installed for that interpreter.
+- The GitHub Actions Python test environment is Python 3.10 with
+  `protobuf==5.29.5` installed into an isolated `PYTHONUSERBASE`; a mismatch
+  can cause generated protobuf modules to fail importing `runtime_version`.
+- Iceoryx tests use shared `/tmp` and `/dev/shm` resources. Permission errors
+  involving `/tmp/iox1_0_*` or existing shared-memory objects can indicate
+  collisions with another user; rerun in an IPC-isolated container or
+  namespace instead of deleting host IPC resources.
 - GitHub lint checks changed files; use `bash scripts/lint/lint.sh --all` for a
   full-tree check. Full-tree checks may surface pre-existing lint debt.
-- The Ubuntu baseline covers `//cyber`, `//:wheelos_core`, and integration
-  regression; distinguish compile, test, and environment failures.
+- The Ubuntu baseline covers `//cyber`, `//:wheelos_core`, and a curated unit
+  and integration test matrix; distinguish compile, test, and environment
+  failures.
 - Fast-DDS exit exceptions (such as heap-use-after-free or dangling proxy access
   during Domain::removeParticipant) indicate a reader/writer destruction ordering
   inversion; ensure Subscribers are removed before Publishers and that
