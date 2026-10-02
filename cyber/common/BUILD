@@ -31,7 +31,7 @@ cc_test(
     size = "small",
     srcs = ["file_test.cc"],
     deps = [
-        "//cyber",
+        ":file",
         "//cyber/proto:unit_test_cc_proto",
         "@com_google_googletest//:gtest_main",
     ],
@@ -51,7 +51,7 @@ cc_test(
     size = "small",
     srcs = ["log_test.cc"],
     deps = [
-        "//cyber",
+        ":log",
         "@com_google_googletest//:gtest_main",
     ],
 )
@@ -97,7 +97,7 @@ cc_test(
     size = "small",
     srcs = ["macros_test.cc"],
     deps = [
-        "//cyber",
+        ":macros",
         "@com_google_googletest//:gtest_main",
     ],
 )

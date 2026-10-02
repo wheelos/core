@@ -22,9 +22,6 @@
 
 #include "glog/logging.h"
 
-#include "cyber/cyber.h"
-#include "cyber/time/time.h"
-
 namespace apollo {
 namespace cyber {
 namespace logger {

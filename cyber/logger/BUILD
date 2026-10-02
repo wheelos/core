@@ -7,7 +7,7 @@ cc_library(
     srcs = ["logger.cc"],
     hdrs = ["logger.h"],
     deps = [
-        "//cyber/common",
+        "//cyber/common:global_data",
         "//cyber/logger:log_file_object",
     ],
 )
@@ -17,7 +17,7 @@ cc_test(
     size = "small",
     srcs = ["logger_test.cc"],
     deps = [
-        "//cyber",
+        ":logger",
         "@com_google_googletest//:gtest_main",
     ],
 )
@@ -28,7 +28,7 @@ cc_library(
     hdrs = ["async_logger.h"],
     deps = [
         "//cyber/base:macros",
-        "//cyber/common",
+        "//cyber/common:global_data",
         "//cyber/logger:log_file_object",
     ],
 )
@@ -38,7 +38,7 @@ cc_test(
     size = "small",
     srcs = ["async_logger_test.cc"],
     deps = [
-        "//cyber",
+        ":async_logger",
         "@com_google_googletest//:gtest_main",
     ],
 )
@@ -59,7 +59,7 @@ cc_test(
     size = "small",
     srcs = ["log_file_object_test.cc"],
     deps = [
-        "//cyber",
+        ":log_file_object",
         "@com_google_googletest//:gtest_main",
     ],
 )
@@ -78,7 +78,7 @@ cc_test(
     size = "small",
     srcs = ["logger_util_test.cc"],
     deps = [
-        "//cyber",
+        ":logger_util",
         "@com_google_googletest//:gtest_main",
     ],
 )
