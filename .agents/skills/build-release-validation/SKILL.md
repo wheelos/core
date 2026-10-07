@@ -131,6 +131,7 @@ claim the full release flow passed when either acceptance part is incomplete.
 
 ## Sources
 
+- [Supplementary packaging reference](packaging-reference.md)
 - `scripts/release/check_bzlmod_lockfile.sh`
 - `scripts/release/ubuntu2204_baseline.sh`
 - `scripts/release/build_release_artifacts.sh`

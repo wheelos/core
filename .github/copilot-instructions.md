@@ -73,7 +73,9 @@
   bash scripts/lint/lint.sh --all --diff origin/main
   ```
   C++ checks use clang-format and Buildifier; Python checks use Black, isort, and Flake8; shell checks use ShellCheck. Configure `WheelOS Lint` and `WheelOS Core CI` as required PR checks for changed-file lint and the Ubuntu 22.04 build/integration baseline. PyCyber wheel verification runs for relevant PRs; PyPI publishing runs only for `wheelos_core-v*` tags.
-- Persistent repository context lives under `.github/context/`. Read `.github/context/index.md` before changing build/release flow or middleware roadmap assumptions.
+- Shared agent rules live in `AGENTS.md`; durable repository knowledge lives in
+  `.agents/knowledge/`, indexed by its `README.md`. Task workflows are indexed
+  in `.agents/skills/README.md`.
 
 ## High-level architecture
 
@@ -118,6 +120,6 @@
   2. improve in-process and same-host zero-copy/data-sharing paths
   3. add heterogeneous buffer-handle negotiation only after the shared-memory contracts are explicit and testable
 - For roadmap, build/release, and skill details, use:
-  - `.github/context/roadmaps/middleware-evolution.md`
-  - `.github/context/design/build-release-architecture.md`
-  - `.github/context/skills/bzlmod-build-release.md`
+  - `.agents/knowledge/roadmaps/middleware-evolution.md`
+  - `.agents/knowledge/design/build-release-architecture.md`
+  - `.agents/skills/build-release-validation/SKILL.md`

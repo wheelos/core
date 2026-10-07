@@ -1,4 +1,7 @@
-# Skill: Bzlmod build and release
+# Bzlmod packaging reference
+
+Read `SKILL.md` for the canonical build and release acceptance workflow.
+This supplementary reference preserves packaging examples and output details.
 
 ## Ubuntu 22.04 baseline
 

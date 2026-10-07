@@ -34,4 +34,4 @@ validating deliverables.
 - `scripts/release/check_bzlmod_lockfile.sh`
 - `scripts/release/ubuntu2204_baseline.sh`
 - `scripts/release/build_release_artifacts.sh`
-- `.github/context/design/build-release-architecture.md`
+- `.agents/knowledge/design/build-release-architecture.md`

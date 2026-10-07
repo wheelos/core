@@ -5,7 +5,7 @@ Semantic、Lifecycle、Compatibility 和 Recovery Contract，再演进性能与�
 Runtime Metrics 的具体指标计划仍见
 `../design/runtime-metrics-plan.md`。近期兼容优先的实施拆分与验收门槛见
 `../design/runtime-contract-rollout-plan.md`；当前可验证的 Writer/Reader
-语义见 `../../../docs/guides/runtime-contract-v1.md`。
+语义见 `../../../../docs/guides/runtime-contract-v1.md`。
 
 ## 2026 Q4：Core 1.1 基线，不扩功能面
 

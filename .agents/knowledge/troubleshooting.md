@@ -45,4 +45,4 @@ checks fail.
 - `scripts/lint/lint.sh`
 - `scripts/release/ubuntu2204_baseline.sh`
 - `scripts/release/build_vendor_bundle.sh`
-- `.github/context/skills/offline-vendor-validation.md`
+- `.agents/skills/offline-vendor-validation/SKILL.md`

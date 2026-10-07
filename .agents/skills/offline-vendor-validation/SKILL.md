@@ -1,4 +1,9 @@
-# Skill: Bazel vendor offline validation
+---
+name: offline-vendor-validation
+description: Prepare and validate wheelos_core vendor bundles with matching lockfiles and network-isolated builds.
+---
+
+# Bazel Vendor Offline Validation
 
 This procedure validates Bazel 7.6.2 vendor mode without a host cache or
 network access.

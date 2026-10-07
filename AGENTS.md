@@ -21,6 +21,7 @@
 
 ## Knowledge
 
+- Index: `.agents/knowledge/README.md`
 - Architecture: `.agents/knowledge/architecture.md`
 - Conventions: `.agents/knowledge/conventions.md`
 - Troubleshooting: `.agents/knowledge/troubleshooting.md`
@@ -31,3 +32,10 @@
 - Review: `.agents/skills/review/SKILL.md`
 - Release: `.agents/skills/release/SKILL.md`
 - Build/release validation: `.agents/skills/build-release-validation/SKILL.md`
+
+## Agent layout
+
+- `.github/` owns GitHub governance and provider integration.
+- `.agents/skills/README.md` indexes executable task workflows.
+- `.agents/knowledge/` owns durable repository knowledge.
+- `.agents/notes/README.md` describes ignored temporary investigations.
