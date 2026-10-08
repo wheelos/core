@@ -150,7 +150,9 @@ bool Component<M0, NullType, NullType, NullType>::Process(
 inline bool Component<NullType, NullType, NullType>::Initialize(
     const ComponentConfig& config) {
   node_.reset(new Node(config.name()));
-  LoadConfigFiles(config);
+  if (!LoadConfigFiles(config)) {
+    return false;
+  }
   if (!Init()) {
     AERROR << "Component Init() failed." << std::endl;
     return false;
@@ -162,7 +164,9 @@ template <typename M0>
 bool Component<M0, NullType, NullType, NullType>::Initialize(
     const ComponentConfig& config) {
   node_.reset(new Node(config.name()));
-  LoadConfigFiles(config);
+  if (!LoadConfigFiles(config)) {
+    return false;
+  }
 
   if (config.readers_size() < 1) {
     AERROR << "Invalid config file: too few readers.";
@@ -236,7 +240,9 @@ template <typename M0, typename M1>
 bool Component<M0, M1, NullType, NullType>::Initialize(
     const ComponentConfig& config) {
   node_.reset(new Node(config.name()));
-  LoadConfigFiles(config);
+  if (!LoadConfigFiles(config)) {
+    return false;
+  }
 
   if (config.readers_size() < 2) {
     AERROR << "Invalid config file: too few readers.";
@@ -336,7 +342,9 @@ template <typename M0, typename M1, typename M2>
 bool Component<M0, M1, M2, NullType>::Initialize(
     const ComponentConfig& config) {
   node_.reset(new Node(config.name()));
-  LoadConfigFiles(config);
+  if (!LoadConfigFiles(config)) {
+    return false;
+  }
 
   if (config.readers_size() < 3) {
     AERROR << "Invalid config file: too few readers.";
@@ -450,7 +458,9 @@ bool Component<M0, M1, M2, M3>::Process(const std::shared_ptr<M0>& msg0,
 template <typename M0, typename M1, typename M2, typename M3>
 bool Component<M0, M1, M2, M3>::Initialize(const ComponentConfig& config) {
   node_.reset(new Node(config.name()));
-  LoadConfigFiles(config);
+  if (!LoadConfigFiles(config)) {
+    return false;
+  }
 
   if (config.readers_size() < 4) {
     AERROR << "Invalid config file: too few readers_." << std::endl;

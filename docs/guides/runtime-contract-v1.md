@@ -45,5 +45,5 @@ different resources. `SetHistoryDepth()` changes blocker retention, not
 
 The current release/metrics validation gates and their outstanding results
 are tracked in
-[`runtime-contract-rollout-plan.md`](../../.github/context/design/runtime-contract-rollout-plan.md).
+[`runtime-contract-rollout-plan.md`](../../.agents/knowledge/design/runtime-contract-rollout-plan.md).
 This document does not claim old-plugin ABI or N-1 wire compatibility.

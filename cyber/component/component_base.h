@@ -29,6 +29,8 @@
 #include "cyber/class_loader/class_loader.h"
 #include "cyber/common/environment.h"
 #include "cyber/common/file.h"
+#include "cyber/common/log.h"
+#include "cyber/common/resource_manager.h"
 #include "cyber/metrics/metrics.h"
 #include "cyber/node/node.h"
 #include "cyber/scheduler/scheduler.h"
@@ -65,49 +67,87 @@ class ComponentBase : public std::enable_shared_from_this<ComponentBase> {
     return common::GetProtoFromFile(config_file_path_, config);
   }
 
+  template <typename T>
+  bool GetProtoConfigFromPath(const std::string& input_path,
+                              T* config) const {
+    std::string resolved_path;
+    if (!ResolveComponentConfigPath(input_path, &resolved_path)) {
+      return false;
+    }
+    return common::GetProtoFromFile(resolved_path, config);
+  }
+
  protected:
   virtual bool Init() = 0;
   virtual void Clear() { return; }
   const std::string& ConfigFilePath() const { return config_file_path_; }
 
-  void LoadConfigFiles(const ComponentConfig& config) {
-    if (!config.config_file_path().empty()) {
-      if (config.config_file_path()[0] != '/') {
-        config_file_path_ = common::GetAbsolutePath(common::WorkRoot(),
-                                                    config.config_file_path());
-      } else {
-        config_file_path_ = config.config_file_path();
-      }
-    }
-
-    if (!config.flag_file_path().empty()) {
-      std::string flag_file_path = config.flag_file_path();
-      if (flag_file_path[0] != '/') {
-        flag_file_path =
-            common::GetAbsolutePath(common::WorkRoot(), flag_file_path);
-      }
-      google::SetCommandLineOption("flagfile", flag_file_path.c_str());
-    }
+  bool LoadConfigFiles(const ComponentConfig& config) {
+    return LoadConfigFiles(config.config_file_path(), config.flag_file_path());
   }
 
-  void LoadConfigFiles(const TimerComponentConfig& config) {
-    if (!config.config_file_path().empty()) {
-      if (config.config_file_path()[0] != '/') {
-        config_file_path_ = common::GetAbsolutePath(common::WorkRoot(),
-                                                    config.config_file_path());
+  bool LoadConfigFiles(const TimerComponentConfig& config) {
+    return LoadConfigFiles(config.config_file_path(), config.flag_file_path());
+  }
+
+  bool ResolveComponentConfigPath(const std::string& input_path,
+                                  std::string* resolved_path) const {
+    if (input_path.empty()) {
+      return true;
+    }
+
+    const std::string relative_asset_prefix = "assets/";
+    const std::string absolute_asset_prefix = "/apollo/assets/";
+    if (input_path.rfind(relative_asset_prefix, 0) == 0) {
+      return common::ResourceManager::ResolveAssetPath(
+          input_path.substr(relative_asset_prefix.size()), resolved_path);
+    }
+    if (input_path.rfind(absolute_asset_prefix, 0) == 0) {
+      return common::ResourceManager::ResolveAssetPath(
+          input_path.substr(absolute_asset_prefix.size()), resolved_path);
+    }
+
+    if (!common::ResourceManager::InitializeConfigRoot()) {
+      AERROR << "Failed to initialize config root.";
+      return false;
+    }
+
+    std::string source_path = input_path;
+    if (source_path[0] != '/') {
+      if (source_path.rfind("modules/", 0) == 0 ||
+          source_path.rfind("cyber/", 0) == 0) {
+        return common::ResourceManager::ResolveConfigPath(source_path,
+                                                          resolved_path);
       } else {
-        config_file_path_ = config.config_file_path();
+        source_path = common::GetAbsolutePath(common::WorkRoot(), source_path);
       }
     }
 
-    if (!config.flag_file_path().empty()) {
-      std::string flag_file_path = config.flag_file_path();
-      if (flag_file_path[0] != '/') {
-        flag_file_path =
-            common::GetAbsolutePath(common::WorkRoot(), flag_file_path);
-      }
-      google::SetCommandLineOption("flagfile", flag_file_path.c_str());
+    return common::ResourceManager::ResolveConfigPath(source_path,
+                                                      resolved_path);
+  }
+
+  bool LoadConfigFiles(const std::string& config_path,
+                       const std::string& flag_file_path) {
+    if (!config_path.empty() &&
+        !ResolveComponentConfigPath(config_path, &config_file_path_)) {
+      return false;
     }
+    if (!flag_file_path.empty()) {
+      std::string resolved_flag_file_path;
+      if (!ResolveComponentConfigPath(flag_file_path,
+                                      &resolved_flag_file_path)) {
+        return false;
+      }
+      if (google::SetCommandLineOption("flagfile",
+                                       resolved_flag_file_path.c_str())
+              .empty()) {
+        AERROR << "Failed to set component flagfile: "
+               << resolved_flag_file_path;
+        return false;
+      }
+    }
+    return true;
   }
 
   void RegisterComponentMetric(const ComponentConfig& config) {

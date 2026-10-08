@@ -38,7 +38,9 @@ bool TimerComponent::Initialize(const TimerComponentConfig& config) {
     return false;
   }
   node_.reset(new Node(config.name()));
-  LoadConfigFiles(config);
+  if (!LoadConfigFiles(config)) {
+    return false;
+  }
   if (!Init()) {
     return false;
   }

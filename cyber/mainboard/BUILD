@@ -15,6 +15,7 @@ cc_binary(
     linkstatic = False,
     deps = [
         "//cyber:cyber_core",
+        "//cyber/common:resource_manager",
         "//cyber/proto:dag_conf_cc_proto",
     ],
 )

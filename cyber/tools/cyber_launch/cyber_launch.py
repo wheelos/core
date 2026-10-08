@@ -39,6 +39,7 @@ g_process_pid = os.getpid()
 g_process_name = g_script_name + "_" + str(g_process_pid)
 
 cyber_path = os.getenv('CYBER_PATH')
+_config_roots = None
 
 
 def launch_pid_file(launch_file):
@@ -103,6 +104,115 @@ def resolve_mainboard_binary():
         if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
             return candidate
     return 'mainboard'
+
+
+def _path_is_within(root, path):
+    try:
+        return os.path.commonpath([root, path]) == root
+    except ValueError:
+        return False
+
+
+def _is_readable_file(path):
+    if not os.path.isfile(path) or not os.access(path, os.R_OK):
+        return False
+    try:
+        with open(path, 'rb'):
+            return True
+    except OSError:
+        return False
+
+
+def _get_config_roots():
+    global _config_roots
+    if _config_roots is None:
+        _config_roots = (
+            os.getenv('APOLLO_ROOT_DIR') or '/apollo',
+            os.getenv('WHEELOS_CONFIG_ROOT'),
+        )
+    return _config_roots
+
+
+def resolve_config_path(default_path):
+    """Resolve a config key through whole-file override then software default."""
+    if '..' in default_path.split(os.sep):
+        raise ValueError('Config path must not contain parent traversal: ' +
+                         default_path)
+    configured_software_root, config_root_value = _get_config_roots()
+    if not os.path.isabs(configured_software_root):
+        raise ValueError('APOLLO_ROOT_DIR must be an absolute path.')
+
+    if os.path.isabs(default_path):
+        source_path = os.path.abspath(default_path)
+    else:
+        source_path = os.path.abspath(
+            os.path.join(configured_software_root, default_path))
+
+    software_root = os.path.realpath(configured_software_root)
+    key = None
+    for root in (configured_software_root, '/apollo'):
+        root = os.path.abspath(root)
+        if source_path != root and _path_is_within(root, source_path):
+            key = os.path.relpath(source_path, root)
+            break
+
+    if key is None:
+        raise ValueError('Config path must be under the software root: ' +
+                         source_path)
+
+    key_parts = key.split(os.sep)
+    if (not key or os.path.isabs(key) or
+            any(part in ('', '.', '..') for part in key_parts)):
+        raise ValueError('Config key must be a safe relative path: ' + key)
+    if not os.path.isdir(software_root):
+        raise ValueError('Software root is not an accessible directory: ' +
+                         configured_software_root)
+
+    default_file = os.path.join(software_root, key)
+    if config_root_value is None:
+        resolved_default = os.path.realpath(default_file)
+        if (not _path_is_within(software_root, resolved_default) or
+                not _is_readable_file(resolved_default)):
+            raise ValueError('Default config is not readable within the '
+                             'software root: ' + default_file)
+        return resolved_default, 'default'
+
+    if not config_root_value or not os.path.isabs(config_root_value):
+        raise ValueError('WHEELOS_CONFIG_ROOT must be a non-empty absolute '
+                         'directory.')
+    config_root = os.path.realpath(config_root_value)
+    if (not os.path.isdir(config_root) or
+            not os.access(config_root, os.R_OK | os.X_OK)):
+        raise ValueError('WHEELOS_CONFIG_ROOT is not an accessible directory: '
+                         + config_root_value)
+
+    override_file = os.path.join(config_root, key)
+    current_path = config_root
+    for index, part in enumerate(key_parts):
+        current_path = os.path.join(current_path, part)
+        if not os.path.lexists(current_path):
+            resolved_default = os.path.realpath(default_file)
+            if (not _path_is_within(software_root, resolved_default) or
+                    not _is_readable_file(resolved_default)):
+                raise ValueError('Neither a usable override nor a readable '
+                                 'default config exists for ' + key)
+            return resolved_default, 'default'
+
+        resolved_prefix = os.path.realpath(current_path)
+        if (not os.path.exists(current_path) or
+                not _path_is_within(config_root, resolved_prefix)):
+            raise ValueError('Config override contains a broken or escaping '
+                             'symlink: ' + current_path)
+        if index < len(key_parts) - 1 and not os.path.isdir(resolved_prefix):
+            raise ValueError('Config override parent is not a directory: ' +
+                             current_path)
+
+    resolved_override = os.path.realpath(override_file)
+    if (not _path_is_within(config_root, resolved_override) or
+            not _is_readable_file(resolved_override)):
+        raise ValueError('Config override is not a readable regular file '
+                         'within WHEELOS_CONFIG_ROOT: ' + override_file)
+    return resolved_override, 'override'
 
 
 g_binary_name = resolve_mainboard_binary()
@@ -395,13 +505,12 @@ def start(launch_file=''):
                 'CYBER_PATH is required when a launch file is not explicitly specified.')
             sys.exit(1)
         launch_file = os.path.join(cyber_path, 'launch', launch_file)
-    else:
-        if os.path.exists(os.path.join(g_pwd, launch_file)):
-            launch_file = os.path.join(g_pwd, launch_file)
-        else:
-            logger.error('Cannot find launch file: %s ' % launch_file)
-            sys.exit(1)
-    logger.info('Launch file [%s]' % launch_file)
+    try:
+        launch_file, launch_source = resolve_config_path(launch_file)
+    except ValueError as error:
+        logger.error('Cannot resolve launch file %s: %s', launch_file, error)
+        sys.exit(1)
+    logger.info('Launch file [%s] source: %s' % (launch_file, launch_source))
     logger.info('=' * 120)
 
     if not os.path.isfile(launch_file):
@@ -413,6 +522,12 @@ def start(launch_file=''):
     except Exception:
         logger.error('Parse xml failed. illegal xml!')
         sys.exit(1)
+
+    root = tree.getroot()
+    for env in root.findall('environment'):
+        for var in env:
+            os.environ[var.tag] = str(var.text)
+
     pid_file = launch_pid_file(launch_file)
     try:
         pid, start_time = _write_launch_pid_file(pid_file)
@@ -461,10 +576,6 @@ def start(launch_file=''):
                 dag_dict[str(process_name)].extend(dag_list)
 
     process_list = []
-    root = tree.getroot()
-    for env in root.findall('environment'):
-        for var in env:
-            os.environ[var.tag] = str(var.text)
     for module in root.findall('module'):
         module_name = module.find('name').text
         dag_conf = module.find('dag_conf').text

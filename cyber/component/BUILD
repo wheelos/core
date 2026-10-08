@@ -52,6 +52,8 @@ cc_library(
         "//cyber/base:signal",
         "//cyber/base:thread_pool",
         "//cyber/class_loader",
+        "//cyber/common:log",
+        "//cyber/common:resource_manager",
         "//cyber/metrics",
         "//cyber/node",
         "@com_github_gflags_gflags//:gflags",

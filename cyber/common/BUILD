@@ -10,6 +10,7 @@ cc_library(
         "//cyber/common:global_data",
         "//cyber/common:log",
         "//cyber/common:macros",
+        "//cyber/common:resource_manager",
         "//cyber/common:time_conversion",
         "//cyber/common:types",
         "//cyber/common:util",
@@ -32,8 +33,18 @@ cc_test(
     srcs = ["file_test.cc"],
     deps = [
         ":file",
+        ":resource_manager",
         "//cyber/proto:unit_test_cc_proto",
         "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "resource_manager",
+    srcs = ["resource_manager.cc"],
+    hdrs = ["resource_manager.h"],
+    deps = [
+        "//cyber/common:log",
     ],
 )
 

@@ -20,6 +20,7 @@
 
 #include "cyber/common/environment.h"
 #include "cyber/common/file.h"
+#include "cyber/common/resource_manager.h"
 #include "cyber/component/component_base.h"
 
 namespace apollo {
@@ -35,24 +36,25 @@ void ModuleController::Clear() {
 }
 
 bool ModuleController::LoadAll() {
+  if (!common::ResourceManager::InitializeConfigRoot()) {
+    AERROR << "Failed to initialize config root.";
+    return false;
+  }
   const std::string work_root = common::WorkRoot();
-  const std::string current_path = common::GetCurrentPath();
   const std::string dag_root_path = common::GetAbsolutePath(work_root, "dag");
   std::vector<std::string> paths;
   for (auto& dag_conf : args_.GetDAGConfList()) {
-    std::string module_path = "";
+    std::string default_path;
     if (dag_conf == common::GetFileName(dag_conf)) {
-      // case dag conf argument var is a filename
-      module_path = common::GetAbsolutePath(dag_root_path, dag_conf);
-    } else if (dag_conf[0] == '/') {
-      // case dag conf argument var is an absolute path
-      module_path = dag_conf;
+      default_path = common::GetAbsolutePath(dag_root_path, dag_conf);
     } else {
-      // case dag conf argument var is a relative path
-      module_path = common::GetAbsolutePath(current_path, dag_conf);
-      if (!common::PathExists(module_path)) {
-        module_path = common::GetAbsolutePath(work_root, dag_conf);
-      }
+      default_path = dag_conf;
+    }
+    std::string module_path;
+    if (!common::ResourceManager::ResolveConfigPath(default_path,
+                                                    &module_path)) {
+      AERROR << "Failed to resolve dag config: " << dag_conf;
+      return false;
     }
     total_component_nums += GetComponentNum(module_path);
     paths.emplace_back(std::move(module_path));

@@ -1,24 +1,24 @@
-/******************************************************************************
- * Copyright 2018 The Apollo Authors. All Rights Reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *****************************************************************************/
+// Copyright 2026 WheelOS. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 //  Created Date: 2025-10-25
 //  Author: daohu527 <daohu527@gmail.com>
 
 #include "cyber/common/file.h"
+#include "cyber/common/resource_manager.h"
 
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -50,11 +50,30 @@ class FileTest : public ::testing::Test {
         fs::temp_directory_path() / "file_test_root" / test_info->name();
     fs::remove_all(test_root_);
     fs::create_directories(test_root_);
+    SaveEnvironmentVariable("WHEELOS_CONFIG_ROOT",
+                            &original_config_root_is_set_,
+                            &original_config_root_);
+    SaveEnvironmentVariable("APOLLO_ROOT_DIR", &original_apollo_root_is_set_,
+                            &original_apollo_root_);
+    SaveEnvironmentVariable("WHEELOS_ASSET_ROOT",
+                            &original_asset_root_is_set_, &original_asset_root_);
+    unsetenv("WHEELOS_CONFIG_ROOT");
+    unsetenv("APOLLO_ROOT_DIR");
+    unsetenv("WHEELOS_ASSET_ROOT");
   }
 
   void TearDown() override {
     std::error_code ec;
     fs::remove_all(test_root_, ec);
+    RestoreEnvironmentVariable("WHEELOS_CONFIG_ROOT",
+                               original_config_root_is_set_,
+                               original_config_root_);
+    RestoreEnvironmentVariable("APOLLO_ROOT_DIR",
+                               original_apollo_root_is_set_,
+                               original_apollo_root_);
+    RestoreEnvironmentVariable("WHEELOS_ASSET_ROOT",
+                               original_asset_root_is_set_,
+                               original_asset_root_);
     ASSERT_FALSE(ec) << "TearDown failed to clean up: " << test_root_.string();
   }
 
@@ -63,7 +82,29 @@ class FileTest : public ::testing::Test {
     return test_root_ / relative_path;
   }
 
+  static void SaveEnvironmentVariable(const char* name, bool* was_set,
+                                     std::string* value) {
+    const char* original = std::getenv(name);
+    *was_set = original != nullptr;
+    *value = original == nullptr ? "" : original;
+  }
+
+  static void RestoreEnvironmentVariable(const char* name, bool was_set,
+                                        const std::string& value) {
+    if (was_set) {
+      setenv(name, value.c_str(), 1);
+    } else {
+      unsetenv(name);
+    }
+  }
+
   fs::path test_root_;
+  bool original_config_root_is_set_ = false;
+  std::string original_config_root_;
+  bool original_apollo_root_is_set_ = false;
+  std::string original_apollo_root_;
+  bool original_asset_root_is_set_ = false;
+  std::string original_asset_root_;
 };
 
 TEST_F(FileTest, ProtoIOCombined) {
@@ -100,6 +141,253 @@ TEST_F(FileTest, ProtoIOCombined) {
     ofs << R"({"className": )";
   }
   EXPECT_FALSE(GetProtoFromJsonFile(json_path.string(), &read_json));
+}
+
+TEST_F(FileTest, ResolveConfigPathUsesWholeFileOverride) {
+  const fs::path software_root = GetTestPath("software");
+  const fs::path config_root = GetTestPath("assets/vehicles/cargo/config");
+  const fs::path default_path =
+      software_root / "modules/canbus/conf/canbus_conf.pb.txt";
+  const fs::path override_path =
+      config_root / "modules/canbus/conf/canbus_conf.pb.txt";
+  fs::create_directories(default_path.parent_path());
+  fs::create_directories(override_path.parent_path());
+  {
+    std::ofstream default_file(default_path);
+    default_file << "default";
+    std::ofstream override_file(override_path);
+    override_file << "override";
+  }
+
+  setenv("APOLLO_ROOT_DIR", software_root.c_str(), 1);
+  setenv("WHEELOS_CONFIG_ROOT", config_root.c_str(), 1);
+
+  std::string selected_path;
+  ASSERT_TRUE(ResourceManager::ResolveConfigPath(default_path.string(),
+                                                 &selected_path));
+  EXPECT_EQ(fs::canonical(override_path).string(), selected_path);
+}
+
+TEST_F(FileTest, ResolveConfigPathFallsBackToSoftwareDefault) {
+  const fs::path software_root = GetTestPath("software");
+  const fs::path config_root = GetTestPath("assets/vehicles/cargo/config");
+  const fs::path default_path =
+      software_root / "modules/canbus/conf/canbus_conf.pb.txt";
+  fs::create_directories(default_path.parent_path());
+  fs::create_directories(config_root);
+  {
+    std::ofstream default_file(default_path);
+    default_file << "default";
+  }
+
+  setenv("APOLLO_ROOT_DIR", software_root.c_str(), 1);
+  setenv("WHEELOS_CONFIG_ROOT", config_root.c_str(), 1);
+
+  std::string selected_path;
+  ASSERT_TRUE(ResourceManager::ResolveConfigPath(default_path.string(),
+                                                 &selected_path));
+  EXPECT_EQ(fs::canonical(default_path).string(), selected_path);
+}
+
+TEST_F(FileTest, ResolveAbsoluteApolloPathAgainstConfiguredSoftwareRoot) {
+  const fs::path software_root = GetTestPath("software");
+  const fs::path config_root = GetTestPath("assets/vehicles/cargo/config");
+  const fs::path default_path =
+      software_root / "modules/canbus/conf/canbus_conf.pb.txt";
+  fs::create_directories(default_path.parent_path());
+  fs::create_directories(config_root);
+  {
+    std::ofstream default_file(default_path);
+    default_file << "default";
+  }
+
+  setenv("APOLLO_ROOT_DIR", software_root.c_str(), 1);
+  setenv("WHEELOS_CONFIG_ROOT", config_root.c_str(), 1);
+
+  std::string selected_path;
+  ASSERT_TRUE(ResourceManager::ResolveConfigPath(
+      "/apollo/modules/canbus/conf/canbus_conf.pb.txt", &selected_path));
+  EXPECT_EQ(fs::canonical(default_path).string(), selected_path);
+}
+
+TEST_F(FileTest, ResolveConfigPathRejectsInvalidRootAndTraversal) {
+  const fs::path software_root = GetTestPath("software");
+  const fs::path default_path =
+      software_root / "modules/canbus/conf/canbus_conf.pb.txt";
+  const fs::path traversal_target = software_root / "outside.conf";
+  fs::create_directories(default_path.parent_path());
+  {
+    std::ofstream default_file(default_path);
+    default_file << "default";
+    std::ofstream outside_file(traversal_target);
+    outside_file << "outside";
+  }
+  setenv("APOLLO_ROOT_DIR", software_root.c_str(), 1);
+
+  std::string selected_path;
+  setenv("WHEELOS_CONFIG_ROOT", GetTestPath("missing-root").c_str(), 1);
+  EXPECT_FALSE(ResourceManager::ResolveConfigPath(default_path.string(),
+                                                  &selected_path));
+
+  setenv("WHEELOS_CONFIG_ROOT", GetTestPath("assets").c_str(), 1);
+  EXPECT_FALSE(
+      ResourceManager::ResolveConfigPath("modules/../outside.conf",
+                                         &selected_path));
+  EXPECT_FALSE(ResourceManager::ResolveConfigPath(
+      (software_root / "modules/../outside.conf").string(), &selected_path));
+  EXPECT_FALSE(ResourceManager::ResolveConfigPath(
+      (GetTestPath("outside.conf")).string(), &selected_path));
+}
+
+TEST_F(FileTest, ResolveConfigPathFailsWhenBothFilesAreMissing) {
+  const fs::path software_root = GetTestPath("software");
+  const fs::path config_root = GetTestPath("assets/vehicles/cargo/config");
+  fs::create_directories(software_root);
+  fs::create_directories(config_root);
+  setenv("APOLLO_ROOT_DIR", software_root.c_str(), 1);
+  setenv("WHEELOS_CONFIG_ROOT", config_root.c_str(), 1);
+
+  std::string selected_path;
+  EXPECT_FALSE(ResourceManager::ResolveConfigPath(
+      (software_root / "modules/canbus/conf/missing.pb.txt").string(),
+      &selected_path));
+}
+
+TEST_F(FileTest, ResolveConfigPathRejectsOverrideSymlinkEscape) {
+  const fs::path software_root = GetTestPath("software");
+  const fs::path config_root = GetTestPath("assets/vehicles/cargo/config");
+  const fs::path default_path =
+      software_root / "modules/canbus/conf/canbus_conf.pb.txt";
+  const fs::path outside_path = GetTestPath("outside.conf");
+  const fs::path override_path =
+      config_root / "modules/canbus/conf/canbus_conf.pb.txt";
+  fs::create_directories(default_path.parent_path());
+  fs::create_directories(override_path.parent_path());
+  {
+    std::ofstream default_file(default_path);
+    default_file << "default";
+    std::ofstream outside_file(outside_path);
+    outside_file << "outside";
+  }
+  fs::create_symlink(outside_path, override_path);
+  setenv("APOLLO_ROOT_DIR", software_root.c_str(), 1);
+  setenv("WHEELOS_CONFIG_ROOT", config_root.c_str(), 1);
+
+  std::string selected_path;
+  EXPECT_FALSE(ResourceManager::ResolveConfigPath(default_path.string(),
+                                                  &selected_path));
+}
+
+TEST_F(FileTest, ResolveConfigPathRejectsBrokenOverrideSymlink) {
+  const fs::path software_root = GetTestPath("software");
+  const fs::path config_root = GetTestPath("assets/vehicles/cargo/config");
+  const fs::path default_path =
+      software_root / "modules/canbus/conf/canbus_conf.pb.txt";
+  const fs::path override_path =
+      config_root / "modules/canbus/conf/canbus_conf.pb.txt";
+  fs::create_directories(default_path.parent_path());
+  fs::create_directories(override_path.parent_path());
+  {
+    std::ofstream default_file(default_path);
+    default_file << "default";
+  }
+  fs::create_symlink(GetTestPath("missing.conf"), override_path);
+  setenv("APOLLO_ROOT_DIR", software_root.c_str(), 1);
+  setenv("WHEELOS_CONFIG_ROOT", config_root.c_str(), 1);
+
+  std::string selected_path;
+  EXPECT_FALSE(ResourceManager::ResolveConfigPath(default_path.string(),
+                                                  &selected_path));
+}
+
+TEST_F(FileTest, ResolveConfigPathRejectsDefaultSymlinkEscape) {
+  const fs::path software_root = GetTestPath("software");
+  const fs::path config_root = GetTestPath("assets/vehicles/cargo/config");
+  const fs::path default_path =
+      software_root / "modules/canbus/conf/canbus_conf.pb.txt";
+  const fs::path outside_path = GetTestPath("outside.conf");
+  fs::create_directories(default_path.parent_path());
+  fs::create_directories(config_root);
+  {
+    std::ofstream outside_file(outside_path);
+    outside_file << "outside";
+  }
+  fs::create_symlink(outside_path, default_path);
+  setenv("APOLLO_ROOT_DIR", software_root.c_str(), 1);
+  setenv("WHEELOS_CONFIG_ROOT", config_root.c_str(), 1);
+
+  std::string selected_path;
+  EXPECT_FALSE(ResourceManager::ResolveConfigPath(default_path.string(),
+                                                  &selected_path));
+}
+
+TEST_F(FileTest, ResolveRelativeConfigPathUsesSoftwareRootWithoutOverride) {
+  const fs::path software_root = GetTestPath("software");
+  const fs::path default_path =
+      software_root / "modules/canbus/conf/canbus_conf.pb.txt";
+  fs::create_directories(default_path.parent_path());
+  {
+    std::ofstream default_file(default_path);
+    default_file << "default";
+  }
+  setenv("APOLLO_ROOT_DIR", software_root.c_str(), 1);
+
+  std::string selected_path;
+  ASSERT_TRUE(ResourceManager::ResolveConfigPath(
+      "modules/canbus/conf/canbus_conf.pb.txt", &selected_path));
+  EXPECT_EQ((software_root / "modules/canbus/conf/canbus_conf.pb.txt")
+                .lexically_normal()
+                .string(),
+            selected_path);
+}
+
+TEST_F(FileTest, ResolveConfigPathFailsWhenDefaultIsMissingWithoutOverride) {
+  setenv("APOLLO_ROOT_DIR", GetTestPath("software").c_str(), 1);
+
+  std::string selected_path;
+  EXPECT_FALSE(ResourceManager::ResolveConfigPath(
+      "modules/canbus/conf/missing.pb.txt", &selected_path));
+}
+
+TEST_F(FileTest, ResolveAssetPathUsesConfiguredAssetRoot) {
+  const fs::path asset_root = GetTestPath("installed/assets");
+  const fs::path map_bundle = asset_root / "sites/map/borregas_ave";
+  fs::create_directories(map_bundle);
+  {
+    std::ofstream map_file(map_bundle / "base_map.bin", std::ios::binary);
+    map_file << "map";
+  }
+  setenv("WHEELOS_ASSET_ROOT", asset_root.c_str(), 1);
+
+  std::string resolved_path;
+  ASSERT_TRUE(ResourceManager::ResolveAssetPath("sites/map/borregas_ave",
+                                               &resolved_path));
+  EXPECT_EQ(fs::canonical(map_bundle).string(), resolved_path);
+}
+
+TEST_F(FileTest, ResolveAssetPathAcceptsEmptyDirectory) {
+  const fs::path asset_root = GetTestPath("installed/assets");
+  const fs::path empty_bundle = asset_root / "runtime/models/empty";
+  fs::create_directories(empty_bundle);
+  setenv("WHEELOS_ASSET_ROOT", asset_root.c_str(), 1);
+
+  std::string resolved_path;
+  ASSERT_TRUE(
+      ResourceManager::ResolveAssetPath("runtime/models/empty", &resolved_path));
+  EXPECT_EQ(fs::canonical(empty_bundle).string(), resolved_path);
+}
+
+TEST_F(FileTest, ResolveAssetPathRejectsMissingAndEscapingKeys) {
+  const fs::path asset_root = GetTestPath("installed/assets");
+  fs::create_directories(asset_root / "vehicles/cargo/calibration");
+  setenv("WHEELOS_ASSET_ROOT", asset_root.c_str(), 1);
+
+  std::string resolved_path;
+  EXPECT_FALSE(ResourceManager::ResolveAssetPath(".", &resolved_path));
+  EXPECT_FALSE(
+      ResourceManager::ResolveAssetPath("../outside", &resolved_path));
+  EXPECT_FALSE(ResourceManager::ResolveAssetPath("runtime/models/missing",
+                                                 &resolved_path));
 }
 
 TEST_F(FileTest, ContentAndExistence) {
@@ -337,6 +625,41 @@ TEST_F(FileTest, GetProtoFromFileHonorsExplicitBinaryFormat) {
   EXPECT_FALSE(GetProtoFromFile(text_path.string(), &read_message,
                                 ProtoFileFormat::Binary));
   EXPECT_EQ(read_message.class_name(), "unchanged");
+}
+
+TEST_F(FileTest, ConfigRootRemainsFixedAfterInitialization) {
+  const fs::path software_root = GetTestPath("software");
+  const fs::path config_root = GetTestPath("assets/vehicles/cargo/config");
+  const fs::path other_config_root = GetTestPath("other-config");
+  const fs::path default_path =
+      software_root / "modules/canbus/conf/canbus_conf.pb.txt";
+  const fs::path override_path =
+      config_root / "modules/canbus/conf/canbus_conf.pb.txt";
+  fs::create_directories(default_path.parent_path());
+  fs::create_directories(override_path.parent_path());
+  fs::create_directories(other_config_root /
+                         "modules/canbus/conf");
+  {
+    std::ofstream default_file(default_path);
+    default_file << "default";
+    std::ofstream override_file(override_path);
+    override_file << "first";
+    std::ofstream other_override_file(
+        other_config_root / "modules/canbus/conf/canbus_conf.pb.txt");
+    other_override_file << "second";
+  }
+
+  setenv("APOLLO_ROOT_DIR", software_root.c_str(), 1);
+  setenv("WHEELOS_CONFIG_ROOT", config_root.c_str(), 1);
+  ASSERT_TRUE(ResourceManager::InitializeConfigRoot());
+
+  setenv("WHEELOS_CONFIG_ROOT", other_config_root.c_str(), 1);
+  ASSERT_TRUE(ResourceManager::InitializeConfigRoot());
+
+  std::string selected_path;
+  ASSERT_TRUE(ResourceManager::ResolveConfigPath(default_path.string(),
+                                                 &selected_path));
+  EXPECT_EQ(fs::canonical(override_path).string(), selected_path);
 }
 
 }  // namespace common
