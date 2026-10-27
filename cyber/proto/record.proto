@@ -77,6 +77,7 @@ message Header {
   optional uint64 segment_raw_size = 15;
   optional MapInfo map_info = 16;
   optional VehicleInfo vehicle_info = 17;
+  map<string, string> metadata = 18;
 }
 
 message Channel {

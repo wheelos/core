@@ -15,11 +15,13 @@
  *****************************************************************************/
 
 #include <unistd.h>
+
 #include <atomic>
 #include <string>
 
-#include "gflags/gflags.h"
 #include "gtest/gtest.h"
+
+#include "gflags/gflags.h"
 
 #include "cyber/record/file/record_file_base.h"
 #include "cyber/record/file/record_file_reader.h"
@@ -94,6 +96,8 @@ TEST(RecordFileTest, TestOneMessageFile) {
   Header hdr1 = HeaderBuilder::GetHeaderWithSegmentParams(0, 0);
   hdr1.set_chunk_interval(0);
   hdr1.set_chunk_raw_size(0);
+  (*hdr1.mutable_metadata())["test.owner"] = "record_file_test";
+  (*hdr1.mutable_metadata())["test.version"] = "v2";
   ASSERT_TRUE(rfw.WriteHeader(hdr1));
   ASSERT_FALSE(rfw.GetHeader().is_complete());
 
@@ -134,6 +138,9 @@ TEST(RecordFileTest, TestOneMessageFile) {
   ASSERT_EQ(hdr2.begin_time(), hdr1.begin_time());
   ASSERT_EQ(hdr2.end_time(), hdr1.end_time());
   ASSERT_EQ(hdr2.message_number(), hdr1.message_number());
+  ASSERT_EQ(hdr2.metadata().size(), 2);
+  EXPECT_EQ(hdr2.metadata().at("test.owner"), "record_file_test");
+  EXPECT_EQ(hdr2.metadata().at("test.version"), "v2");
 
   // read channel section
   ASSERT_TRUE(rfr.ReadSection(&sec));

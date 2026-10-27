@@ -27,6 +27,18 @@ cyber_recorder record --help
 
 You can then configure which channels to capture and where to store the recorded file.
 
+### Application metadata
+
+`proto::Header.metadata` is an optional string-to-string map for compact,
+application-owned recording identity. Pass the populated header to
+`RecordWriter` or `Recorder`; the writer preserves it in each segment and when
+finalizing the file. Read it through the record header, not a topic.
+
+Core does not interpret these keys. Applications should use namespaced keys
+and avoid credentials or other sensitive data. Existing records have an empty
+map, and older protobuf readers ignore the new field. Metadata does not alter
+message payloads or establish the correctness of application configuration.
+
 ## Replay workflow
 
 Replay a recorded file to validate message flow or reproduce an earlier system state.

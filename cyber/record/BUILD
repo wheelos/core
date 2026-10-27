@@ -31,8 +31,8 @@ cc_library(
         "//cyber/common:file",
         "//cyber/task",
         "//cyber/time",
-        "@liburing//:liburing",
         "@com_google_protobuf//:protobuf",
+        "@liburing",
     ],
 )
 
@@ -76,6 +76,7 @@ cc_test(
     deps = [
         "//cyber",
         "//cyber/proto:record_cc_proto",
+        "@com_github_gflags_gflags//:gflags",
         "@com_google_googletest//:gtest_main",
     ],
 )
@@ -119,8 +120,8 @@ cc_test(
     srcs = ["record_reader_test.cc"],
     deps = [
         "//cyber",
-        "//cyber/transport/message:pod_message",
         "//cyber/proto:record_cc_proto",
+        "//cyber/transport/message:pod_message",
         "@com_google_googletest//:gtest_main",
     ],
 )
@@ -178,7 +179,7 @@ cc_binary(
     deps = [
         ":section",
         "//cyber/proto:record_cc_proto",
-        "@liburing//:liburing",
         "@com_google_protobuf//:protobuf",
+        "@liburing",
     ],
 )

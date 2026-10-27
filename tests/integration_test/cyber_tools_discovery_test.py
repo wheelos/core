@@ -662,7 +662,9 @@ class CyberToolsDiscoveryTest(unittest.TestCase):
         finally:
             _terminate_process(publisher)
 
-        launch_dir = tempfile.mkdtemp(prefix="cyber_launch_e2e_")
+        launch_dir = tempfile.mkdtemp(
+            prefix="cyber_launch_e2e_", dir=os.environ["APOLLO_ROOT_DIR"]
+        )
         launch_file = os.path.join(launch_dir, "tools.launch")
         with open(launch_file, "w") as launch:
             launch.write(
@@ -717,6 +719,7 @@ if __name__ == "__main__":
         )
         cyber_path, temp_root = _write_rtps_config()
         os.environ["CYBER_PATH"] = cyber_path
+        os.environ["APOLLO_ROOT_DIR"] = temp_root
         cyber.init("cyber_tools_discovery_test")
         try:
             unittest.main()

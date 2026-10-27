@@ -117,6 +117,13 @@ bool GetConfigKey(const fs::path& source_path, const fs::path& software_root,
       return true;
     }
   }
+  std::error_code ec;
+  const fs::path canonical_source = fs::weakly_canonical(source_path, ec);
+  if (!ec && canonical_source != software_root &&
+      IsAncestorOrSamePath(software_root, canonical_source)) {
+    *config_key = canonical_source.lexically_relative(software_root);
+    return true;
+  }
   return false;
 }
 

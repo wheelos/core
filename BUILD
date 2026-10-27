@@ -1,6 +1,6 @@
+load("@bazel_skylib//lib:selects.bzl", "selects")
 load("@rules_pkg//:pkg.bzl", "pkg_deb", "pkg_tar")
 load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_files", "strip_prefix")
-load("@bazel_skylib//lib:selects.bzl", "selects")
 load("//tools/sdk:cc_headers.bzl", "cc_sdk_headers")
 
 config_setting(
@@ -28,7 +28,7 @@ selects.config_setting_group(
 
 cc_sdk_headers(
     name = "wheelos_cyber_headers",
-    target = "//cyber:cyber",
+    target = "//cyber",
 )
 
 pkg_files(
@@ -41,26 +41,26 @@ pkg_files(
 pkg_files(
     name = "wheelos_cyber_runtime_library",
     srcs = ["//cyber:cyber_core"],
+    attributes = pkg_attributes(mode = "0755"),
     prefix = "/opt/wheelos_core/lib",
     strip_prefix = strip_prefix.files_only(),
-    attributes = pkg_attributes(mode = "0755"),
 )
 
 pkg_files(
     name = "wheelos_cyber_runtime_native_tools",
     srcs = ["//cyber:runtime_native_tools"],
+    attributes = pkg_attributes(mode = "0755"),
+    include_runfiles = True,
     prefix = "/opt/wheelos_core/bin",
     strip_prefix = strip_prefix.files_only(),
-    include_runfiles = True,
-    attributes = pkg_attributes(mode = "0755"),
 )
 
 pkg_files(
     name = "wheelos_cyber_runtime_launcher",
     srcs = ["scripts/runtime/cyber_launch"],
+    attributes = pkg_attributes(mode = "0755"),
     prefix = "/opt/wheelos_core/bin",
     strip_prefix = strip_prefix.files_only(),
-    attributes = pkg_attributes(mode = "0755"),
 )
 
 pkg_files(
@@ -73,9 +73,9 @@ pkg_files(
 pkg_files(
     name = "wheelos_cyber_runtime_setup",
     srcs = ["scripts/runtime/setup.bash"],
+    attributes = pkg_attributes(mode = "0755"),
     prefix = "/opt/wheelos_core",
     strip_prefix = strip_prefix.files_only(),
-    attributes = pkg_attributes(mode = "0755"),
 )
 
 pkg_files(
@@ -97,7 +97,7 @@ pkg_deb(
     homepage = "https://github.com/wheelos/core",
     maintainer = "daohu527@gmail.com",
     package = "wheelos_core",
-    version = "1.0.5",
+    version = "1.0.6",
 )
 
 pkg_tar(
@@ -115,19 +115,19 @@ pkg_tar(
 pkg_tar(
     name = "wheelos_cyber_sdk",
     deps = [
+        "wheelos_cyber_conf",
         "wheelos_cyber_core",
         "wheelos_cyber_header",
-        "wheelos_cyber_conf"
     ],
 )
 
 pkg_tar(
     name = "wheelos_cyber_core",
-    package_dir = "/usr/local/lib",
     srcs = [
-        "//cyber:cyber_core"
+        "//cyber:cyber_core",
     ],
     mode = "0755",
+    package_dir = "/usr/local/lib",
 )
 
 pkg_tar(
@@ -138,9 +138,9 @@ pkg_tar(
 
 pkg_tar(
     name = "wheelos_cyber_conf",
-    package_dir = "/etc/cyber",
     srcs = [
         "//cyber:cyber_conf",
     ],
     mode = "0644",
+    package_dir = "/etc/cyber",
 )

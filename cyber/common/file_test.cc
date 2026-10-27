@@ -210,6 +210,40 @@ TEST_F(FileTest, ResolveAbsoluteApolloPathAgainstConfiguredSoftwareRoot) {
   EXPECT_EQ(fs::canonical(default_path).string(), selected_path);
 }
 
+TEST_F(FileTest, ResolveConfigPathThroughSoftwareRootAlias) {
+  const fs::path software_root = GetTestPath("software");
+  const fs::path config_root = GetTestPath("config");
+  const fs::path config_key = "cyber/conf/cyber.pb.conf";
+  const fs::path default_path = software_root / config_key;
+  const fs::path override_path = config_root / config_key;
+  const fs::path software_alias = GetTestPath("runfiles");
+  const fs::path outside_root = GetTestPath("outside");
+  const fs::path outside_alias = GetTestPath("outside_runfiles");
+  fs::create_directories(default_path.parent_path());
+  fs::create_directories(override_path.parent_path());
+  fs::create_directories((outside_root / config_key).parent_path());
+  {
+    std::ofstream default_file(default_path);
+    default_file << "default";
+    std::ofstream override_file(override_path);
+    override_file << "override";
+    std::ofstream outside_file(outside_root / config_key);
+    outside_file << "outside";
+  }
+  fs::create_directory_symlink(software_root, software_alias);
+  fs::create_directory_symlink(outside_root, outside_alias);
+  setenv("APOLLO_ROOT_DIR", software_root.c_str(), 1);
+  setenv("WHEELOS_CONFIG_ROOT", config_root.c_str(), 1);
+
+  std::string selected_path;
+  ASSERT_TRUE(ResourceManager::ResolveConfigPath(
+      (software_alias / config_key).string(), &selected_path));
+  EXPECT_EQ(fs::canonical(override_path).string(), selected_path);
+  EXPECT_FALSE(ResourceManager::ResolveConfigPath(
+      (outside_alias / config_key).string(), &selected_path));
+  EXPECT_TRUE(selected_path.empty());
+}
+
 TEST_F(FileTest, ResolveConfigPathRejectsInvalidRootAndTraversal) {
   const fs::path software_root = GetTestPath("software");
   const fs::path default_path =

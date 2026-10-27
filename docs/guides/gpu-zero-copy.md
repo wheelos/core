@@ -207,6 +207,11 @@ acceptable.
   on other streams must be synchronized by the application first.
 - **Shut down in order.** Stop publishing, shut down the reader/writer, wait
   for the configured CUDA streams, and only then destroy the streams.
+- **Coordinate writer restart.** Live readers do not transparently reconnect
+  to a replacement writer. Stop publishing, quiesce consumers, wait for all
+  published slots to be returned, and destroy readers before shutting down
+  the writer. Recreate the writer and readers together, and wait for readers
+  to be ready and registered before publishing again.
 - **Account for platform behavior.** Discrete GPU mode uses CUDA IPC for
   memory and synchronization. Orin UMA mode uses mapped POSIX shared memory
   and conservative host synchronization, so zero-copy does not guarantee a

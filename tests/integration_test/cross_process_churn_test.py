@@ -35,6 +35,9 @@ def _environment(**updates):
     return {
         **os.environ,
         "CYBER_PATH": CHURN_CYBER_PATH or _runfile("cyber"),
+        "APOLLO_ROOT_DIR": os.path.dirname(
+            CHURN_CYBER_PATH or os.path.realpath(_runfile("cyber"))
+        ),
         "CYBER_DOMAIN_ID": CHURN_DOMAIN_ID,
         "PYTHONUNBUFFERED": "1",
         **updates,
