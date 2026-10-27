@@ -23,6 +23,7 @@
 #include <type_traits>
 
 #include "google/protobuf/arena.h"
+
 #include "cyber/message/protobuf_factory.h"
 
 namespace apollo {
@@ -34,7 +35,7 @@ template <typename MessageT,
               std::is_base_of<google::protobuf::Message, MessageT>::value,
               int>::type = 0>
 inline std::string MessageType() {
-  return MessageT::descriptor()->full_name();
+  return std::string(MessageT::descriptor()->full_name());
 }
 
 template <typename MessageT,
@@ -42,7 +43,7 @@ template <typename MessageT,
               std::is_base_of<google::protobuf::Message, MessageT>::value,
               int>::type = 0>
 std::string MessageType(const MessageT& message) {
-  return message.GetDescriptor()->full_name();
+  return std::string(message.GetDescriptor()->full_name());
 }
 
 template <typename MessageT,

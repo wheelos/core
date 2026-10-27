@@ -1,6 +1,6 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//:internal"])
 
 cc_binary(
     name = "mainboard",
@@ -13,6 +13,7 @@ cc_binary(
     ],
     linkopts = ["-pthread"],
     linkstatic = False,
+    visibility = ["//visibility:public"],
     deps = [
         "//cyber:cyber_core",
         "//cyber/common:resource_manager",

@@ -13,7 +13,7 @@ modules can start.
   package indexes
 - A checkout with enough free space for Bazel outputs and release artifacts
 
-The validation image installs the pinned Bazel version (`7.6.2`) from the
+The validation image installs the pinned Bazel version (`8.8.1`) from the
 official Bazel GitHub release URL. The image uses the named virtual user
 `wheelos` (UID/GID 1000) instead of running build commands as root.
 Ubuntu 22.04 supplies `patchelf 0.14.3`, which is too old for current
@@ -39,7 +39,7 @@ UID/GID 1000, omit the two `--build-arg` options. The build prints the
 installed Bazel version. It should report:
 
 ```text
-bazel 7.6.2
+bazel 8.8.1
 ```
 
 ## Build and validate release artifacts

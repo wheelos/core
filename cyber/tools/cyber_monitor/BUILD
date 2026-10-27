@@ -1,6 +1,6 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//:internal"])
 
 cc_binary(
     name = "cyber_monitor",
@@ -15,6 +15,7 @@ cc_binary(
     ],
     data = ["//cyber:runtime_resources"],
     linkopts = ["-pthread"],
+    visibility = ["//visibility:public"],
     deps = [
         ":cyber_topology_message",
         ":general_channel_message",

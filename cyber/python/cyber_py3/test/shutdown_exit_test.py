@@ -20,7 +20,7 @@ def repo_root() -> Path:
 def child_env(root: Path) -> dict[str, str]:
     env = os.environ.copy()
     log_dir = Path(tempfile.mkdtemp(prefix="pycyber-exit-log-"))
-    path_entries = [str(root)]
+    path_entries = [str(root), *sys.path]
     existing_pythonpath = env.get("PYTHONPATH")
     if existing_pythonpath:
         path_entries.append(existing_pythonpath)

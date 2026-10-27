@@ -1,6 +1,6 @@
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//:internal"])
 
 cc_library(
     name = "attributes_filler",
@@ -28,9 +28,9 @@ cc_library(
     srcs = ["participant.cc"],
     hdrs = ["participant.h"],
     deps = [
-        "//cyber:state",
         ":underlay_message",
         ":underlay_message_type",
+        "//cyber:state",
         "//cyber/common:global_data",
     ],
 )

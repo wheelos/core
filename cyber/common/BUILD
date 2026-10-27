@@ -1,6 +1,6 @@
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//:internal"])
 
 cc_library(
     name = "common",
@@ -21,6 +21,7 @@ cc_library(
     name = "file",
     srcs = ["file.cc"],
     hdrs = ["file.h"],
+    visibility = ["//visibility:public"],
     deps = [
         "//cyber/common:log",
         "@com_google_protobuf//:protobuf",
@@ -43,6 +44,7 @@ cc_library(
     name = "resource_manager",
     srcs = ["resource_manager.cc"],
     hdrs = ["resource_manager.h"],
+    visibility = ["//visibility:public"],
     deps = [
         "//cyber/common:log",
     ],
@@ -51,6 +53,7 @@ cc_library(
 cc_library(
     name = "log",
     hdrs = ["log.h"],
+    visibility = ["//visibility:public"],
     deps = [
         "//cyber:binary",
         "@com_github_google_glog//:glog",
@@ -116,6 +119,7 @@ cc_test(
 cc_library(
     name = "macros",
     hdrs = ["macros.h"],
+    visibility = ["//visibility:public"],
     deps = [
         "//cyber/base:macros",
     ],

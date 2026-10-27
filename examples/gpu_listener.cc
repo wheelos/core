@@ -21,7 +21,7 @@
 
 #include "cyber/common/log.h"
 #include "cyber/cyber.h"
-#include "cyber/transport/nvsci/gpu_reader.h"
+#include "cyber/gpu/gpu_reader.h"
 
 using apollo::cyber::examples::GpuImageMeta;
 using apollo::cyber::transport::CreateGpuReader;
@@ -69,14 +69,12 @@ bool ValidateGpuImage(const void* device_ptr, size_t byte_size,
 int main(int argc, char* argv[]) {
   apollo::cyber::Init(argv[0]);
 
-  auto listener_node =
-      apollo::cyber::CreateNode("gpu_listener");
+  auto listener_node = apollo::cyber::CreateNode("gpu_listener");
 
   // 1. Create the CUDA stream used by the consumer GPU pipeline.
   cudaStream_t infer_stream = nullptr;
   if (!CheckCuda(
-          cudaStreamCreateWithFlags(
-              &infer_stream, cudaStreamNonBlocking),
+          cudaStreamCreateWithFlags(&infer_stream, cudaStreamNonBlocking),
           "cudaStreamCreateWithFlags")) {
     return -1;
   }
@@ -89,81 +87,71 @@ int main(int argc, char* argv[]) {
   options.stream = infer_stream;
 
   // 3. Create the typed GPU zero-copy reader.
-  auto gpu_reader =
-      CreateGpuReader<GpuImageMeta>(
-          listener_node, "camera/front", options,
-          [&](GpuMsgView<GpuImageMeta>& view) {
-            const auto& meta = *view;
+  auto gpu_reader = CreateGpuReader<GpuImageMeta>(
+      listener_node, "camera/front", options,
+      [&](GpuMsgView<GpuImageMeta>& view) {
+        const auto& meta = *view;
 
-            if (meta.width == 0 || meta.height == 0 ||
-                meta.channels == 0) {
-              AERROR << "Received invalid frame metadata";
-              return;
-            }
+        if (meta.width == 0 || meta.height == 0 || meta.channels == 0) {
+          AERROR << "Received invalid frame metadata";
+          return;
+        }
 
-            if (meta.frame_id % 100 == 0) {
-              AINFO << "Received frame " << meta.frame_id
-                    << " [" << meta.width << "x"
-                    << meta.height << "]"
-                    << " GPU ptr: "
-                    << view.device_ptr();
-            }
+        if (meta.frame_id % 100 == 0) {
+          AINFO << "Received frame " << meta.frame_id << " [" << meta.width
+                << "x" << meta.height << "]"
+                << " GPU ptr: " << view.device_ptr();
+        }
 
-            // 4. Submit downstream GPU work directly against the
-            //    received device buffer.
-            //
-            // IMPORTANT:
-            // Do not call Done() before all GPU consumers have been
-            // submitted to infer_stream.
-            //
-            // In a real system this is where TensorRT inference,
-            // CUDA preprocessing, feature extraction, encoding, etc.
-            // would run.
-            const size_t capacity = view.capacity();
-            if (static_cast<size_t>(meta.width) >
-                capacity / static_cast<size_t>(meta.height)) {
-              AERROR << "Frame " << meta.frame_id
-                     << " dimensions exceed the slot capacity";
-              if (!view.Done(infer_stream)) {
-                AERROR << "Failed to complete GPU frame "
-                       << meta.frame_id;
-              }
-              return;
-            }
-            const size_t pixel_count =
-                static_cast<size_t>(meta.width) * meta.height;
-            if (static_cast<size_t>(meta.channels) >
-                capacity / pixel_count) {
-              AERROR << "Frame " << meta.frame_id
-                     << " channels exceed the slot capacity";
-              if (!view.Done(infer_stream)) {
-                AERROR << "Failed to complete GPU frame "
-                       << meta.frame_id;
-              }
-              return;
-            }
-            const size_t byte_size =
-                pixel_count * static_cast<size_t>(meta.channels);
+        // 4. Submit downstream GPU work directly against the
+        //    received device buffer.
+        //
+        // IMPORTANT:
+        // Do not call Done() before all GPU consumers have been
+        // submitted to infer_stream.
+        //
+        // In a real system this is where TensorRT inference,
+        // CUDA preprocessing, feature extraction, encoding, etc.
+        // would run.
+        const size_t capacity = view.capacity();
+        if (static_cast<size_t>(meta.width) >
+            capacity / static_cast<size_t>(meta.height)) {
+          AERROR << "Frame " << meta.frame_id
+                 << " dimensions exceed the slot capacity";
+          if (!view.Done(infer_stream)) {
+            AERROR << "Failed to complete GPU frame " << meta.frame_id;
+          }
+          return;
+        }
+        const size_t pixel_count =
+            static_cast<size_t>(meta.width) * meta.height;
+        if (static_cast<size_t>(meta.channels) > capacity / pixel_count) {
+          AERROR << "Frame " << meta.frame_id
+                 << " channels exceed the slot capacity";
+          if (!view.Done(infer_stream)) {
+            AERROR << "Failed to complete GPU frame " << meta.frame_id;
+          }
+          return;
+        }
+        const size_t byte_size =
+            pixel_count * static_cast<size_t>(meta.channels);
 
-            // The reader exposes the transport buffer as const. Validate a
-            // byte on the consumer stream without mutating shared storage.
-            if (!ValidateGpuImage(
-                    view.device_ptr(), byte_size,
-                    static_cast<uint8_t>(meta.frame_id & 0xFF),
-                    infer_stream)) {
-              AERROR << "Failed to validate GPU frame " << meta.frame_id;
-              if (!view.Done(infer_stream)) {
-                AERROR << "Failed to complete GPU frame "
-                       << meta.frame_id;
-              }
-              return;
-            }
+        // The reader exposes the transport buffer as const. Validate a
+        // byte on the consumer stream without mutating shared storage.
+        if (!ValidateGpuImage(view.device_ptr(), byte_size,
+                              static_cast<uint8_t>(meta.frame_id & 0xFF),
+                              infer_stream)) {
+          AERROR << "Failed to validate GPU frame " << meta.frame_id;
+          if (!view.Done(infer_stream)) {
+            AERROR << "Failed to complete GPU frame " << meta.frame_id;
+          }
+          return;
+        }
 
-            if (!view.Done(infer_stream)) {
-              AERROR << "Failed to complete GPU frame "
-                     << meta.frame_id;
-            }
-          });
+        if (!view.Done(infer_stream)) {
+          AERROR << "Failed to complete GPU frame " << meta.frame_id;
+        }
+      });
 
   if (!gpu_reader) {
     AERROR << "Failed to create GpuReader";
@@ -180,15 +168,13 @@ int main(int argc, char* argv[]) {
   // after the final synchronization.
   gpu_reader->Shutdown();
 
-  if (!CheckCuda(
-          cudaStreamSynchronize(infer_stream),
-          "cudaStreamSynchronize(infer_stream)")) {
+  if (!CheckCuda(cudaStreamSynchronize(infer_stream),
+                 "cudaStreamSynchronize(infer_stream)")) {
     AERROR << "Consumer CUDA stream did not synchronize cleanly";
   }
 
-  if (!CheckCuda(
-          cudaStreamDestroy(infer_stream),
-          "cudaStreamDestroy(infer_stream)")) {
+  if (!CheckCuda(cudaStreamDestroy(infer_stream),
+                 "cudaStreamDestroy(infer_stream)")) {
     return -1;
   }
 

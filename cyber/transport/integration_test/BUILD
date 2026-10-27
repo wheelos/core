@@ -1,5 +1,7 @@
 load("@rules_cc//cc:defs.bzl", "cc_test")
 
+package(default_visibility = ["//:internal"])
+
 cc_test(
     name = "hybrid_transceiver_test",
     size = "small",

@@ -32,6 +32,7 @@
 #include "cyber/common/file.h"
 #include "cyber/common/global_data.h"
 #include "cyber/data/data_dispatcher.h"
+#include "cyber/internal/python_lifecycle.h"
 #include "cyber/logger/async_logger.h"
 #include "cyber/metrics/metrics.h"
 #include "cyber/node/node.h"
@@ -76,9 +77,11 @@ void InitLogger(const char* binary_name) {
   google::SetLogDestination(google::FATAL, "");
 
   // Init async logger
-  async_logger = new ::apollo::cyber::logger::AsyncLogger(
-      google::base::GetLogger(static_cast<google::LogSeverity>(FLAGS_minloglevel)));
-  google::base::SetLogger(static_cast<google::LogSeverity>(FLAGS_minloglevel), async_logger);
+  async_logger =
+      new ::apollo::cyber::logger::AsyncLogger(google::base::GetLogger(
+          static_cast<google::LogSeverity>(FLAGS_minloglevel)));
+  google::base::SetLogger(static_cast<google::LogSeverity>(FLAGS_minloglevel),
+                          async_logger);
   async_logger->Start();
 }
 
@@ -170,8 +173,8 @@ bool Init(const char* binary_name) {
   metrics::Registry::Instance().Configure(metrics_mode);
   if (metrics_mode != metrics::Mode::Off &&
       !metrics_conf.snapshot_path().empty()) {
-    const auto path = metrics_conf.snapshot_path() + "." +
-                      std::to_string(getpid()) + ".json";
+    const auto path =
+        metrics_conf.snapshot_path() + "." + std::to_string(getpid()) + ".json";
     if (!metrics::Registry::Instance().StartExport(path)) {
       AERROR << "Unable to start Runtime Metrics export at " << path
              << " (parent directory must be private and owned by this user)";
@@ -217,7 +220,7 @@ void Clear() {
   }
   SetState(STATE_SHUTTING_DOWN);
   if (clock_node) {
-      clock_node.reset();
+    clock_node.reset();
   }
 
   FinishClear(true);

@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef CYBER_TRANSPORT_NVSCI_GPU_READER_H_
-#define CYBER_TRANSPORT_NVSCI_GPU_READER_H_
+#ifndef CYBER_GPU_GPU_READER_H_
+#define CYBER_GPU_GPU_READER_H_
 
 #include <algorithm>
 #include <atomic>
@@ -30,13 +30,13 @@
 
 #include "cyber/common/log.h"
 #include "cyber/common/util.h"
+#include "cyber/gpu/internal/gpu_control_endpoint.h"
 #include "cyber/message/raw_message.h"
 #include "cyber/node/node.h"
 #include "cyber/node/reader.h"
 #include "cyber/node/writer.h"
 #include "cyber/transport/nvsci/gpu_channel_manager.h"
 #include "cyber/transport/nvsci/gpu_channel_session.h"
-#include "cyber/transport/nvsci/gpu_control_endpoint.h"
 #include "cyber/transport/nvsci/gpu_control_protocol.h"
 #include "cyber/transport/nvsci/nvsci_types.h"
 
@@ -708,4 +708,4 @@ std::shared_ptr<GpuReader<MetaT>> CreateGpuReader(
 }  // namespace cyber
 }  // namespace apollo
 
-#endif  // CYBER_TRANSPORT_NVSCI_GPU_READER_H_
+#endif  // CYBER_GPU_GPU_READER_H_

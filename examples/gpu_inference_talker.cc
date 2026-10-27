@@ -30,9 +30,9 @@
 
 #include "cyber/common/log.h"
 #include "cyber/cyber.h"
+#include "cyber/gpu/gpu_writer.h"
 #include "cyber/time/time.h"
 #include "cyber/transport/nvsci/gpu_channel_manager.h"
-#include "cyber/transport/nvsci/gpu_writer.h"
 
 namespace {
 

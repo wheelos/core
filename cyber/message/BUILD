@@ -1,11 +1,12 @@
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//:internal"])
 
 cc_library(
     name = "flatbuffers_message",
     hdrs = ["flatbuffers_message.h"],
-    deps = ["@flatbuffers//:flatbuffers"],
+    visibility = ["//visibility:public"],
+    deps = ["@flatbuffers"],
 )
 
 cc_test(
@@ -21,8 +22,8 @@ cc_test(
 cc_library(
     name = "message_traits",
     hdrs = [
+        "message_header.h",
         "message_traits.h",
-        "message_header.h"
     ],
     deps = [
         ":message_header",
@@ -84,6 +85,7 @@ cc_library(
 cc_library(
     name = "raw_message",
     hdrs = ["raw_message.h"],
+    visibility = ["//visibility:public"],
     deps = [
         ":protobuf_factory",
     ],

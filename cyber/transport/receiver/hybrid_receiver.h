@@ -26,11 +26,11 @@
 #include <utility>
 #include <vector>
 
+#include "cyber/proto/role_attributes.pb.h"
+
 #include "cyber/common/global_data.h"
 #include "cyber/common/log.h"
 #include "cyber/common/types.h"
-#include "cyber/proto/role_attributes.pb.h"
-#include "cyber/service_discovery/role/role.h"
 #include "cyber/task/task.h"
 #include "cyber/time/time.h"
 #include "cyber/transport/message/pod_message.h"
@@ -120,8 +120,7 @@ class HybridReceiver : public Receiver<M> {
   void ClearTransmitters();
   void ReceiveHistoryMsg(const RoleAttributes& opposite_attr);
   static void ThreadFunc(
-      const RoleAttributes& opposite_attr,
-      const RoleAttributes& receiver_attr,
+      const RoleAttributes& opposite_attr, const RoleAttributes& receiver_attr,
       const typename Receiver<M>::MessageListener& message_listener);
   Relation GetRelation(const RoleAttributes& opposite_attr);
 

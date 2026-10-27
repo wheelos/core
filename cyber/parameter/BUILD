@@ -1,11 +1,12 @@
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//:internal"])
 
 cc_library(
     name = "parameter",
     srcs = ["parameter.cc"],
     hdrs = ["parameter.h"],
+    visibility = ["//visibility:public"],
     deps = [
         "//cyber/message:protobuf_factory",
         "//cyber/proto:parameter_cc_proto",
@@ -26,6 +27,7 @@ cc_library(
     name = "parameter_client",
     srcs = ["parameter_client.cc"],
     hdrs = ["parameter_client.h"],
+    visibility = ["//visibility:public"],
     deps = [
         ":parameter",
         ":parameter_service_names",
@@ -49,6 +51,7 @@ cc_library(
     name = "parameter_server",
     srcs = ["parameter_server.cc"],
     hdrs = ["parameter_server.h"],
+    visibility = ["//visibility:public"],
     deps = [
         ":parameter",
         ":parameter_service_names",

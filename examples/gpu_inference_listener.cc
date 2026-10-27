@@ -29,8 +29,8 @@
 
 #include "cyber/common/log.h"
 #include "cyber/cyber.h"
+#include "cyber/gpu/gpu_reader.h"
 #include "cyber/time/time.h"
-#include "cyber/transport/nvsci/gpu_reader.h"
 
 namespace {
 

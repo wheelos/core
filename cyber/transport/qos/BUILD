@@ -1,5 +1,7 @@
 load("@rules_cc//cc:defs.bzl", "cc_library")
 
+package(default_visibility = ["//:internal"])
+
 cc_library(
     name = "qos",
     visibility = ["//visibility:public"],

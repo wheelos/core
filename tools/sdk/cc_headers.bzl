@@ -1,37 +1,46 @@
-"""Collect public headers owned by the current workspace from a C++ dependency graph."""
+"""Collect explicit API roots and their required template support headers."""
 
-SdkHeadersInfo = provider(fields = ["headers"])
+load("@rules_cc//cc/common:cc_info.bzl", "CcInfo")
 
-def _sdk_headers_aspect_impl(target, ctx):
-    transitive_headers = []
-    for dep in ctx.rule.attr.deps if hasattr(ctx.rule.attr, "deps") else []:
-        if SdkHeadersInfo in dep:
-            transitive_headers.append(dep[SdkHeadersInfo].headers)
-
-    direct_headers = []
-    if CcInfo in target:
-        for header in target[CcInfo].compilation_context.direct_public_headers:
-            if header.short_path.startswith("cyber/"):
-                direct_headers.append(header)
-
-    return [SdkHeadersInfo(
-        headers = depset(direct_headers, transitive = transitive_headers),
-    )]
-
-sdk_headers_aspect = aspect(
-    implementation = _sdk_headers_aspect_impl,
-    attr_aspects = ["deps"],
-)
+def _workspace_path(header):
+    path = header.short_path
+    if path.startswith("../"):
+        return "/".join(path.split("/")[2:])
+    return path
 
 def _cc_sdk_headers_impl(ctx):
-    return [DefaultInfo(files = ctx.attr.target[SdkHeadersInfo].headers)]
+    public_headers = []
+    support_headers = []
+    for target in ctx.attr.targets:
+        public_headers.extend(target[CcInfo].compilation_context.direct_public_headers)
+        support_headers.extend([
+            header
+            for header in target[CcInfo].compilation_context.headers.to_list()
+            if header.owner and
+               header.owner.workspace_name == ctx.label.workspace_name and
+               _workspace_path(header).startswith("cyber/")
+        ])
+
+    headers = depset(support_headers)
+    public = depset(public_headers)
+    manifest = ctx.actions.declare_file(ctx.label.name + ".all.txt")
+    public_manifest = ctx.actions.declare_file(ctx.label.name + ".public.txt")
+    ctx.actions.write(manifest, "\n".join(sorted([_workspace_path(f) for f in headers.to_list()])) + "\n")
+    ctx.actions.write(public_manifest, "\n".join(sorted([_workspace_path(f) for f in public.to_list()])) + "\n")
+    return [
+        DefaultInfo(files = headers),
+        OutputGroupInfo(
+            public_headers = public,
+            manifest = depset([manifest]),
+            public_manifest = depset([public_manifest]),
+        ),
+    ]
 
 cc_sdk_headers = rule(
     implementation = _cc_sdk_headers_impl,
     attrs = {
-        "target": attr.label(
+        "targets": attr.label_list(
             mandatory = True,
-            aspects = [sdk_headers_aspect],
             providers = [CcInfo],
         ),
     },

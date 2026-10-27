@@ -1,12 +1,25 @@
 load("@rules_cc//cc:defs.bzl", "cc_library")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//:internal"])
 
 cc_library(
     name = "cyber",
+    implementation_deps = [":cyber_core"],
     linkstatic = False,
+    visibility = ["//visibility:public"],
     deps = [
-        ":cyber_core",
+        ":api",
+        "//cyber/common:file",
+        "//cyber/common:macros",
+        "//cyber/common:resource_manager",
+        "//cyber/component:timer_component",
+        "//cyber/message:raw_message",
+        "//cyber/parameter:parameter_client",
+        "//cyber/parameter:parameter_server",
+        "//cyber/record",
+        "//cyber/time:clock",
+        "//cyber/time:duration",
+        "//cyber/time:rate",
     ],
 )
 
@@ -20,8 +33,9 @@ cc_library(
     name = "state",
     srcs = ["state.cc"],
     hdrs = ["state.h"],
+    visibility = ["//visibility:public"],
     deps = [
-        "//cyber/common",
+        "//cyber/common:log",
     ],
 )
 
@@ -29,26 +43,56 @@ cc_library(
     name = "init",
     srcs = ["init.cc"],
     hdrs = ["init.h"],
-    deps = [
+    implementation_deps = [
         "//cyber:binary",
-        "//cyber:state",
-        "//cyber/metrics",
+        "//cyber:python_lifecycle",
         "//cyber/common:file",
+        "//cyber/common:global_data",
+        "//cyber/data:data_dispatcher",
         "//cyber/logger:async_logger",
+        "//cyber/metrics",
         "//cyber/node",
         "//cyber/proto:clock_cc_proto",
+        "//cyber/scheduler",
+        "//cyber/service_discovery:topology_manager",
         "//cyber/sysmo",
+        "//cyber/task",
         "//cyber/time:clock",
         "//cyber/timer:timing_wheel",
+        "//cyber/transport",
     ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//cyber:state",
+        "//cyber/common:log",
+    ],
+)
+
+cc_library(
+    name = "api",
+    hdrs = ["cyber.h"],
+    deps = [
+        ":init",
+        "//cyber/common:log",
+        "//cyber/component",
+        "//cyber/node",
+        "//cyber/task",
+        "//cyber/time",
+        "//cyber/timer",
+    ],
+)
+
+cc_library(
+    name = "python_lifecycle",
+    hdrs = ["internal/python_lifecycle.h"],
 )
 
 cc_library(
     name = "cyber_core",
     srcs = ["cyber.cc"],
-    hdrs = ["cyber.h"],
     linkopts = ["-lrt"],
     deps = [
+        ":api",
         "//cyber:binary",
         "//cyber:init",
         "//cyber:state",
@@ -91,29 +135,30 @@ cc_library(
         "//cyber/transport/rtps:sub_listener",
         "@com_github_google_glog//:glog",
         "@com_google_protobuf//:protobuf",
-        "@fastdds//:fastdds",
+        "@fastdds",
     ],
 )
 
 filegroup(
     name = "runtime_tools",
     srcs = [
-        "//cyber/mainboard:mainboard",
-        "//cyber/tools/cyber_channel:cyber_channel",
-        "//cyber/tools/cyber_launch:cyber_launch",
-        "//cyber/tools/cyber_monitor:cyber_monitor",
-        "//cyber/tools/cyber_node:cyber_node",
-        "//cyber/tools/cyber_recorder:cyber_recorder",
-        "//cyber/tools/cyber_service:cyber_service",
+        "//cyber/mainboard",
+        "//cyber/tools/cyber_channel",
+        "//cyber/tools/cyber_launch",
+        "//cyber/tools/cyber_monitor",
+        "//cyber/tools/cyber_node",
+        "//cyber/tools/cyber_recorder",
+        "//cyber/tools/cyber_service",
     ],
+    visibility = ["//visibility:public"],
 )
 
 filegroup(
     name = "runtime_native_tools",
     srcs = [
-        "//cyber/mainboard:mainboard",
-        "//cyber/tools/cyber_monitor:cyber_monitor",
-        "//cyber/tools/cyber_recorder:cyber_recorder",
+        "//cyber/mainboard",
+        "//cyber/tools/cyber_monitor",
+        "//cyber/tools/cyber_recorder",
     ],
 )
 
@@ -122,10 +167,9 @@ filegroup(
     srcs = glob(
         [
             "conf/**",
-            "tools/cyber_tools_auto_complete.bash",
         ],
         allow_empty = True,
-    ),
+    ) + ["//cyber/tools:cyber_tools_auto_complete.bash"],
 )
 
 filegroup(
@@ -133,6 +177,7 @@ filegroup(
     srcs = glob([
         "conf/*.conf",
     ]),
+    visibility = ["//visibility:public"],
 )
 
 filegroup(

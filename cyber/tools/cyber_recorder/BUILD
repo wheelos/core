@@ -1,16 +1,17 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//:internal"])
 
 cc_binary(
     name = "cyber_recorder",
     srcs = ["main.cc"],
     data = ["//cyber:runtime_resources"],
     linkopts = ["-pthread"],
+    visibility = ["//visibility:public"],
     deps = [
         ":info",
-        ":recorder_config",
         ":recorder",
+        ":recorder_config",
         ":recoverer",
         ":spliter",
         "//cyber:init",
@@ -104,6 +105,7 @@ cc_library(
     name = "recorder",
     srcs = ["record/core/recorder.cc"],
     hdrs = ["record/core/recorder.h"],
+    visibility = ["//visibility:public"],
     deps = [
         ":channel_rate_filter",
         ":conflict_warning_emitter",
@@ -116,7 +118,7 @@ cc_library(
         "//cyber",
         "//cyber/common:log",
         "//cyber/proto:record_cc_proto",
-        "@fastdds//:fastdds",
+        "@fastdds",
     ],
 )
 

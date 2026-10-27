@@ -23,8 +23,8 @@
 #include <gtest/gtest.h>
 
 #include "cyber/cyber.h"
-#include "cyber/transport/nvsci/gpu_reader.h"
-#include "cyber/transport/nvsci/gpu_writer.h"
+#include "cyber/gpu/gpu_reader.h"
+#include "cyber/gpu/gpu_writer.h"
 #include "cyber/transport/rtps/participant.h"
 
 namespace apollo {

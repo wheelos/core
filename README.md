@@ -62,7 +62,25 @@ Application / Component
 Subscriber / Receiver / Proc() execution
 ```
 
-The actual build graph includes targets such as `//cyber:cyber`, `//cyber:cyber_core`, `//cyber/service_discovery`, `//cyber/transport`, `//cyber/record`, and the tool targets under `//cyber/tools/...`.
+Applications depend on `//cyber` or the explicit targets in the
+[public API contract](docs/reference/api.md#supported-public-surface).
+`//cyber:cyber_core`, discovery managers, scheduler policies, and transport
+backends are internal implementation targets, not external APIs.
+
+The main ownership boundaries are:
+
+| Directories | Responsibility |
+| --- | --- |
+| `node/`, `service/`, `parameter/`, `gpu/` | Application APIs and their adapters; RPC uses transport directly rather than Node internals |
+| `component/`, `mainboard/`, `class_loader/` | Component contracts, process assembly, and dynamic loading |
+| `scheduler/`, `croutine/`, `task/`, `timer/` | Dispatch policies, execution contexts, task submission, and timers |
+| `data/`, `blocker/` | Scheduling data buffers/fusion and publish/observe caches; simulation Node adapters live in `node/internal/` |
+| `transport/`, `service_discovery/` | Data backends and topology control; GPU Node control-plane adapters live in `gpu/`, not the backend |
+| `record/`, `tools/`, `python/` | Record-file library, runtime commands, and language bindings |
+
+Paths in this table are relative to `cyber/`. The public SDK distinguishes
+supported header roots from the internal support headers needed to compile
+C++ templates; it does not export the entire runtime dependency graph.
 
 # Installation
 
@@ -75,6 +93,12 @@ sudo bash scripts/deploy/build.sh
 This installs the Bazel build dependencies used by the repository.
 
 ## Build the project
+
+Use Bazel **8.8.1**, matching Apollo-Lite. Bazelisk reads the version from
+`.bazelversion`; a separately installed `bazel` binary must match it.
+Protobuf 36.2 generates Python code requiring `protobuf>=7.36.2,<8`.
+Abseil and GoogleTest remain at the latest versions compatible with
+Protobuf's Abseil compatibility level 1.
 
 ```bash
 bash scripts/build.sh
@@ -98,7 +122,7 @@ bazel mod deps --config=ci --lockfile_mode=update
 bash scripts/release/build_vendor_bundle.sh --outdir artifacts/vendor
 ```
 
-The script refreshes the Bazel 7.6.2-compatible `MODULE.bazel.lock`, runs
+The script refreshes the Bazel 8.8.1-compatible `MODULE.bazel.lock`, runs
 `bazel vendor --lockfile_mode=update`, validates `//:wheelos_core`, and writes
 an archive such as
 `artifacts/vendor/wheelos_core_vendor_<timestamp>.tar.gz`. The archive

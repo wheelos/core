@@ -1,11 +1,12 @@
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//:internal"])
 
 cc_library(
     name = "topology_manager",
     srcs = ["topology_manager.cc"],
     hdrs = ["topology_manager.h"],
+    implementation_deps = ["//cyber/common:global_data"],
     deps = [
         ":channel_manager",
         ":node_manager",
@@ -114,6 +115,7 @@ cc_library(
     name = "manager",
     srcs = ["specific_manager/manager.cc"],
     hdrs = ["specific_manager/manager.h"],
+    implementation_deps = ["//cyber/common:global_data"],
     deps = [
         "//cyber:state",
         "//cyber/base:signal",
@@ -135,6 +137,7 @@ cc_library(
     name = "channel_manager",
     srcs = ["specific_manager/channel_manager.cc"],
     hdrs = ["specific_manager/channel_manager.h"],
+    implementation_deps = ["//cyber/common:global_data"],
     deps = [
         ":graph",
         ":manager",
@@ -159,6 +162,7 @@ cc_library(
     name = "node_manager",
     srcs = ["specific_manager/node_manager.cc"],
     hdrs = ["specific_manager/node_manager.h"],
+    implementation_deps = ["//cyber/common:global_data"],
     deps = [
         ":manager",
         ":multi_value_warehouse",
@@ -180,6 +184,7 @@ cc_library(
     name = "service_manager",
     srcs = ["specific_manager/service_manager.cc"],
     hdrs = ["specific_manager/service_manager.h"],
+    implementation_deps = ["//cyber/common:global_data"],
     deps = [
         ":manager",
         ":multi_value_warehouse",

@@ -1,4 +1,4 @@
-load("@rules_cc//cc:defs.bzl", "cc_binary")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
 load("@rules_cuda//cuda:defs.bzl", "cuda_library", "requires_cuda")
 
 package(default_visibility = ["//visibility:public"])
@@ -77,9 +77,9 @@ cuda_library(
     name = "gpu_classifier_kernel",
     srcs = ["gpu_classifier_kernel.cu"],
     hdrs = ["gpu_classifier_kernel.h"],
-    deps = ["@cuda//:cuda_runtime"],
     features = ["-nvcc_extended_lambda"],
     target_compatible_with = requires_cuda(),
+    deps = ["@cuda//:cuda_runtime"],
 )
 
 cc_binary(
@@ -88,9 +88,9 @@ cc_binary(
     target_compatible_with = requires_cuda(),
     deps = [
         ":gpu_image_meta",
-        "@cuda//:cuda_runtime",
         "//cyber",
-        "//cyber/transport/nvsci:gpu_writer",
+        "//cyber/gpu:gpu_writer",
+        "@cuda//:cuda_runtime",
     ],
 )
 
@@ -100,9 +100,9 @@ cc_binary(
     target_compatible_with = requires_cuda(),
     deps = [
         ":gpu_image_meta",
-        "@cuda//:cuda_runtime",
         "//cyber",
-        "//cyber/transport/nvsci:gpu_reader",
+        "//cyber/gpu:gpu_reader",
+        "@cuda//:cuda_runtime",
     ],
 )
 
@@ -112,9 +112,9 @@ cc_binary(
     target_compatible_with = requires_cuda(),
     deps = [
         ":gpu_image_meta",
-        "@cuda//:cuda_runtime",
         "//cyber",
-        "//cyber/transport/nvsci:gpu_writer",
+        "//cyber/gpu:gpu_writer",
+        "@cuda//:cuda_runtime",
     ],
 )
 
@@ -125,9 +125,9 @@ cc_binary(
     deps = [
         ":gpu_classifier_kernel",
         ":gpu_image_meta",
-        "@cuda//:cuda_runtime",
         "//cyber",
-        "//cyber/transport/nvsci:gpu_reader",
+        "//cyber/gpu:gpu_reader",
+        "@cuda//:cuda_runtime",
     ],
 )
 
@@ -137,7 +137,7 @@ cc_test(
     target_compatible_with = requires_cuda(),
     deps = [
         ":gpu_classifier_kernel",
-        "@cuda//:cuda_runtime",
         "@com_google_googletest//:gtest_main",
+        "@cuda//:cuda_runtime",
     ],
 )

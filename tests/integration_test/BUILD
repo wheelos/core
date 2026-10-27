@@ -38,9 +38,9 @@ cc_test(
     srcs = ["examples_integration_test.cc"],
     data = ["//cyber:cyber_conf"],
     deps = [
+        ":examples_test_utils",
         "//cyber:cyber_core",
         "//examples/proto:examples_cc_proto",
-        ":examples_test_utils",
         "@com_google_googletest//:gtest",
     ],
 )
@@ -51,9 +51,9 @@ cc_test(
     srcs = ["examples_stress_test.cc"],
     data = ["//cyber:cyber_conf"],
     deps = [
+        ":examples_test_utils",
         "//cyber:cyber_core",
         "//examples/proto:examples_cc_proto",
-        ":examples_test_utils",
         "@com_google_googletest//:gtest",
     ],
 )
@@ -63,18 +63,18 @@ py_test(
     size = "medium",
     timeout = "moderate",
     srcs = ["cyber_tools_discovery_test.py"],
+    data = [
+        "//cyber:cyber_conf",
+        "//cyber/tools/cyber_channel",
+        "//cyber/tools/cyber_launch",
+        "//cyber/tools/cyber_monitor",
+        "//cyber/tools/cyber_node",
+        "//cyber/tools/cyber_recorder",
+        "//cyber/tools/cyber_service",
+    ],
     tags = [
         "exclusive",
         "local",
-    ],
-    data = [
-        "//cyber:cyber_conf",
-        "//cyber/tools/cyber_channel:cyber_channel",
-        "//cyber/tools/cyber_launch:cyber_launch",
-        "//cyber/tools/cyber_monitor:cyber_monitor",
-        "//cyber/tools/cyber_node:cyber_node",
-        "//cyber/tools/cyber_recorder:cyber_recorder",
-        "//cyber/tools/cyber_service:cyber_service",
     ],
     deps = [
         "//cyber/proto:unit_test_py_pb2",
@@ -87,16 +87,16 @@ py_test(
     size = "large",
     timeout = "long",
     srcs = ["cross_process_churn_test.py"],
-    tags = [
-        "exclusive",
-        "local",
-    ],
     data = [
         ":cross_process_lifecycle_helper",
         ":librecorder_input_component.so",
         "//cyber:cyber_conf",
-        "//cyber/mainboard:mainboard",
-        "//cyber/tools/cyber_recorder:cyber_recorder",
+        "//cyber/mainboard",
+        "//cyber/tools/cyber_recorder",
+    ],
+    tags = [
+        "exclusive",
+        "local",
     ],
 )
 
@@ -106,7 +106,7 @@ py_test(
     srcs = ["mainboard_integration_test.py"],
     data = [
         "//cyber:cyber_conf",
-        "//cyber/mainboard:mainboard",
+        "//cyber/mainboard",
         "//examples/timer_component_example:libtimer_component_example.so",
     ],
 )
@@ -165,8 +165,8 @@ cc_test(
     target_compatible_with = requires_cuda(),
     deps = [
         "//cyber:cyber_core",
-        "//cyber/transport/nvsci:gpu_reader",
-        "//cyber/transport/nvsci:gpu_writer",
+        "//cyber/gpu:gpu_reader",
+        "//cyber/gpu:gpu_writer",
         "@com_google_googletest//:gtest",
     ],
 )
@@ -208,9 +208,9 @@ cc_test(
 test_suite(
     name = "examples_regression_tests",
     tests = [
+        ":cross_process_churn_test",
         ":cyber_lifecycle_test",
         ":cyber_tools_discovery_test",
-        ":cross_process_churn_test",
         ":examples_integration_test",
         ":examples_stress_test",
         ":mainboard_integration_test",
@@ -222,8 +222,8 @@ test_suite(
     name = "core_tool_matrix_tests",
     tests = [
         ":core_transport_matrix_test",
-        ":runtime_metrics_test",
         ":examples_regression_tests",
+        ":runtime_metrics_test",
         "//cyber/python/cyber_py3/examples:examples_smoke_test",
         "//cyber/python/cyber_py3/test:cyber_test",
         "//cyber/python/cyber_py3/test:cyber_time_test",

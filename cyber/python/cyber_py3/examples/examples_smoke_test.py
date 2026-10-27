@@ -20,7 +20,7 @@ def example_env(root: Path) -> dict[str, str]:
     env = os.environ.copy()
     log_dir = root / "data" / "log"
     log_dir.mkdir(parents=True, exist_ok=True)
-    path_entries = [str(root)]
+    path_entries = [str(root), *sys.path]
     existing_pythonpath = env.get("PYTHONPATH")
     if existing_pythonpath:
         path_entries.append(existing_pythonpath)

@@ -1,5 +1,7 @@
 load("@rules_python//python:defs.bzl", "py_test")
 
+package(default_visibility = ["//:internal"])
+
 py_test(
     name = "record_test",
     timeout = "short",
@@ -28,6 +30,7 @@ py_test(
         "//cyber/python/cyber_py3:cyber",
     ],
 )
+
 py_test(
     name = "parameter_test",
     timeout = "short",

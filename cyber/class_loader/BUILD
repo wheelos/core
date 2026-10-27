@@ -1,6 +1,6 @@
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//:internal"])
 
 cc_library(
     name = "class_loader",
@@ -42,6 +42,7 @@ cc_test(
         "//cyber/class_loader/test:plugin2_loader.so",
     ],
     deps = [
+        ":class_loader_manager",
         "//cyber",
         "//cyber/class_loader/test:base",
         "//cyber/proto:unit_test_cc_proto",

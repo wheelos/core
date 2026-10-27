@@ -1,7 +1,7 @@
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 load("@rules_cuda//cuda:defs.bzl", "requires_cuda")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//:internal"])
 
 config_setting(
     name = "use_nvsci_enabled",
@@ -131,75 +131,17 @@ cc_library(
 )
 
 cc_library(
-    name = "gpu_control_endpoint",
-    hdrs = ["gpu_control_endpoint.h"],
-    deps = [
-        "//cyber/common:global_data",
-        "//cyber/common:util",
-        "//cyber/message:message_traits",
-        "//cyber/message:protobuf_factory",
-        "//cyber/message:raw_message",
-        "//cyber/node",
-        "//cyber/transport/common:identity",
-    ],
-)
-
-cc_library(
     name = "gpu_channel_manager",
     srcs = ["gpu_channel_manager.cc"],
     hdrs = ["gpu_channel_manager.h"],
     deps = [
-        ":gpu_wire",
         ":gpu_channel_session",
+        ":gpu_wire",
         ":nvsci_buf_pool",
         ":nvsci_sync_engine",
+        "//cyber/common:log",
         "//cyber/common:macros",
-        "//cyber/common:log",
         "//cyber/common:util",
-    ],
-)
-
-cc_library(
-    name = "gpu_writer",
-    hdrs = ["gpu_writer.h"],
-    deps = [
-        ":gpu_control_endpoint",
-        ":gpu_channel_manager",
-        ":gpu_channel_session",
-        ":gpu_control_protocol",
-        ":nvsci_types",
-        "//cyber/common:log",
-        "//cyber/message:raw_message",
-        "//cyber/node",
-    ],
-)
-
-cc_library(
-    name = "gpu_reader",
-    hdrs = ["gpu_reader.h"],
-    deps = [
-        ":gpu_control_endpoint",
-        ":gpu_channel_manager",
-        ":gpu_channel_session",
-        ":gpu_control_protocol",
-        ":nvsci_types",
-        "//cyber/common:log",
-        "//cyber/common:util",
-        "//cyber/message:raw_message",
-        "//cyber/node",
-    ],
-)
-
-cc_test(
-    name = "gpu_writer_reader_test",
-    size = "small",
-    srcs = ["gpu_writer_reader_test.cc"],
-    target_compatible_with = requires_cuda(),
-    deps = [
-        ":gpu_reader",
-        ":gpu_writer",
-        "//cyber",
-        "@com_google_googletest//:gtest_main",
     ],
 )
 

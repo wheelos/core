@@ -1,6 +1,6 @@
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//:internal"])
 
 cc_library(
     name = "transport",
@@ -8,7 +8,6 @@ cc_library(
     hdrs = ["transport.h"],
     deps = [
         ":iceoryx_runtime",
-        "//cyber/service_discovery:role",
         "//cyber/task",
         "//cyber/transport/dispatcher:intra_dispatcher",
         "//cyber/transport/dispatcher:rtps_dispatcher",

@@ -21,9 +21,9 @@
 
 #include "cyber/common/log.h"
 #include "cyber/cyber.h"
+#include "cyber/gpu/gpu_writer.h"
 #include "cyber/time/rate.h"
 #include "cyber/time/time.h"
-#include "cyber/transport/nvsci/gpu_writer.h"
 
 using apollo::cyber::Rate;
 using apollo::cyber::Time;
@@ -39,10 +39,9 @@ constexpr uint32_t kImageHeight = 1080;
 constexpr uint32_t kImageChannels = 3;
 
 // Tutorial contract: tightly packed RGB8 image.
-constexpr size_t kImageBytes =
-    static_cast<size_t>(kImageWidth) *
-    static_cast<size_t>(kImageHeight) *
-    static_cast<size_t>(kImageChannels);
+constexpr size_t kImageBytes = static_cast<size_t>(kImageWidth) *
+                               static_cast<size_t>(kImageHeight) *
+                               static_cast<size_t>(kImageChannels);
 
 bool CheckCuda(cudaError_t error, const char* operation) {
   if (error == cudaSuccess) {
@@ -53,8 +52,7 @@ bool CheckCuda(cudaError_t error, const char* operation) {
   return false;
 }
 
-bool GenerateGpuFrame(void* device_ptr, uint8_t value,
-                      cudaStream_t stream) {
+bool GenerateGpuFrame(void* device_ptr, uint8_t value, cudaStream_t stream) {
   return CheckCuda(cudaMemsetAsync(device_ptr, value, kImageBytes, stream),
                    "cudaMemsetAsync");
 }
@@ -69,8 +67,7 @@ int main(int argc, char* argv[]) {
   // 1. Create the CUDA stream used for asynchronous frame generation.
   cudaStream_t capture_stream = nullptr;
   if (!CheckCuda(
-          cudaStreamCreateWithFlags(
-              &capture_stream, cudaStreamNonBlocking),
+          cudaStreamCreateWithFlags(&capture_stream, cudaStreamNonBlocking),
           "cudaStreamCreateWithFlags")) {
     return -1;
   }
@@ -88,8 +85,7 @@ int main(int argc, char* argv[]) {
 
   // 3. Create the typed GPU zero-copy writer.
   auto gpu_writer =
-      CreateGpuWriter<GpuImageMeta>(
-          talker_node, "camera/front", options);
+      CreateGpuWriter<GpuImageMeta>(talker_node, "camera/front", options);
 
   if (!gpu_writer) {
     AERROR << "Failed to create GpuWriter";
@@ -120,11 +116,9 @@ int main(int argc, char* argv[]) {
     // 5. Generate the frame directly in GPU memory.
     //
     // No intermediate CPU image buffer is used.
-    const uint8_t test_pattern =
-        static_cast<uint8_t>(frame_seq & 0xFF);
+    const uint8_t test_pattern = static_cast<uint8_t>(frame_seq & 0xFF);
 
-    if (!GenerateGpuFrame(
-            loan->device_ptr(), test_pattern, capture_stream)) {
+    if (!GenerateGpuFrame(loan->device_ptr(), test_pattern, capture_stream)) {
       AWARN << "Failed to generate frame " << frame_seq;
       rate.Sleep();
       continue;
@@ -140,8 +134,7 @@ int main(int argc, char* argv[]) {
     loan->metadata().height = kImageHeight;
     loan->metadata().channels = kImageChannels;
     loan->metadata().frame_id = frame_seq;
-    loan->metadata().timestamp_ns =
-        Time::Now().ToNanosecond();
+    loan->metadata().timestamp_ns = Time::Now().ToNanosecond();
 
     // 7. Publish the loan.
     //
@@ -162,17 +155,15 @@ int main(int argc, char* argv[]) {
 
   // Ensure producer-side CUDA work has completed before destroying
   // the stream and shutting down the process.
-  if (!CheckCuda(
-          cudaStreamSynchronize(capture_stream),
-          "cudaStreamSynchronize(capture_stream)")) {
+  if (!CheckCuda(cudaStreamSynchronize(capture_stream),
+                 "cudaStreamSynchronize(capture_stream)")) {
     AERROR << "Producer CUDA stream did not synchronize cleanly";
   }
 
   gpu_writer->Shutdown();
 
-  if (!CheckCuda(
-          cudaStreamDestroy(capture_stream),
-          "cudaStreamDestroy(capture_stream)")) {
+  if (!CheckCuda(cudaStreamDestroy(capture_stream),
+                 "cudaStreamDestroy(capture_stream)")) {
     return -1;
   }
 

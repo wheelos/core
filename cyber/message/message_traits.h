@@ -18,6 +18,8 @@
 #define CYBER_MESSAGE_MESSAGE_TRAITS_H_
 
 #include <string>
+#include <type_traits>
+#include <utility>
 
 #include "cyber/base/macros.h"
 #include "cyber/common/log.h"
@@ -36,10 +38,24 @@ DEFINE_TYPE_TRAIT(HasSetType, SetTypeName)
 DEFINE_TYPE_TRAIT(HasGetDescriptorString, GetDescriptorString)
 DEFINE_TYPE_TRAIT(HasDescriptor, descriptor)
 DEFINE_TYPE_TRAIT(HasFullName, full_name)
-DEFINE_TYPE_TRAIT(HasSerializeToString, SerializeToString)
-DEFINE_TYPE_TRAIT(HasParseFromString, ParseFromString)
 DEFINE_TYPE_TRAIT(HasSerializeToArray, SerializeToArray)
 DEFINE_TYPE_TRAIT(HasParseFromArray, ParseFromArray)
+
+template <typename T, typename = void>
+struct HasSerializeToString : std::false_type {};
+
+template <typename T>
+struct HasSerializeToString<
+    T, std::void_t<decltype(std::declval<const T&>().SerializeToString(
+           std::declval<std::string*>()))>> : std::true_type {};
+
+template <typename T, typename = void>
+struct HasParseFromString : std::false_type {};
+
+template <typename T>
+struct HasParseFromString<
+    T, std::void_t<decltype(std::declval<T&>().ParseFromString(
+           std::declval<const std::string&>()))>> : std::true_type {};
 
 template <typename T>
 class HasSerializer {
@@ -258,7 +274,7 @@ template <
     typename T, typename Descriptor,
     typename std::enable_if<HasFullName<Descriptor>::value, bool>::type = 0>
 std::string GetFullName() {
-  return T::descriptor()->full_name();
+  return std::string(T::descriptor()->full_name());
 }
 
 template <
@@ -283,7 +299,7 @@ template <typename T,
                   std::is_base_of<google::protobuf::Message, T>::value,
               bool>::type = 0>
 std::string GetMessageName() {
-  return T::descriptor()->full_name();
+  return std::string(T::descriptor()->full_name());
 }
 
 template <typename T,

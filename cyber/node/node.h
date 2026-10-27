@@ -28,6 +28,11 @@
 namespace apollo {
 namespace cyber {
 
+class Node;
+
+std::unique_ptr<Node> CreateNode(const std::string& node_name,
+                                 const std::string& name_space = "");
+
 template <typename M0, typename M1, typename M2, typename M3>
 class Component;
 class TimerComponent;

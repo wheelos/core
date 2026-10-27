@@ -14,8 +14,8 @@
  * limitations under the License.
  *****************************************************************************/
 
-#ifndef CYBER_BLOCKER_INTRA_READER_H_
-#define CYBER_BLOCKER_INTRA_READER_H_
+#ifndef CYBER_NODE_INTERNAL_INTRA_READER_H_
+#define CYBER_NODE_INTERNAL_INTRA_READER_H_
 
 #include <functional>
 #include <list>
@@ -28,7 +28,9 @@
 
 namespace apollo {
 namespace cyber {
-namespace blocker {
+namespace node_internal {
+
+using blocker::BlockerManager;
 
 template <typename MessageT>
 class IntraReader : public apollo::cyber::Reader<MessageT> {
@@ -204,8 +206,8 @@ void IntraReader<MessageT>::OnMessage(const MessagePtr& msg_ptr) {
   }
 }
 
-}  // namespace blocker
+}  // namespace node_internal
 }  // namespace cyber
 }  // namespace apollo
 
-#endif  // CYBER_BLOCKER_INTRA_READER_H_
+#endif  // CYBER_NODE_INTERNAL_INTRA_READER_H_

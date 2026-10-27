@@ -17,12 +17,23 @@
 #include "cyber/node/node.h"
 
 #include "cyber/common/global_data.h"
+#include "cyber/state.h"
 #include "cyber/time/time.h"
 
 namespace apollo {
 namespace cyber {
 
 using proto::RoleType;
+
+std::unique_ptr<Node> CreateNode(const std::string& node_name,
+                                 const std::string& name_space) {
+  bool is_reality_mode = common::GlobalData::Instance()->IsRealityMode();
+  if (is_reality_mode && !OK()) {
+    AERROR << "please initialize cyber firstly.";
+    return nullptr;
+  }
+  return std::unique_ptr<Node>(new Node(node_name, name_space));
+}
 
 Node::Node(const std::string& node_name, const std::string& name_space)
     : node_name_(node_name), name_space_(name_space) {

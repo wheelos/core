@@ -1,6 +1,6 @@
 load("@rules_cc//cc:defs.bzl", "cc_library")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//:internal"])
 
 cc_library(
     name = "receiver",
@@ -46,12 +46,12 @@ cc_library(
         "iceoryx_receiver.h",
     ],
     deps = [
+        ":receiver_interface",
+        "//cyber/task",
         "//cyber/transport:iceoryx_chunk",
         "//cyber/transport:iceoryx_runtime",
-        "//cyber/transport/shm:profile",
-        "//cyber/task",
         "//cyber/transport/dispatcher:shm_dispatcher",
-        ":receiver_interface",
+        "//cyber/transport/shm:profile",
         "@iceoryx//:iceoryx_posh",
     ],
 )

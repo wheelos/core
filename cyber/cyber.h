@@ -29,13 +29,4 @@
 #include "cyber/time/time.h"
 #include "cyber/timer/timer.h"
 
-namespace apollo {
-namespace cyber {
-
-std::unique_ptr<Node> CreateNode(const std::string& node_name,
-                                 const std::string& name_space = "");
-
-}  // namespace cyber
-}  // namespace apollo
-
 #endif  // CYBER_CYBER_H_

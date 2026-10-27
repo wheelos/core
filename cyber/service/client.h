@@ -17,19 +17,22 @@
 #ifndef CYBER_SERVICE_CLIENT_H_
 #define CYBER_SERVICE_CLIENT_H_
 
+#include <functional>
 #include <future>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <sstream>
 #include <string>
 #include <tuple>
 #include <unordered_map>
 #include <utility>
 
+#include "cyber/common/global_data.h"
 #include "cyber/common/log.h"
 #include "cyber/common/types.h"
-#include "cyber/node/node_channel_impl.h"
 #include "cyber/service/client_base.h"
+#include "cyber/transport/transport.h"
 
 namespace apollo {
 namespace cyber {

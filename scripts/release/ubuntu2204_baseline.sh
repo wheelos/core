@@ -36,6 +36,9 @@ if [[ -n "${PYTHONUSERBASE:-}" ]]; then
 fi
 bazel test --config=ci --distdir="$DISTDIR" \
   "${TEST_ENV_ARGS[@]}" \
+  //tests/public_api:sdk_contract_test \
+  //tests/public_api:node_public_api_test \
+  //cyber/node:intra_reader_writer_test \
   //scripts/release:release_scripts_test \
   //cyber/node:writer_test \
   //cyber/node:writer_reader_test \

@@ -1,6 +1,6 @@
 load("@pybind11_bazel//:build_defs.bzl", "pybind_extension")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//:internal"])
 
 pybind_extension(
     name = "_cyber_wrapper",
@@ -24,14 +24,15 @@ pybind_extension(
     ],
     deps = [
         "//cyber:cyber_core",
+        "//cyber:python_lifecycle",
         "//cyber/message:protobuf_factory",
         "//cyber/message:py_message",
         "//cyber/message:raw_message",
-        "//cyber/parameter:parameter",
+        "//cyber/parameter",
         "//cyber/parameter:parameter_client",
         "//cyber/parameter:parameter_server",
         "//cyber/record",
         "@com_google_protobuf//:protobuf",
-        "@fastdds//:fastdds",
+        "@fastdds",
     ],
 )

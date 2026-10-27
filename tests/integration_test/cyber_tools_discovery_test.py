@@ -27,6 +27,7 @@ import time
 import unittest
 
 from cyber.proto.unit_test_pb2 import ChatterBenchmark
+
 from cyber.python.cyber_py3 import cyber
 
 
@@ -77,9 +78,7 @@ def _publisher(node_name, channel_name, service_name):
         service_name,
         ChatterBenchmark,
         ChatterBenchmark,
-        lambda request: ChatterBenchmark(
-            seq=request.seq, content="service-response"
-        ),
+        lambda request: ChatterBenchmark(seq=request.seq, content="service-response"),
     )
     message = ChatterBenchmark(content="cross-process-tool-message")
     print("READY", flush=True)
@@ -116,9 +115,7 @@ def _wait_for_output(command, expected, timeout=10):
                     return output
         stderr = process.stderr.read() if process.poll() is not None else ""
         raise AssertionError(
-            "expected {!r} in output {!r}; stderr={!r}".format(
-                expected, output, stderr
-            )
+            "expected {!r} in output {!r}; stderr={!r}".format(expected, output, stderr)
         )
     finally:
         process.terminate()
@@ -258,14 +255,12 @@ class CyberToolsDiscoveryTest(unittest.TestCase):
         reader_node.create_reader(
             in_process_channel,
             ChatterBenchmark,
-            lambda message: received.set()
-            if message.content == "in-process-tool-message"
-            else None,
+            lambda message: (
+                received.set() if message.content == "in-process-tool-message" else None
+            ),
         )
         writer_node = cyber.Node("tools_in_process_writer_" + suffix)
-        writer = writer_node.create_writer(
-            in_process_channel, ChatterBenchmark, 8
-        )
+        writer = writer_node.create_writer(in_process_channel, ChatterBenchmark, 8)
         message = ChatterBenchmark(content="in-process-tool-message")
         deadline = time.monotonic() + 5
         while not received.is_set() and time.monotonic() < deadline:
@@ -484,9 +479,11 @@ class CyberToolsDiscoveryTest(unittest.TestCase):
             reader_node.create_reader(
                 channel_name,
                 ChatterBenchmark,
-                lambda message: replayed.set()
-                if message.content == "cross-process-tool-message"
-                else None,
+                lambda message: (
+                    replayed.set()
+                    if message.content == "cross-process-tool-message"
+                    else None
+                ),
             )
             _run_until_contains(
                 [
@@ -626,9 +623,7 @@ class CyberToolsDiscoveryTest(unittest.TestCase):
                 )
                 ready, _, _ = select.select([second_publisher.stdout], [], [], 10)
                 self.assertTrue(ready, "second publisher did not become ready")
-                self.assertEqual(
-                    "READY", second_publisher.stdout.readline().strip()
-                )
+                self.assertEqual("READY", second_publisher.stdout.readline().strip())
                 _run_until_contains(
                     channel_info_command,
                     second_node_name,
@@ -714,9 +709,10 @@ if __name__ == "__main__":
     if len(sys.argv) == 5 and sys.argv[1] == "--publisher":
         _publisher(sys.argv[2], sys.argv[3], sys.argv[4])
     else:
-        os.environ.setdefault(
-            "CYBER_DOMAIN_ID", str(100 + os.getpid() % 100)
+        os.environ["PYTHONPATH"] = os.pathsep.join(
+            [*sys.path, os.environ.get("PYTHONPATH", "")]
         )
+        os.environ.setdefault("CYBER_DOMAIN_ID", str(100 + os.getpid() % 100))
         cyber_path, temp_root = _write_rtps_config()
         os.environ["CYBER_PATH"] = cyber_path
         os.environ["APOLLO_ROOT_DIR"] = temp_root

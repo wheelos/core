@@ -11,7 +11,7 @@ requires-python = ">=3.10,<3.11"
 license = "Apache-2.0"
 authors = [{ name = "Apollo Authors" }]
 urls = { Homepage = "https://github.com/wheelos/core", Source = "https://github.com/wheelos/core" }
-dependencies = ["protobuf>=5.29.0,<6"]
+dependencies = ["protobuf>=7.36.2,<8"]
 classifiers = [
   "Operating System :: POSIX :: Linux",
   "Programming Language :: Python :: 3 :: Only",

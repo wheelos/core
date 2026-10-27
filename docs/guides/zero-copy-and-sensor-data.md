@@ -121,7 +121,7 @@ bazel test --config=cuda --cache_test_results=no \
   //cyber/transport/nvsci:nvsci_sync_engine_test \
   //cyber/transport/nvsci:gpu_channel_manager_test \
   //cyber/transport/nvsci:gpu_channel_session_test \
-  //cyber/transport/nvsci:gpu_writer_reader_test \
+  //cyber/gpu:gpu_writer_reader_test \
   //tests/perf_test:cuda_ipc_process_test \
   //tests/perf_test:gpu_zero_copy_perf_test
 

@@ -1,6 +1,6 @@
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//:internal"])
 
 cc_library(
     name = "data",
@@ -18,7 +18,7 @@ cc_library(
 
 cc_library(
     name = "cache_buffer",
-    srcs = ["cache_buffer.h"],
+    hdrs = ["cache_buffer.h"],
     deps = ["//cyber/metrics"],
 )
 

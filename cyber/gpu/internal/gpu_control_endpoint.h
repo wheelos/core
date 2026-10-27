@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef CYBER_TRANSPORT_NVSCI_GPU_CONTROL_ENDPOINT_H_
-#define CYBER_TRANSPORT_NVSCI_GPU_CONTROL_ENDPOINT_H_
+#ifndef CYBER_GPU_INTERNAL_GPU_CONTROL_ENDPOINT_H_
+#define CYBER_GPU_INTERNAL_GPU_CONTROL_ENDPOINT_H_
 
 #include <algorithm>
 #include <condition_variable>
@@ -272,4 +272,4 @@ inline bool GpuControlSubscription::HasWriter() const {
 }  // namespace cyber
 }  // namespace apollo
 
-#endif  // CYBER_TRANSPORT_NVSCI_GPU_CONTROL_ENDPOINT_H_
+#endif  // CYBER_GPU_INTERNAL_GPU_CONTROL_ENDPOINT_H_

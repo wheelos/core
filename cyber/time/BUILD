@@ -1,11 +1,12 @@
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//:internal"])
 
 cc_library(
     name = "time",
     srcs = ["time.cc"],
     hdrs = ["time.h"],
+    visibility = ["//visibility:public"],
     deps = [
         ":duration",
     ],
@@ -25,6 +26,7 @@ cc_library(
     name = "rate",
     srcs = ["rate.cc"],
     hdrs = ["rate.h"],
+    visibility = ["//visibility:public"],
     deps = [
         ":duration",
         ":time",
@@ -36,6 +38,7 @@ cc_library(
     name = "duration",
     srcs = ["duration.cc"],
     hdrs = ["duration.h"],
+    visibility = ["//visibility:public"],
 )
 
 cc_test(
@@ -53,6 +56,7 @@ cc_library(
     name = "clock",
     srcs = ["clock.cc"],
     hdrs = ["clock.h"],
+    visibility = ["//visibility:public"],
     deps = [
         ":time",
         "//cyber/base:atomic_rw_lock",

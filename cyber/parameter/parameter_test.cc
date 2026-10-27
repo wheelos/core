@@ -45,7 +45,7 @@ class ParameterTest : public ::testing::Test {
     param.SerializeToString(&str);
     std::string desc;
     message::GetDescriptorString(param, &desc);
-    std::string full_name = proto::Param::descriptor()->full_name();
+    std::string full_name(proto::Param::descriptor()->full_name());
     protobuf_param_.reset(new Parameter("protobuf", str, full_name, desc));
   }
 
@@ -181,10 +181,11 @@ TEST_F(ParameterTest, debug_string) {
             double_param_->DebugString());
   EXPECT_EQ("{name: \"string\", type: \"STRING\", value: \"test\"}",
             string_param_->DebugString());
-  EXPECT_EQ(
-      "{name: \"protobuf\", type: \"apollo.cyber.proto.Param\", value: "
-      "\"name: \"param\"\"}",
-      protobuf_param_->DebugString());
+  const auto protobuf_debug = protobuf_param_->DebugString();
+  EXPECT_EQ(0u, protobuf_debug.find(
+                    "{name: \"protobuf\", type: \"apollo.cyber.proto.Param\", "
+                    "value: \""));
+  EXPECT_NE(std::string::npos, protobuf_debug.find("name: \"param\""));
 }
 
 }  // namespace cyber

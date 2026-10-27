@@ -1,9 +1,10 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//:internal"])
 
 cc_library(
     name = "record",
+    visibility = ["//visibility:public"],
     deps = [
         ":record_reader",
         ":record_viewer",
@@ -25,6 +26,7 @@ cc_library(
     name = "record_file_reader",
     srcs = ["file/record_file_reader.cc"],
     hdrs = ["file/record_file_reader.h"],
+    visibility = ["//visibility:public"],
     deps = [
         ":record_file_base",
         ":section",
@@ -85,6 +87,7 @@ cc_library(
     name = "header_builder",
     srcs = ["header_builder.cc"],
     hdrs = ["header_builder.h"],
+    visibility = ["//visibility:public"],
     deps = [
         "//cyber/proto:record_cc_proto",
     ],
@@ -93,6 +96,7 @@ cc_library(
 cc_library(
     name = "record_base",
     hdrs = ["record_base.h"],
+    visibility = ["//visibility:public"],
     deps = [
         "//cyber/proto:record_cc_proto",
     ],
@@ -101,12 +105,14 @@ cc_library(
 cc_library(
     name = "record_message",
     hdrs = ["record_message.h"],
+    visibility = ["//visibility:public"],
 )
 
 cc_library(
     name = "record_reader",
     srcs = ["record_reader.cc"],
     hdrs = ["record_reader.h"],
+    visibility = ["//visibility:public"],
     deps = [
         ":record_base",
         ":record_file_reader",
@@ -130,6 +136,7 @@ cc_library(
     name = "record_viewer",
     srcs = ["record_viewer.cc"],
     hdrs = ["record_viewer.h"],
+    visibility = ["//visibility:public"],
     deps = [
         ":record_message",
         ":record_reader",
@@ -151,6 +158,7 @@ cc_library(
     name = "record_writer",
     srcs = ["record_writer.cc"],
     hdrs = ["record_writer.h"],
+    visibility = ["//visibility:public"],
     deps = [
         ":header_builder",
         ":record_base",

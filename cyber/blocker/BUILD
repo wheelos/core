@@ -1,6 +1,6 @@
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//:internal"])
 
 cc_library(
     name = "blocker_manager",
@@ -16,7 +16,7 @@ cc_test(
     size = "small",
     srcs = ["blocker_manager_test.cc"],
     deps = [
-        "//cyber",
+        ":blocker_manager",
         "//cyber/proto:unit_test_cc_proto",
         "@com_google_googletest//:gtest_main",
     ],
@@ -32,24 +32,8 @@ cc_test(
     size = "small",
     srcs = ["blocker_test.cc"],
     deps = [
-        "//cyber",
+        ":blocker",
         "//cyber/proto:unit_test_cc_proto",
         "@com_google_googletest//:gtest_main",
-    ],
-)
-
-cc_library(
-    name = "intra_reader",
-    hdrs = ["intra_reader.h"],
-    deps = [
-        ":blocker_manager",
-    ],
-)
-
-cc_library(
-    name = "intra_writer",
-    hdrs = ["intra_writer.h"],
-    deps = [
-        ":blocker_manager",
     ],
 )

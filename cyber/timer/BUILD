@@ -1,11 +1,12 @@
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//:internal"])
 
 cc_library(
     name = "timer",
     srcs = ["timer.cc"],
     hdrs = ["timer.h"],
+    visibility = ["//visibility:public"],
     deps = [
         ":timing_wheel",
         "//cyber/common:global_data",

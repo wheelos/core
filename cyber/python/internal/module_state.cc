@@ -3,10 +3,12 @@
 #include <atomic>
 #include <thread>
 
+#include "callback_lifecycle.h"
+
 #include "cyber/common/log.h"
 #include "cyber/cyber.h"
 #include "cyber/init.h"
-#include "callback_lifecycle.h"
+#include "cyber/internal/python_lifecycle.h"
 
 namespace apollo {
 namespace cyber {
@@ -23,8 +25,9 @@ std::atomic<bool>& DeferredShutdownInFlight() {
 }
 
 void WaitForPythonShutdownQuiescence() {
-  // Full shutdown must wait for both Python callbacks and any callback-triggered
-  // deferred close tails before tearing down transport/topology singletons.
+  // Full shutdown must wait for both Python callbacks and any
+  // callback-triggered deferred close tails before tearing down
+  // transport/topology singletons.
   WaitForPythonCallbacksToDrain();
   WaitForDetachedCloseTasksToDrain();
 }
@@ -97,9 +100,7 @@ bool InitBinding(const std::string& module_name) {
   return true;
 }
 
-void ShutdownBinding() {
-  RequestShutdown(false);
-}
+void ShutdownBinding() { RequestShutdown(false); }
 
 void ShutdownForPythonExitBinding() { RequestShutdown(true); }
 

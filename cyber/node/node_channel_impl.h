@@ -22,10 +22,10 @@
 
 #include "cyber/proto/run_mode_conf.pb.h"
 
-#include "cyber/blocker/intra_reader.h"
-#include "cyber/blocker/intra_writer.h"
 #include "cyber/common/global_data.h"
 #include "cyber/message/message_traits.h"
+#include "cyber/node/internal/intra_reader.h"
+#include "cyber/node/internal/intra_writer.h"
 #include "cyber/node/reader.h"
 #include "cyber/node/writer.h"
 
@@ -160,7 +160,8 @@ auto NodeChannelImpl::CreateWriter(const proto::RoleAttributes& role_attr)
 
   std::shared_ptr<Writer<MessageT>> writer_ptr = nullptr;
   if (!is_reality_mode_) {
-    writer_ptr = std::make_shared<blocker::IntraWriter<MessageT>>(new_attr);
+    writer_ptr =
+        std::make_shared<node_internal::IntraWriter<MessageT>>(new_attr);
   } else {
     writer_ptr = std::make_shared<Writer<MessageT>>(new_attr);
   }
@@ -213,8 +214,8 @@ auto NodeChannelImpl::CreateReader(const proto::RoleAttributes& role_attr,
 
   std::shared_ptr<Reader<MessageT>> reader_ptr = nullptr;
   if (!is_reality_mode_) {
-    reader_ptr =
-        std::make_shared<blocker::IntraReader<MessageT>>(new_attr, reader_func);
+    reader_ptr = std::make_shared<node_internal::IntraReader<MessageT>>(
+        new_attr, reader_func);
   } else {
     reader_ptr = std::make_shared<Reader<MessageT>>(new_attr, reader_func,
                                                     pending_queue_size);

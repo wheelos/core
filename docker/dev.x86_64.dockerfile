@@ -37,7 +37,7 @@ RUN groupadd --gid "${WHEELOS_GID}" wheelos && \
 RUN echo "[ -f /workspace/scripts/env/runtime.bash ] && source /workspace/scripts/env/runtime.bash" >> /etc/bash.bashrc
 
 WORKDIR /tmp/build
-ARG BAZEL_VERSION=7.6.2
+ARG BAZEL_VERSION=8.8.1
 RUN curl -fsSL \
     "https://github.com/bazelbuild/bazel/releases/download/${BAZEL_VERSION}/bazel-${BAZEL_VERSION}-installer-linux-x86_64.sh" \
     -o bazel-installer.sh && \

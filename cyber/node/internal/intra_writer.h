@@ -14,8 +14,8 @@
  * limitations under the License.
  *****************************************************************************/
 
-#ifndef CYBER_BLOCKER_INTRA_WRITER_H_
-#define CYBER_BLOCKER_INTRA_WRITER_H_
+#ifndef CYBER_NODE_INTERNAL_INTRA_WRITER_H_
+#define CYBER_NODE_INTERNAL_INTRA_WRITER_H_
 
 #include <memory>
 
@@ -24,7 +24,10 @@
 
 namespace apollo {
 namespace cyber {
-namespace blocker {
+namespace node_internal {
+
+using blocker::BlockerAttr;
+using blocker::BlockerManager;
 
 template <typename MessageT>
 class IntraWriter : public apollo::cyber::Writer<MessageT> {
@@ -99,8 +102,8 @@ bool IntraWriter<MessageT>::Write(const MessagePtr& msg_ptr) {
                                              msg_ptr);
 }
 
-}  // namespace blocker
+}  // namespace node_internal
 }  // namespace cyber
 }  // namespace apollo
 
-#endif  // CYBER_BLOCKER_INTRA_WRITER_H_
+#endif  // CYBER_NODE_INTERNAL_INTRA_WRITER_H_

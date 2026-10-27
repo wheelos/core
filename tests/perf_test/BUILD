@@ -195,10 +195,10 @@ cc_test(
     target_compatible_with = requires_cuda(),
     deps = [
         "//cyber:cyber_core",
+        "//cyber/gpu:gpu_reader",
+        "//cyber/gpu:gpu_writer",
         "//cyber/transport/nvsci:gpu_channel_session",
         "//cyber/transport/nvsci:gpu_loaned_message",
-        "//cyber/transport/nvsci:gpu_reader",
-        "//cyber/transport/nvsci:gpu_writer",
         "@com_google_googletest//:gtest_main",
     ],
 )
@@ -220,15 +220,15 @@ py_test(
     size = "large",
     timeout = "long",
     srcs = ["iceoryx_roudi_lifecycle_test.py"],
-    tags = [
-        "exclusive",
-        "local",
-    ],
     data = [
         ":benchmark_pub",
         ":benchmark_roudi",
         ":benchmark_sub",
         ":cyber_rt_benchmark_suite",
         "//cyber:cyber_conf",
+    ],
+    tags = [
+        "exclusive",
+        "local",
     ],
 )

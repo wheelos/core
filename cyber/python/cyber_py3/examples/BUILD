@@ -1,6 +1,6 @@
 load("@rules_python//python:defs.bzl", "py_binary", "py_test")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//:internal"])
 
 py_binary(
     name = "record",

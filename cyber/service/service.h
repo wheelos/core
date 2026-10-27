@@ -19,6 +19,7 @@
 
 #include <atomic>
 #include <condition_variable>
+#include <functional>
 #include <list>
 #include <memory>
 #include <mutex>
@@ -26,10 +27,12 @@
 #include <thread>
 #include <utility>
 
+#include "cyber/common/global_data.h"
+#include "cyber/common/log.h"
 #include "cyber/common/types.h"
-#include "cyber/node/node_channel_impl.h"
-#include "cyber/scheduler/scheduler.h"
 #include "cyber/service/service_base.h"
+#include "cyber/state.h"
+#include "cyber/transport/transport.h"
 
 namespace apollo {
 namespace cyber {

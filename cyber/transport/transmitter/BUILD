@@ -1,6 +1,6 @@
 load("@rules_cc//cc:defs.bzl", "cc_library")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//:internal"])
 
 cc_library(
     name = "transmitter",
@@ -33,11 +33,11 @@ cc_library(
     name = "iceoryx_transmitter",
     hdrs = ["iceoryx_transmitter.h"],
     deps = [
+        ":shm_transmitter",
+        ":transmitter_interface",
         "//cyber/transport:iceoryx_chunk",
         "//cyber/transport:iceoryx_runtime",
         "//cyber/transport/shm:profile",
-        ":shm_transmitter",
-        ":transmitter_interface",
         "@iceoryx//:iceoryx_posh",
     ],
 )

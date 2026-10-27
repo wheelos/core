@@ -1,10 +1,11 @@
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//:internal"])
 
 cc_library(
     name = "component",
     hdrs = ["component.h"],
+    visibility = ["//visibility:public"],
     deps = [
         ":component_base",
         "//cyber/metrics",
@@ -26,6 +27,7 @@ cc_library(
     name = "timer_component",
     srcs = ["timer_component.cc"],
     hdrs = ["timer_component.h"],
+    visibility = ["//visibility:public"],
     deps = [
         ":component_base",
         "//cyber/blocker:blocker_manager",
@@ -48,6 +50,7 @@ cc_test(
 cc_library(
     name = "component_base",
     hdrs = ["component_base.h"],
+    visibility = ["//visibility:public"],
     deps = [
         "//cyber/base:signal",
         "//cyber/base:thread_pool",
