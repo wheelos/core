@@ -4,6 +4,11 @@ package(
     default_visibility = ["//:internal"],
 )
 
+exports_files(
+    ["cyber_launch.py"],
+    visibility = ["//visibility:public"],
+)
+
 # FIXME(all): python module deps
 py_binary(
     name = "cyber_launch",

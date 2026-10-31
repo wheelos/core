@@ -26,12 +26,10 @@ import signal
 import subprocess
 import sys
 import tempfile
-import time
 import threading
+import time
 import traceback
-
 import xml.etree.ElementTree as ET
-
 
 g_pwd = os.getcwd()
 g_script_name = os.path.basename(sys.argv[0]).split(".")[0]
@@ -40,6 +38,8 @@ g_process_name = g_script_name + "_" + str(g_process_pid)
 
 cyber_path = os.getenv('CYBER_PATH')
 _config_roots = None
+GRACEFUL_SHUTDOWN_TIMEOUT = 5.0
+TERMINATE_SHUTDOWN_TIMEOUT = 2.0
 
 
 def launch_pid_file(launch_file):
@@ -89,7 +89,19 @@ def _remove_launch_pid_file(pid_file, pid, start_time):
 
 
 def resolve_mainboard_binary():
-    """Resolve mainboard from an installed runtime or this target's runfiles."""
+    """Resolve mainboard from the runtime, PATH, or this target's runfiles."""
+    if cyber_path:
+        deployed_mainboard = os.path.join(cyber_path, 'bin', 'mainboard')
+        runtime_config = os.path.join(cyber_path, 'conf', 'runtime.json')
+        if (os.path.isfile(runtime_config) or
+                os.path.lexists(deployed_mainboard)):
+            if (not os.path.isfile(deployed_mainboard) or
+                    not os.access(deployed_mainboard, os.X_OK)):
+                raise RuntimeError(
+                    'CYBER_PATH mainboard is not an executable file: ' +
+                    deployed_mainboard)
+            return os.path.abspath(deployed_mainboard)
+
     installed_mainboard = shutil.which('mainboard')
     if installed_mainboard:
         return installed_mainboard
@@ -262,7 +274,9 @@ logger.addHandler(console)
 
 
 def exit_handler():
-    stop()
+    pmon = ProcessMonitor()
+    if pmon.procs:
+        pmon.stop(signal.SIGINT)
     os.chdir(g_pwd)
     logger.info('cyber_launch exit.')
 
@@ -309,9 +323,9 @@ class ProcessWrapper(object):
         self.pid = -1
         self.exception_handler = exception_handler
 
-    def wait(self):
+    def wait(self, timeout=None):
         if self.started:
-            self.popen.wait()
+            return self.popen.wait(timeout=timeout)
 
     def start(self):
         """
@@ -432,8 +446,6 @@ class ProcessMonitor(object):
         for pw in self.procs:
             if self.is_shutdown:
                 break
-            if pw.process_type == 'binary':
-                continue
             try:
                 if not pw.is_alive():
                     if pw.exception_handler == "respawn":
@@ -443,11 +455,17 @@ class ProcessMonitor(object):
                         if result != 0:
                             logger.error(
                                 'respawn process [%s] failed, stop all!' % (pw.name))
-                            stop()
+                            stop(exit_code=1)
+                        continue
                     elif pw.exception_handler == "exit":
                         logger.warning(
                             'child process [%s][%d] exit, stop all' % (pw.name, pw.pid))
-                        stop()
+                        stop(exit_code=1)
+                    elif pw.exit_code not in (None, 0):
+                        logger.error(
+                            'child process [%s][%d] failed with exit code %s, '
+                            'stop all' % (pw.name, pw.pid, pw.exit_code))
+                        stop(exit_code=1)
                     dead_cnt += 1
             except Exception:
                 dead_cnt += 1
@@ -475,16 +493,64 @@ class ProcessMonitor(object):
         """
         Stop all processes in monitor
         """
-        for p in self.procs:
-            if p.is_alive():
+        running = [p for p in self.procs if p.is_alive()]
+        for p in running:
+            try:
                 p.popen.send_signal(signal)
+            except ProcessLookupError:
+                pass
 
-        for p in self.procs:
-            if p.is_alive():
-                logger.warning('Waiting for [%s][%s] exit.' % (p.name, p.pid))
-                p.wait()
-                logger.info(
-                    'Process [%s] has been stopped. dag_file: %s' % (p.name, p.dag_list))
+        def wait_until(deadline):
+            for p in running:
+                if not p.is_alive():
+                    continue
+                timeout = deadline - time.monotonic()
+                if timeout <= 0:
+                    return
+                try:
+                    p.wait(timeout=timeout)
+                except subprocess.TimeoutExpired:
+                    return
+
+        wait_until(time.monotonic() + GRACEFUL_SHUTDOWN_TIMEOUT)
+        remaining = [p for p in running if p.is_alive()]
+        if remaining:
+            logger.warning(
+                'Graceful shutdown timed out; terminating %d process(es).' %
+                len(remaining))
+            for p in remaining:
+                try:
+                    p.popen.terminate()
+                except ProcessLookupError:
+                    pass
+            deadline = time.monotonic() + TERMINATE_SHUTDOWN_TIMEOUT
+            for p in remaining:
+                if not p.is_alive():
+                    continue
+                timeout = deadline - time.monotonic()
+                if timeout <= 0:
+                    break
+                try:
+                    p.wait(timeout=timeout)
+                except subprocess.TimeoutExpired:
+                    break
+
+        remaining = [p for p in running if p.is_alive()]
+        if remaining:
+            logger.error(
+                'Termination timed out; killing %d process(es).' %
+                len(remaining))
+            for p in remaining:
+                try:
+                    p.popen.kill()
+                except ProcessLookupError:
+                    pass
+
+        for p in running:
+            p.wait()
+            logger.info(
+                'Process [%s] has been stopped. dag_file: %s' %
+                (p.name, p.dag_list))
         # Reset members
         self.procs = []
         self.dead_cnt = 0
@@ -629,7 +695,7 @@ def start(launch_file=''):
                 pw = ProcessWrapper(
                     process_name.split()[0], 0, [
                         ""], process_name, process_type,
-                    exception_handler)
+                    sched_name, exception_handler)
             # Default is library
             else:
                 pw = ProcessWrapper(
@@ -640,7 +706,7 @@ def start(launch_file=''):
             if result != 0:
                 logger.error(
                     'Start manager [%s] failed. Stop all!' % process_name)
-                stop()
+                stop(exit_code=1)
             pmon.register(pw)
             process_list.append(process_name)
 
@@ -656,17 +722,19 @@ def start(launch_file=''):
     logger.info("Cyber exit.")
 
 
-def stop(sig=signal.SIGINT):
+def stop(sig=signal.SIGINT, exit_code=0):
     """
     stop all modules
     """
     pmon = ProcessMonitor()
     if len(pmon.procs) == 0:
+        if exit_code:
+            sys.exit(exit_code)
         return
     pmon.stop(sig)
 
     logger.info('All processes have been stopped.')
-    sys.exit(0)
+    sys.exit(exit_code)
 
 
 def stop_launch(launch_file):
@@ -707,8 +775,9 @@ def stop_launch(launch_file):
 
 
 def signal_handler(sig, frame):
-    logger.info('Keyboard interrupt received. Stop all processes.')
-    stop(sig)
+    logger.info('Shutdown signal received. Stop all processes.')
+    stop(signal.SIGINT)
+    sys.exit(0)
 
 
 def main():

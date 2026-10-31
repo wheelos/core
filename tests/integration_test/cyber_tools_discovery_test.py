@@ -43,7 +43,10 @@ def _tool_path(package, name):
 
 
 def _write_rtps_config():
-    root = tempfile.mkdtemp(prefix="cyber_tools_rtps_")
+    root = tempfile.mkdtemp(
+        prefix="cyber_tools_rtps_",
+        dir=os.environ.get("APOLLO_ROOT_DIR", os.getcwd()),
+    )
     config_dir = os.path.join(root, "cyber", "conf")
     os.makedirs(config_dir)
     with open(os.path.join(config_dir, "cyber.pb.conf"), "w") as config:
@@ -233,6 +236,97 @@ def _drain_pty(master_fd):
                 return
         except OSError:
             return
+
+
+def _write_fake_mainboard(path, label):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    script = """#!/usr/bin/env python3
+import os
+import signal
+import sys
+import time
+
+label = "__LABEL__"
+mode = os.environ.get("CYBER_LAUNCH_TEST_MODE", "run")
+log_path = os.environ["CYBER_LAUNCH_TEST_LOG"]
+
+def record(message):
+    with open(log_path, "a") as output:
+        output.write(message + "\\n")
+
+record("start {} pid={} args={}".format(
+    label, os.getpid(), " ".join(sys.argv[1:])))
+
+if mode in ("fail", "success"):
+    time.sleep(0.2)
+    sys.exit(23 if mode == "fail" else 0)
+
+if mode == "respawn":
+    counter_path = os.environ["CYBER_LAUNCH_TEST_COUNTER"]
+    with open(counter_path, "a+") as counter:
+        counter.seek(0)
+        count = int(counter.read() or "0") + 1
+        counter.seek(0)
+        counter.truncate()
+        counter.write(str(count))
+    if count == 1:
+        sys.exit(23)
+
+def handle_signal(signum, frame):
+    record("signal {} {}".format(label, signal.Signals(signum).name))
+    if mode != "ignore":
+        sys.exit(0)
+
+signal.signal(signal.SIGINT, handle_signal)
+signal.signal(signal.SIGTERM, handle_signal)
+while True:
+    time.sleep(0.05)
+""".replace(
+        "__LABEL__", label
+    )
+    with open(path, "w") as output:
+        output.write(script)
+    os.chmod(path, 0o755)
+
+
+def _write_mainboard_launch(path, exception_handler=None, binary=None):
+    handler = ""
+    if exception_handler:
+        handler = "<exception_handler>{}</exception_handler>".format(exception_handler)
+    with open(path, "w") as launch:
+        launch.write(
+            """<launch>
+  <module>
+    <name>fixture-mainboard</name>
+    <dag_conf>fixture.dag</dag_conf>
+    <process_name>{}</process_name>
+    {}
+    {}
+  </module>
+</launch>
+""".format(
+                binary or "fixture-mainboard",
+                "<type>binary</type>" if binary else "",
+                handler,
+            )
+        )
+
+
+def _wait_for_file_text(path, expected, timeout=5):
+    deadline = time.monotonic() + timeout
+    content = ""
+    while time.monotonic() < deadline:
+        try:
+            with open(path) as output:
+                content = output.read()
+        except FileNotFoundError:
+            pass
+        if expected in content:
+            return content
+        time.sleep(0.02)
+    raise AssertionError(
+        "expected {!r} in file {!r}; content={!r}".format(expected, path, content)
+    )
 
 
 class CyberToolsDiscoveryTest(unittest.TestCase):
@@ -704,6 +798,298 @@ class CyberToolsDiscoveryTest(unittest.TestCase):
             launcher.stderr.close()
             shutil.rmtree(launch_dir)
 
+    def test_cyber_launch_uses_runtime_mainboard_and_maps_sigterm(self):
+        test_dir = tempfile.mkdtemp(
+            prefix="cyber_launch_runtime_",
+            dir=os.environ["APOLLO_ROOT_DIR"],
+        )
+        self.addCleanup(shutil.rmtree, test_dir)
+        runtime_root = os.path.join(test_dir, "runtime")
+        runtime_mainboard = os.path.join(runtime_root, "bin", "mainboard")
+        decoy_mainboard = os.path.join(test_dir, "path", "mainboard")
+        _write_fake_mainboard(runtime_mainboard, "runtime")
+        _write_fake_mainboard(decoy_mainboard, "path")
+
+        log_path = os.path.join(test_dir, "mainboard.log")
+        launch_file = os.path.join(test_dir, "fixture.launch")
+        _write_mainboard_launch(launch_file)
+        env = {
+            **os.environ,
+            "CYBER_PATH": runtime_root,
+            "CYBER_LAUNCH_TEST_LOG": log_path,
+            "CYBER_LAUNCH_TEST_MODE": "run",
+            "PATH": os.path.join(test_dir, "path") + os.pathsep + os.environ["PATH"],
+            "TMPDIR": test_dir,
+        }
+        launcher = subprocess.Popen(
+            [
+                _tool_path("cyber_launch", "cyber_launch"),
+                "start",
+                launch_file,
+            ],
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        self.addCleanup(_terminate_process, launcher)
+        try:
+            output = _wait_for_file_text(log_path, "start runtime pid=")
+            self.assertNotIn("start path pid=", output)
+            launcher.send_signal(signal.SIGTERM)
+            _, stderr = launcher.communicate(timeout=10)
+            self.assertEqual(0, launcher.returncode, stderr)
+            output = _wait_for_file_text(log_path, "signal runtime SIGINT")
+            self.assertNotIn("signal runtime SIGTERM", output)
+        finally:
+            if launcher.poll() is None:
+                launcher.send_signal(signal.SIGKILL)
+                launcher.wait(timeout=5)
+
+    def test_cyber_launch_rejects_unusable_deployed_mainboard(self):
+        test_dir = tempfile.mkdtemp(
+            prefix="cyber_launch_invalid_runtime_",
+            dir=os.environ["APOLLO_ROOT_DIR"],
+        )
+        self.addCleanup(shutil.rmtree, test_dir)
+        mainboard = os.path.join(test_dir, "runtime", "bin", "mainboard")
+        os.makedirs(os.path.dirname(mainboard))
+        with open(mainboard, "w") as output:
+            output.write("#!/bin/sh\n")
+        os.chmod(mainboard, 0o644)
+        result = subprocess.run(
+            [
+                _tool_path("cyber_launch", "cyber_launch"),
+                "--help",
+            ],
+            env={
+                **os.environ,
+                "CYBER_PATH": os.path.join(test_dir, "runtime"),
+            },
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn(
+            "CYBER_PATH mainboard is not an executable file",
+            result.stderr,
+        )
+
+    def test_cyber_launch_missing_runtime_mainboard_never_uses_path(self):
+        with tempfile.TemporaryDirectory(
+            prefix="cyber_launch_missing_runtime_",
+            dir=os.environ["APOLLO_ROOT_DIR"],
+        ) as directory:
+            runtime = os.path.join(directory, "runtime")
+            os.makedirs(os.path.join(runtime, "conf"))
+            with open(os.path.join(runtime, "conf", "runtime.json"), "w") as config:
+                config.write("{}")
+            _write_fake_mainboard(os.path.join(directory, "mainboard"), "ambient")
+            result = subprocess.run(
+                [_tool_path("cyber_launch", "cyber_launch"), "--help"],
+                env={
+                    **os.environ,
+                    "CYBER_PATH": runtime,
+                    "PATH": directory + os.pathsep + os.environ["PATH"],
+                },
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                "CYBER_PATH mainboard is not an executable file", result.stderr
+            )
+
+    def test_cyber_launch_required_child_failure_is_nonzero(self, binary=False):
+        test_dir = tempfile.mkdtemp(
+            prefix="cyber_launch_failure_",
+            dir=os.environ["APOLLO_ROOT_DIR"],
+        )
+        self.addCleanup(shutil.rmtree, test_dir)
+        runtime_root = os.path.join(test_dir, "runtime")
+        _write_fake_mainboard(os.path.join(runtime_root, "bin", "mainboard"), "runtime")
+        log_path = os.path.join(test_dir, "mainboard.log")
+        launch_file = os.path.join(test_dir, "fixture.launch")
+        _write_mainboard_launch(
+            launch_file,
+            binary=os.path.join(runtime_root, "bin", "mainboard") if binary else None,
+        )
+        result = subprocess.run(
+            [
+                _tool_path("cyber_launch", "cyber_launch"),
+                "start",
+                launch_file,
+            ],
+            env={
+                **os.environ,
+                "CYBER_PATH": runtime_root,
+                "CYBER_LAUNCH_TEST_LOG": log_path,
+                "CYBER_LAUNCH_TEST_MODE": "fail",
+                "TMPDIR": test_dir,
+            },
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        self.assertNotEqual(0, result.returncode, result.stderr)
+        output = _wait_for_file_text(log_path, "start runtime")
+        self.assertIn("start runtime pid=", output)
+
+    def test_cyber_launch_clean_child_exit_has_clean_atexit(self):
+        test_dir = tempfile.mkdtemp(
+            prefix="cyber_launch_clean_exit_",
+            dir=os.environ["APOLLO_ROOT_DIR"],
+        )
+        self.addCleanup(shutil.rmtree, test_dir)
+        runtime_root = os.path.join(test_dir, "runtime")
+        _write_fake_mainboard(os.path.join(runtime_root, "bin", "mainboard"), "runtime")
+        log_path = os.path.join(test_dir, "mainboard.log")
+        launch_file = os.path.join(test_dir, "fixture.launch")
+        _write_mainboard_launch(launch_file)
+        result = subprocess.run(
+            [
+                _tool_path("cyber_launch", "cyber_launch"),
+                "start",
+                launch_file,
+            ],
+            env={
+                **os.environ,
+                "CYBER_PATH": runtime_root,
+                "CYBER_LAUNCH_TEST_LOG": log_path,
+                "CYBER_LAUNCH_TEST_MODE": "success",
+                "TMPDIR": test_dir,
+            },
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertNotIn("SystemExit", result.stderr)
+
+    def test_cyber_launch_binary_failure_is_nonzero(self):
+        self.test_cyber_launch_required_child_failure_is_nonzero(binary=True)
+
+    def test_cyber_launch_binary_respawns_configured_child(self):
+        self.test_cyber_launch_respawns_configured_child(binary=True)
+
+    def test_cyber_launch_respawns_configured_child(self, binary=False):
+        test_dir = tempfile.mkdtemp(
+            prefix="cyber_launch_respawn_",
+            dir=os.environ["APOLLO_ROOT_DIR"],
+        )
+        self.addCleanup(shutil.rmtree, test_dir)
+        runtime_root = os.path.join(test_dir, "runtime")
+        _write_fake_mainboard(os.path.join(runtime_root, "bin", "mainboard"), "runtime")
+        log_path = os.path.join(test_dir, "mainboard.log")
+        counter_path = os.path.join(test_dir, "starts")
+        launch_file = os.path.join(test_dir, "fixture.launch")
+        _write_mainboard_launch(
+            launch_file,
+            exception_handler="respawn",
+            binary=os.path.join(runtime_root, "bin", "mainboard") if binary else None,
+        )
+        launcher = subprocess.Popen(
+            [
+                _tool_path("cyber_launch", "cyber_launch"),
+                "start",
+                launch_file,
+            ],
+            env={
+                **os.environ,
+                "CYBER_PATH": runtime_root,
+                "CYBER_LAUNCH_TEST_LOG": log_path,
+                "CYBER_LAUNCH_TEST_MODE": "respawn",
+                "CYBER_LAUNCH_TEST_COUNTER": counter_path,
+                "TMPDIR": test_dir,
+            },
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        self.addCleanup(_terminate_process, launcher)
+        try:
+            output = _wait_for_file_text(log_path, "start runtime pid=", timeout=10)
+            deadline = time.monotonic() + 10
+            while time.monotonic() < deadline:
+                with open(log_path) as log:
+                    output = log.read()
+                if output.count("start runtime pid=") >= 2:
+                    break
+                time.sleep(0.02)
+            self.assertGreaterEqual(output.count("start runtime pid="), 2)
+            time.sleep(0.6)
+            self.assertIsNone(launcher.poll())
+            with open(log_path) as log:
+                self.assertNotIn("signal runtime", log.read())
+            launcher.send_signal(signal.SIGINT)
+            _, stderr = launcher.communicate(timeout=10)
+            self.assertEqual(0, launcher.returncode, stderr)
+            output = _wait_for_file_text(log_path, "signal runtime SIGINT")
+            self.assertIn("signal runtime SIGINT", output)
+        finally:
+            if launcher.poll() is None:
+                launcher.send_signal(signal.SIGKILL)
+                launcher.wait(timeout=5)
+
+    def test_cyber_launch_bounds_shutdown_and_reaps_child(self):
+        test_dir = tempfile.mkdtemp(
+            prefix="cyber_launch_shutdown_",
+            dir=os.environ["APOLLO_ROOT_DIR"],
+        )
+        self.addCleanup(shutil.rmtree, test_dir)
+        runtime_root = os.path.join(test_dir, "runtime")
+        _write_fake_mainboard(os.path.join(runtime_root, "bin", "mainboard"), "runtime")
+        log_path = os.path.join(test_dir, "mainboard.log")
+        launch_file = os.path.join(test_dir, "fixture.launch")
+        _write_mainboard_launch(launch_file)
+        launcher = subprocess.Popen(
+            [
+                _tool_path("cyber_launch", "cyber_launch"),
+                "start",
+                launch_file,
+            ],
+            env={
+                **os.environ,
+                "CYBER_PATH": runtime_root,
+                "CYBER_LAUNCH_TEST_LOG": log_path,
+                "CYBER_LAUNCH_TEST_MODE": "ignore",
+                "TMPDIR": test_dir,
+            },
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        self.addCleanup(_terminate_process, launcher)
+        child_pid = None
+        try:
+            output = _wait_for_file_text(log_path, "start runtime pid=")
+            start_line = next(
+                line
+                for line in output.splitlines()
+                if line.startswith("start runtime pid=")
+            )
+            child_pid = int(start_line.split("pid=", 1)[1].split()[0])
+            started_at = time.monotonic()
+            launcher.send_signal(signal.SIGTERM)
+            _, stderr = launcher.communicate(timeout=12)
+            self.assertLess(time.monotonic() - started_at, 12)
+            self.assertEqual(0, launcher.returncode, stderr)
+            output = _wait_for_file_text(log_path, "signal runtime SIGTERM")
+            self.assertIn("signal runtime SIGINT", output)
+            with self.assertRaises(ProcessLookupError):
+                os.kill(child_pid, 0)
+        finally:
+            if launcher.poll() is None:
+                if child_pid is not None:
+                    try:
+                        os.kill(child_pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                launcher.send_signal(signal.SIGKILL)
+                launcher.wait(timeout=5)
+
 
 if __name__ == "__main__":
     if len(sys.argv) == 5 and sys.argv[1] == "--publisher":
@@ -716,6 +1102,8 @@ if __name__ == "__main__":
         cyber_path, temp_root = _write_rtps_config()
         os.environ["CYBER_PATH"] = cyber_path
         os.environ["APOLLO_ROOT_DIR"] = temp_root
+        os.environ["TMPDIR"] = temp_root
+        tempfile.tempdir = temp_root
         cyber.init("cyber_tools_discovery_test")
         try:
             unittest.main()
