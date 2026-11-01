@@ -15,6 +15,7 @@
 #ifndef CYBER_TOOLS_CYBER_RECORDER_SUBSCRIPTION_SELECTOR_H_
 #define CYBER_TOOLS_CYBER_RECORDER_SUBSCRIPTION_SELECTOR_H_
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
