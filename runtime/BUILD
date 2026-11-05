@@ -1,7 +1,7 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
-load("@rules_pkg//pkg:install.bzl", "pkg_install")
 load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
 load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
+load(":install.bzl", "pkg_install")
 load(":product.bzl", "runtime_product")
 load(":runtime.bzl", "runtime_layout", "runtime_package", "runtime_run")
 load(":runtime_test.bzl", "runtime_analysis_tests")
@@ -11,6 +11,7 @@ package(default_visibility = ["//visibility:public"])
 exports_files([
     "materialize_runtime.py",
     "runtime_entry.py",
+    "install.bzl",
     "runtime.bzl",
     "product.bzl",
     "empty",

@@ -1,7 +1,7 @@
 """One product paradigm for source runs, installation, and archives."""
 
-load("@rules_pkg//pkg:install.bzl", "pkg_install")
 load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
+load(":install.bzl", "pkg_install")
 load(":runtime.bzl", "runtime_layout", "runtime_package", "runtime_run")
 
 def runtime_product(
