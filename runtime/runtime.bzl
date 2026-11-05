@@ -67,7 +67,7 @@ def _mapped_files(mapping):
     for target, destination in mapping.items():
         _safe_key(destination)
         files = target[DefaultInfo].files.to_list()
-        if not files:
+        if not files and not destination.endswith("/"):
             fail("required runtime input is empty: " + str(target.label))
         if not destination.endswith("/") and len(files) != 1:
             fail("exact runtime destination requires one file: " + destination)
