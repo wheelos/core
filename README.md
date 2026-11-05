@@ -8,6 +8,9 @@ wheelos_core
 
 The code is organized under `cyber/`, with the public C++ entry point exposed through `cyber/cyber.h`. The project is built with Bazel and ships native runtime tools such as `cyber_launch`, `cyber_monitor`, and `cyber_recorder`.
 
+The reusable [unified runtime rules](runtime/README.md) assemble source-built
+modules into one relocatable development, installed, or archived product.
+
 # Role in WheelOS
 
 `wheelos_core` sits in the WheelOS Runtime layer and provides the message-oriented middleware runtime used by higher-level components and applications.
