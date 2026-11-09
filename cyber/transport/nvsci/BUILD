@@ -163,6 +163,7 @@ cc_test(
     deps = [
         ":nvsci_buf_pool",
         "@com_google_googletest//:gtest_main",
+        "@cuda//:cuda_runtime",
     ],
 )
 
@@ -174,6 +175,7 @@ cc_test(
     deps = [
         ":nvsci_sync_engine",
         "@com_google_googletest//:gtest",
+        "@cuda//:cuda_runtime",
     ],
 )
 

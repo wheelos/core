@@ -168,6 +168,7 @@ cc_test(
         "//cyber/gpu:gpu_reader",
         "//cyber/gpu:gpu_writer",
         "@com_google_googletest//:gtest",
+        "@cuda//:cuda_runtime",
     ],
 )
 
@@ -191,6 +192,7 @@ cc_test(
         "//cyber/transport/nvsci:gpu_channel_session",
         "//cyber/transport/nvsci:gpu_loaned_message",
         "@com_google_googletest//:gtest_main",
+        "@cuda//:cuda_runtime",
     ],
 )
 
@@ -198,10 +200,12 @@ cc_test(
     name = "nvsci_integration_test",
     size = "small",
     srcs = ["nvsci_integration_test.cc"],
+    target_compatible_with = requires_cuda(),
     deps = [
         "//cyber/transport/nvsci:gpu_channel_session",
         "//cyber/transport/nvsci:gpu_loaned_message",
         "@com_google_googletest//:gtest_main",
+        "@cuda//:cuda_runtime",
     ],
 )
 

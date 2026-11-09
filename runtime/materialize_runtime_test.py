@@ -110,11 +110,11 @@ class RuntimeTest(unittest.TestCase):
     def test_component_repository_mappings_merge_and_reject_conflicts(self):
         first = self.file(
             "first.repo_mapping",
-            "camera+,core,wheelos_core+\nshared+,msgs,wheelos_msgs+\n",
+            ",apollo_product_tests,_main\ncamera+,core,wheelos_core+\nshared+,msgs,wheelos_msgs+\n",
         )
         second = self.file(
             "second.repo_mapping",
-            "lidar+,core,wheelos_core+\nshared+,msgs,wheelos_msgs+\n",
+            ",apollo_product_tests,_main\nlidar+,core,wheelos_core+\nshared+,msgs,wheelos_msgs+\n",
         )
         destination = "share/hardware/runfiles/_repo_mapping"
         materializer.materialize(
@@ -124,6 +124,7 @@ class RuntimeTest(unittest.TestCase):
         self.assertEqual(
             (self.runtime / destination).read_text().splitlines(),
             [
+                ",apollo_product_tests,_main",
                 "camera+,core,wheelos_core+",
                 "lidar+,core,wheelos_core+",
                 "shared+,msgs,wheelos_msgs+",
@@ -249,6 +250,21 @@ class RuntimeTest(unittest.TestCase):
                 ["space argument"],
             ],
         )
+        setup_result = subprocess.run(
+            [
+                "bash",
+                "-c",
+                'source "$1/bin/setup.bash"; diagnose "from path"',
+                "test",
+                str(moved),
+            ],
+            env={"PATH": os.environ["PATH"]},
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(setup_result.returncode, 19, setup_result.stderr)
+        self.assertEqual(json.loads(setup_result.stdout)[-1], ["from path"])
 
     def tools(self, requirements=None):
         fake = self.file(
@@ -269,6 +285,9 @@ class RuntimeTest(unittest.TestCase):
                     "cyber_launch.py",
                     "cyber_recorder",
                     "cyber_monitor",
+                    "cyber_node.py",
+                    "cyber_channel.py",
+                    "cyber_service.py",
                 )
             ],
             **(requirements or {}),
@@ -300,9 +319,9 @@ class RuntimeTest(unittest.TestCase):
                 self.assertEqual(
                     payload[1],
                     str(
-                        self.directory
-                        if name in ("cyber_recorder", "cyber_monitor")
-                        else moved
+                        moved
+                        if name in ("mainboard", "cyber_launch")
+                        else self.directory
                     ),
                 )
                 self.assertEqual(

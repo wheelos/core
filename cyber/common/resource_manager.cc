@@ -20,6 +20,7 @@
 #include <mutex>
 #include <system_error>
 
+#include "cyber/common/file.h"
 #include "cyber/common/log.h"
 
 namespace apollo {
@@ -366,6 +367,19 @@ bool ResourceManager::ResolveConfigPath(const std::string& default_path,
   return true;
 }
 
+bool ResourceManager::LoadConfigProto(const std::string& default_path,
+                                      google::protobuf::Message* message) {
+  if (message == nullptr) {
+    AERROR << "Cannot load config proto: output message is null.";
+    return false;
+  }
+  std::string selected_path;
+  if (!ResolveConfigPath(default_path, &selected_path)) {
+    return false;
+  }
+  return GetProtoFromFile(selected_path, message);
+}
+
 bool ResourceManager::ResolveAssetPath(const std::string& asset_key,
                                        std::string* resolved_path) {
   if (resolved_path == nullptr) {
@@ -402,6 +416,19 @@ bool ResourceManager::ResolveAssetPath(const std::string& asset_key,
   *resolved_path = canonical_path.string();
   AINFO << "[ASSET] " << asset_key << ": " << *resolved_path;
   return true;
+}
+
+bool ResourceManager::LoadAssetProto(const std::string& asset_key,
+                                     google::protobuf::Message* message) {
+  if (message == nullptr) {
+    AERROR << "Cannot load asset proto: output message is null.";
+    return false;
+  }
+  std::string resolved_path;
+  if (!ResolveAssetPath(asset_key, &resolved_path)) {
+    return false;
+  }
+  return GetProtoFromFile(resolved_path, message);
 }
 
 }  // namespace common

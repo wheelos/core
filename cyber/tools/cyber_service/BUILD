@@ -4,6 +4,8 @@ package(
     default_visibility = ["//:internal"],
 )
 
+exports_files(["cyber_service.py"])
+
 py_binary(
     name = "cyber_service",
     srcs = ["cyber_service.py"],

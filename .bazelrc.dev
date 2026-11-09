@@ -1,0 +1,2 @@
+common:dev --lockfile_mode=off
+common:dev --registry=file:///apollo/pkgs/bazel-central-registry

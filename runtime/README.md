@@ -64,9 +64,11 @@ basenames are appended). Directory artifacts preserve their subtree.
 Module-owned paths are `conf/<module>/`, `dag/<module>/`, `launch/<module>/`,
 `share/<module>/`, `lib/components/<module>/`, `bin/modules/<module>/` and
 `assets/<module>/` or `assets/models/<module>/`. Module names must be unique.
-The layout owns the common Cyber config and its single tool set. Conflicting
-contents, file/directory conflicts, missing inputs, and unsafe paths fail.
-Identical files shared by declared dependencies are deduplicated.
+The layout owns the common Cyber config and its single tool set. Product-owned
+`files` in `runtime_product`/`runtime_layout` may explicitly override a module's
+default `conf/<module>/...`, `dag/<module>/...`, or `launch/<module>/...` file.
+Other conflicting contents, file/directory conflicts, missing inputs, and unsafe
+paths fail. Identical files shared by declared dependencies are deduplicated.
 
 `runtime_resources(files = [...], module_name = "...", namespace = "...")`
 classifies source paths containing `conf`, `dag`, `launch`, `models`, `assets`,

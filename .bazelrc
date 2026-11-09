@@ -6,6 +6,9 @@ build --keep_going
 
 common --registry=https://bcr.wheelos.cn/
 common --registry=https://bcr.bazel.build
+common --repository_cache=/apollo/.cache/bazel/repo_cache
+build --disk_cache=/apollo/.cache/bazel/disk_cache
+build --symlink_prefix=/
 
 # Vendor/offline build mode. Enabled via: bazel build --config=vendor ...
 common:vendor --vendor_dir=vendor/bazel
@@ -32,4 +35,6 @@ build:orin --config=cuda_toolkit
 build:orin --define=use_nvsci=true
 test:ci --test_output=errors
 
+try-import %workspace%/.bazelrc.dev
+try-import %workspace%/.bazelrc.local
 try-import %workspace%/.bazelrc.user

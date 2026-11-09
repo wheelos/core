@@ -16,6 +16,8 @@
 
 #include <string>
 
+#include <google/protobuf/message.h>
+
 namespace apollo {
 namespace cyber {
 namespace common {
@@ -25,8 +27,12 @@ class ResourceManager {
   static bool InitializeConfigRoot();
   static bool ResolveConfigPath(const std::string& default_path,
                                 std::string* selected_path);
+  static bool LoadConfigProto(const std::string& default_path,
+                              google::protobuf::Message* message);
   static bool ResolveAssetPath(const std::string& asset_key,
                                std::string* resolved_path);
+  static bool LoadAssetProto(const std::string& asset_key,
+                             google::protobuf::Message* message);
 };
 
 }  // namespace common

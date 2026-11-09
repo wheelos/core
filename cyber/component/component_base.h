@@ -114,7 +114,10 @@ class ComponentBase : public std::enable_shared_from_this<ComponentBase> {
 
     std::string source_path = input_path;
     if (source_path[0] != '/') {
-      if (source_path.rfind("modules/", 0) == 0 ||
+      if (source_path.rfind("conf/", 0) == 0 ||
+          source_path.rfind("dag/", 0) == 0 ||
+          source_path.rfind("launch/", 0) == 0 ||
+          source_path.rfind("modules/", 0) == 0 ||
           source_path.rfind("cyber/", 0) == 0) {
         return common::ResourceManager::ResolveConfigPath(source_path,
                                                           resolved_path);

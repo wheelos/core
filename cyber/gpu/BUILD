@@ -60,5 +60,6 @@ cc_test(
         ":gpu_writer",
         "//cyber",
         "@com_google_googletest//:gtest_main",
+        "@cuda//:cuda_runtime",
     ],
 )

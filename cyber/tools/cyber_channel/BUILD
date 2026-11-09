@@ -4,6 +4,8 @@ package(
     default_visibility = ["//:internal"],
 )
 
+exports_files(["cyber_channel.py"])
+
 py_binary(
     name = "cyber_channel",
     srcs = ["cyber_channel.py"],

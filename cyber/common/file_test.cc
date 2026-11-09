@@ -424,6 +424,46 @@ TEST_F(FileTest, ResolveAssetPathRejectsMissingAndEscapingKeys) {
                                                  &resolved_path));
 }
 
+TEST_F(FileTest, LoadConfigProtoAndLoadAssetProtoParseResolvedProtos) {
+  const fs::path software_root = GetTestPath("software");
+  const fs::path config_root = GetTestPath("config");
+  const fs::path asset_root = GetTestPath("assets");
+  const fs::path default_conf = software_root / "conf/planning/planning.pb.txt";
+  const fs::path override_conf = config_root / "conf/planning/planning.pb.txt";
+  const fs::path asset_proto =
+      asset_root / "vehicles/cargo/calibration/extrinsics.pb.txt";
+
+  fs::create_directories(default_conf.parent_path());
+  fs::create_directories(override_conf.parent_path());
+  fs::create_directories(asset_proto.parent_path());
+
+  proto::UnitTest default_msg;
+  default_msg.set_class_name("DefaultConfig");
+  ASSERT_TRUE(SetProtoToASCIIFile(default_msg, default_conf.string()));
+
+  proto::UnitTest override_msg;
+  override_msg.set_class_name("OverrideConfig");
+  ASSERT_TRUE(SetProtoToASCIIFile(override_msg, override_conf.string()));
+
+  proto::UnitTest asset_msg;
+  asset_msg.set_class_name("AssetCalibration");
+  ASSERT_TRUE(SetProtoToASCIIFile(asset_msg, asset_proto.string()));
+
+  setenv("APOLLO_ROOT_DIR", software_root.c_str(), 1);
+  setenv("WHEELOS_CONFIG_ROOT", config_root.c_str(), 1);
+  setenv("WHEELOS_ASSET_ROOT", asset_root.c_str(), 1);
+
+  proto::UnitTest loaded_config;
+  ASSERT_TRUE(ResourceManager::LoadConfigProto(
+      "conf/planning/planning.pb.txt", &loaded_config));
+  EXPECT_EQ("OverrideConfig", loaded_config.class_name());
+
+  proto::UnitTest loaded_asset;
+  ASSERT_TRUE(ResourceManager::LoadAssetProto(
+      "vehicles/cargo/calibration/extrinsics.pb.txt", &loaded_asset));
+  EXPECT_EQ("AssetCalibration", loaded_asset.class_name());
+}
+
 TEST_F(FileTest, ContentAndExistence) {
   const auto dir_path = GetTestPath("a_dir");
   const auto file_path = GetTestPath("a_file.txt");

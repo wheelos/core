@@ -43,6 +43,15 @@ inline std::string GetEnv(const std::string& var_name,
 inline const std::string WorkRoot() {
   std::string work_root = GetEnv("CYBER_PATH");
   if (work_root.empty()) {
+    const char* apollo_root = std::getenv("APOLLO_ROOT_DIR");
+    if (apollo_root != nullptr && apollo_root[0] != '\0') {
+      const std::filesystem::path root_path(apollo_root);
+      if (std::filesystem::exists(root_path / "conf" / "cyber.pb.conf")) {
+        work_root = root_path.string();
+      }
+    }
+  }
+  if (work_root.empty()) {
     const char* runfiles_dir = std::getenv("RUNFILES_DIR");
     if (runfiles_dir != nullptr) {
       const std::filesystem::path runfiles_root(runfiles_dir);

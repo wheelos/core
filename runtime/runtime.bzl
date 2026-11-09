@@ -218,6 +218,9 @@ runtime_resources = rule(
     },
 )
 
+def _overridable_module_config(destination):
+    return any([destination.startswith(prefix) for prefix in ["conf/", "dag/", "launch/"]])
+
 def _layout_impl(ctx):
     if ctx.attr.default_dag and ctx.attr.default_launch:
         fail("default_dag and default_launch are mutually exclusive")
@@ -232,10 +235,14 @@ def _layout_impl(ctx):
         if len(digest) != 64 or any([char not in "0123456789abcdefABCDEF" for char in digest.elems()]):
             fail("required asset digest must be SHA-256 hex: " + digest)
     modules = []
-    entries = _mapped_files(ctx.attr.files)
-    for _, destination in entries:
+    product_entries = _mapped_files(ctx.attr.files)
+    product_overrides = {}
+    for file, destination in product_entries:
         if destination.startswith("bin/") or destination == "conf/runtime.json" or destination.startswith("share/core/"):
             fail("reserved core runtime destination: " + destination)
+        if _overridable_module_config(destination) and not file.is_directory:
+            product_overrides[destination] = True
+    entries = list(product_entries)
     libraries = []
     executables = []
     for target in ctx.attr.modules:
@@ -243,7 +250,10 @@ def _layout_impl(ctx):
         if info.name in modules:
             fail("duplicate runtime module name: " + info.name)
         modules.append(info.name)
-        entries += info.entries
+        for file, destination in info.entries:
+            if destination in product_overrides and _overridable_module_config(destination) and not file.is_directory:
+                continue
+            entries.append((file, destination))
         libraries.append(info.libraries)
         executables += info.executables
     for file in ctx.files.cyber_conf:
@@ -317,6 +327,9 @@ runtime_layout = rule(
                 Label("//cyber/tools/cyber_launch:cyber_launch.py"): "bin/cyber_launch.py",
                 Label("//cyber/tools/cyber_recorder"): "bin/cyber_recorder",
                 Label("//cyber/tools/cyber_monitor"): "bin/cyber_monitor",
+                Label("//cyber/tools/cyber_node:cyber_node.py"): "bin/cyber_node.py",
+                Label("//cyber/tools/cyber_channel:cyber_channel.py"): "bin/cyber_channel.py",
+                Label("//cyber/tools/cyber_service:cyber_service.py"): "bin/cyber_service.py",
             },
         ),
         "python_runtime": attr.label_list(default = [Label("//runtime:python_runtime")]),

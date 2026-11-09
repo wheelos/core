@@ -20,7 +20,14 @@ def _failure_impl(ctx):
     asserts.expect_failure(env, ctx.attr.expected)
     return analysistest.end(env)
 
+def _override_impl(ctx):
+    env = analysistest.begin(ctx)
+    manifest = analysistest.target_under_test(env)[OutputGroupInfo].manifest.to_list()[0]
+    asserts.true(env, manifest.basename.endswith(".manifest.json"))
+    return analysistest.end(env)
+
 _module_test = analysistest.make(_module_impl)
+_override_test = analysistest.make(_override_impl)
 _failure_test = analysistest.make(_failure_impl, expect_failure = True, attrs = {"expected": attr.string()})
 
 def _directory_impl(ctx):
@@ -121,6 +128,21 @@ def runtime_analysis_tests(name):
         target_under_test = ":missing_input",
         expected = "reviewed input required",
     )
+    runtime_layout(
+        name = "product_override_layout",
+        testonly = True,
+        modules = [":example_module"],
+        files = {
+            "tests/models/model.txt": "conf/example/example.conf",
+        },
+        tools = {},
+        python_runtime = [],
+        cyber_conf = "tests/example.conf",
+    )
+    _override_test(
+        name = "product_override_analysis_test",
+        target_under_test = ":product_override_layout",
+    )
     native.test_suite(
         name = name,
         tests = [
@@ -131,5 +153,6 @@ def runtime_analysis_tests(name):
             ":duplicate_analysis_test",
             ":defaults_analysis_test",
             ":required_input_analysis_test",
+            ":product_override_analysis_test",
         ],
     )

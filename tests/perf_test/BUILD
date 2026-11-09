@@ -200,6 +200,7 @@ cc_test(
         "//cyber/transport/nvsci:gpu_channel_session",
         "//cyber/transport/nvsci:gpu_loaned_message",
         "@com_google_googletest//:gtest_main",
+        "@cuda//:cuda_runtime",
     ],
 )
 
@@ -212,6 +213,7 @@ cc_test(
     deps = [
         "//cyber/transport/nvsci:nvsci_buf_pool",
         "@com_google_googletest//:gtest_main",
+        "@cuda//:cuda_runtime",
     ],
 )
 

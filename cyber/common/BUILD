@@ -46,7 +46,9 @@ cc_library(
     hdrs = ["resource_manager.h"],
     visibility = ["//visibility:public"],
     deps = [
+        "//cyber/common:file",
         "//cyber/common:log",
+        "@com_google_protobuf//:protobuf",
     ],
 )
 

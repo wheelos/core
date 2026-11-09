@@ -8,7 +8,21 @@ import posixpath
 import shutil
 from pathlib import Path, PurePosixPath
 
-COMMANDS = ("mainboard", "cyber_launch", "cyber_recorder", "cyber_monitor")
+PYTHON_COMMANDS = (
+    "cyber_launch",
+    "cyber_node",
+    "cyber_channel",
+    "cyber_service",
+)
+COMMANDS = (
+    "mainboard",
+    "cyber_launch",
+    "cyber_recorder",
+    "cyber_monitor",
+    "cyber_node",
+    "cyber_channel",
+    "cyber_service",
+)
 DATA_ROOTS = ("conf", "dag", "launch", "assets", "models")
 
 
@@ -34,7 +48,8 @@ def safe_destination(value):
 
 
 def _wrapper(name):
-    target = "cyber_launch.py" if name == "cyber_launch" else name
+    is_python = name in PYTHON_COMMANDS
+    target = f"{name}.py" if is_python else name
     return f"""#!/usr/bin/env python3
 import os
 from pathlib import Path
@@ -48,7 +63,7 @@ if {name!r} in ("mainboard", "cyber_launch"):
     validate_required(root, env)
     os.chdir(root)
 argv = [str(target), *sys.argv[1:]]
-if {name!r} == "cyber_launch":
+if {is_python!r}:
     argv.insert(0, "python3")
 os.execvpe(argv[0], argv, env)
 """
@@ -94,11 +109,16 @@ for _wheelos_python in "$_wheelos_root"/python/*; do
   fi
 done
 export PATH="$_wheelos_root/bin/commands:$PATH"
+for _wheelos_mod_bin in "$_wheelos_root"/bin/modules/*; do
+  if [[ -d "$_wheelos_mod_bin" ]]; then
+    export PATH="$_wheelos_mod_bin:$PATH"
+  fi
+done
 if [[ ! -v GLOG_log_dir ]]; then
   export GLOG_logtostderr="${GLOG_logtostderr-1}"
 fi
 unset RUNFILES_DIR RUNFILES_MANIFEST_FILE JAVA_RUNFILES
-unset _wheelos_root _wheelos_python
+unset _wheelos_root _wheelos_python _wheelos_mod_bin
 """
 
 
@@ -213,7 +233,11 @@ def materialize(manifest, root, mode_manifest=None):
             mappings = repo_mappings.setdefault(key, {})
             for line in source.read_text().splitlines():
                 fields = line.split(",")
-                if len(fields) not in (2, 3) or not fields[0] or not fields[1]:
+                if (
+                    len(fields) not in (2, 3)
+                    or not fields[1]
+                    or (len(fields) == 3 and not fields[2])
+                ):
                     raise ValueError(
                         f"invalid repository mapping in {source}: {line!r}"
                     )

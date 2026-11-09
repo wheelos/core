@@ -4,6 +4,8 @@ package(
     default_visibility = ["//:internal"],
 )
 
+exports_files(["cyber_node.py"])
+
 py_binary(
     name = "cyber_node",
     srcs = ["cyber_node.py"],

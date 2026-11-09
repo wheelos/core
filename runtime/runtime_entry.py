@@ -49,7 +49,15 @@ def environment(root, inherited=None):
     env["LD_LIBRARY_PATH"] = str(root / "lib")
     if env.get("WHEELOS_RUNTIME_LIBRARY_PATH"):
         env["LD_LIBRARY_PATH"] += ":" + env["WHEELOS_RUNTIME_LIBRARY_PATH"]
-    env["PATH"] = str(root / "bin/commands") + os.pathsep + env.get("PATH", "")
+    path_entries = [str(root / "bin/commands")]
+    modules_bin = root / "bin/modules"
+    if modules_bin.is_dir():
+        path_entries.extend(
+            str(path) for path in sorted(modules_bin.iterdir()) if path.is_dir()
+        )
+    if env.get("PATH"):
+        path_entries.append(env["PATH"])
+    env["PATH"] = os.pathsep.join(path_entries)
     python = root / "python"
     paths = [str(python)]
     if python.is_dir():

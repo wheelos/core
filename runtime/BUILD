@@ -35,6 +35,7 @@ py_library(
     name = "python_runtime",
     deps = [
         "//cyber/proto:record_py_pb2",
+        "//cyber/proto:role_attributes_py_pb2",
         "//cyber/python/cyber_py3:cyber",
         "//cyber/python/cyber_py3:cyber_time",
         "//cyber/python/cyber_py3:cyber_timer",
