@@ -5,6 +5,14 @@ description: Qualify a WheelOS release candidate across packaging, installation,
 
 # Release Acceptance and Qualification
 
+The canonical automated entrypoint is
+`python3 scripts/testing/qualify_release.py`. It runs the layered unit and
+integration suites, package-only E2E, performance/leaks and two-hour stability
+in containers and binds the results to the exact candidate hashes.
+Use `--verify --publish` before delivery. The stage-specific commands below
+remain diagnostic procedures; quick or partial-stage success is not a full
+release authorization.
+
 ## When
 
 Use this skill when qualifying a candidate release, validating packaging and

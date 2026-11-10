@@ -36,22 +36,9 @@ if [[ -n "${PYTHONUSERBASE:-}" ]]; then
 fi
 bazel test --config=ci --distdir="$DISTDIR" \
   "${TEST_ENV_ARGS[@]}" \
-  //tests/public_api:sdk_contract_test \
-  //tests/public_api:node_public_api_test \
-  //cyber/node:intra_reader_writer_test \
-  //scripts/release:release_scripts_test \
-  //cyber/node:writer_test \
-  //cyber/node:writer_reader_test \
-  //cyber/data:all_latest_test \
-  //cyber/data:channel_buffer_test \
-  //cyber/data:data_visitor_test \
-  //cyber/component:component_test \
-  //cyber/metrics:metrics_test \
-  //tests/perf_test:runtime_metrics_hot_path_benchmark_test \
-  //tests/perf_test:runtime_metrics_pubsub_benchmark_test \
-  //tests/perf_test:runtime_metrics_compare_test \
-  //tests/perf_test:runtime_metrics_snapshot_benchmark_test \
-  //tests/integration_test:core_tool_matrix_tests
+  //tests:unit \
+  //tests:integration \
+  //tests:performance_regression
 
 if [ "$RUN_PYCYBER" = true ]; then
   bash scripts/release/build_and_package_pycyber.sh

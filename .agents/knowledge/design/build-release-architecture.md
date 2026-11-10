@@ -16,6 +16,13 @@
 - `bash scripts/release/build_and_package_pycyber.sh` — Python wheel-focused release path.
 - `//tests/integration_test:core_tool_matrix_tests` — shared runtime, tools,
   transport, Python, examples, and record/play acceptance target.
+- `python3 scripts/testing/container_test.py integration` — private-IPC
+  container for `//tests:integration` and short performance regression tests.
+- `python3 scripts/testing/container_test.py e2e` — installed candidate tests
+  in a runtime-only container, without source or Bazel output mounts.
+- `python3 scripts/testing/qualify_release.py` — five mandatory container
+  gates, including two-hour stability and leaks, bound to candidate hashes;
+  `--verify --publish` is required before releasing the same bytes.
 
 ## Artifact model
 
@@ -52,4 +59,9 @@
 - `core-ci.yml` runs the Ubuntu 22.04 compile and regression baseline; configure it as a required PR check.
 - `lint.yml` checks changed files; configure it as a required PR check and expand it to the full tree after existing lint debt is addressed.
 - `release-pycyber.yml` builds and validates wheels for relevant PRs, and publishes only on `wheelos_core-v*` tags.
+- Tagged publication requires full x86 native qualification plus installed
+  Python E2E on x86 and ARM. Native GitHub delivery follows PyPI publication.
+- `nightly-qualification.yml` runs all release gates without publishing.
+- Test responsibilities and server-side release-environment setup are defined
+  in `docs/guides/release-and-verification.md`.
 - Release jobs should keep `fetch-depth: 0` so `setuptools_scm` can resolve tag-derived versions.

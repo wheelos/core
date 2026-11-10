@@ -4,6 +4,9 @@ on:
   pull_request:
     branches: ["main"]
     paths:
+      - "BUILD"
+      - "scripts/runtime/**"
+      - "scripts/env/**"
       - ".github/workflows/release-pycyber.yml"
       - "packaging/pycyber/**"
       - "scripts/release/build_and_package_pycyber.sh"
@@ -20,10 +23,17 @@ on:
       - "cyber/**"
       - "MODULE.bazel"
       - "MODULE.bazel.lock"
+      - "scripts/testing/**"
+      - "tests/**"
+      - "runtime/**"
+      - "docker/test.dockerfile"
   push:
     tags:
       - "wheelos_core-v*"
     paths:
+      - "BUILD"
+      - "scripts/runtime/**"
+      - "scripts/env/**"
       - ".github/workflows/release-pycyber.yml"
       - "packaging/pycyber/**"
       - "scripts/release/build_and_package_pycyber.sh"
@@ -51,16 +61,15 @@ permissions:
 
 jobs:
   build-and-validate-wheel:
+    timeout-minutes: 300
     strategy:
       fail-fast: false
       matrix:
         include:
           - artifact_suffix: linux-x86_64
             runs_on: ubuntu-22.04
-            skip_sdist: false
           - artifact_suffix: linux-aarch64
             runs_on: ubuntu-22.04-arm
-            skip_sdist: true
     runs-on: ${{ matrix.runs_on }}
     env:
       PYTHONUSERBASE: ${{ runner.temp }}/wheelos-python-userbase
@@ -73,50 +82,63 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: Read Bazel version
-        id: bazel-version
-        run: echo "version=$(cat .bazelversion)" >> "$GITHUB_OUTPUT"
-
-      - name: Set up Bazel with cache
-        uses: bazel-contrib/setup-bazel@0.15.0
+      - uses: actions/cache@v4
         with:
-          bazelisk-cache: true
-          disk-cache: ${{ github.workflow }}
-          bazel-version: ${{ steps.bazel-version.outputs.version }}
+          path: |
+            ~/.cache/wheelos-core-testing/repository
+            ~/.cache/wheelos-core-testing/disk
+            ~/.cache/wheelos-core-testing/pip
+          key: release-container-${{ runner.arch }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion') }}-${{ github.sha }}
+          restore-keys: release-container-${{ runner.arch }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion') }}-
 
-      - name: Install wheel build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y patchelf
-          python -m pip install --upgrade pip
-          python -m pip install --user protobuf==7.36.2
-          python -m pip install build auditwheel twine setuptools_scm
-
-      - name: Check Bzlmod lockfile
-        run: bash scripts/release/check_bzlmod_lockfile.sh --check
-
-      - name: Check release scripts
-        run: bazel test //scripts/release:release_scripts_test --test_output=errors
-
-      - name: Build and package pycyber
+      - name: Build ARM wheel in pinned Ubuntu container
+        if: matrix.artifact_suffix == 'linux-aarch64'
         shell: bash
         run: |
           args=()
-          if [[ "${{ matrix.skip_sdist }}" == "true" ]]; then
-            args+=(--skip-sdist)
-          fi
           if [[ "$GITHUB_REF" == refs/tags/* ]]; then
             args+=(--publish)
           fi
-          PYTHON=python3.10 bash scripts/release/build_and_package_pycyber.sh "${args[@]}"
+          python3 scripts/testing/container_test.py wheel --build-images "${args[@]}"
+
+      - name: Build and test native and Python candidate in containers
+        if: matrix.artifact_suffix == 'linux-x86_64' && !startsWith(github.ref, 'refs/tags/')
+        run: |
+          python3 scripts/testing/container_test.py package --build-images
+          python3 scripts/testing/container_test.py e2e
+
+      - name: Qualify exact tagged candidate before publication
+        if: matrix.artifact_suffix == 'linux-x86_64' && startsWith(github.ref, 'refs/tags/')
+        run: python3 scripts/testing/qualify_release.py --publish --build-images
+
+      - name: Export self-contained Python candidate without rebuilding
+        run: |
+          python3 scripts/testing/artifacts.py \
+            artifacts/testing/candidate artifacts/testing/python-candidate
 
       - uses: actions/upload-artifact@v4
         with:
           name: pycyber-${{ matrix.artifact_suffix }}
           if-no-files-found: error
+          path: artifacts/testing/python-candidate/
+
+      - uses: actions/upload-artifact@v4
+        if: matrix.artifact_suffix == 'linux-x86_64'
+        with:
+          name: native-release-candidate
           path: |
-            packaging/pycyber/wheelhouse/*.tar.gz
-            packaging/pycyber/wheelhouse/*.whl
+            artifacts/testing/candidate/
+            artifacts/testing/qualification.json
+
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.artifact_suffix == 'linux-x86_64'
+        with:
+          name: candidate-test-reports
+          path: |
+            artifacts/testing/unit/
+            artifacts/testing/integration/
+            artifacts/testing/e2e/
+            artifacts/testing/perf/
 
   verify-python-compat:
     needs: build-and-validate-wheel
@@ -138,16 +160,22 @@ jobs:
           name: pycyber-${{ matrix.artifact_suffix }}
           path: dist
 
-      - name: Validate wheel install/import on Python ${{ matrix.python-version }}
+      - name: Validate installed wheel processes in runtime-only container
         shell: bash
         run: |
-          wheel="$(ls dist/*.whl | head -n1)"
-          python scripts/release/validate_pycyber.py --python python --wheel "$wheel"
+          python3 scripts/testing/container_test.py e2e --wheel-only --artifacts dist --build-images
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: installed-e2e-${{ matrix.artifact_suffix }}
+          path: artifacts/testing/e2e/
 
   publish-pypi:
     needs: [build-and-validate-wheel, verify-python-compat]
     if: startsWith(github.ref, 'refs/tags/wheelos_core-v')
     runs-on: ubuntu-22.04
+    environment: release
     permissions:
       contents: read
       id-token: write
@@ -159,8 +187,24 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           pattern: pycyber-*
-          path: ${{ runner.temp }}/pycyber-dist
-          merge-multiple: true
+          path: ${{ runner.temp }}/python-candidates
+
+      - name: Collect only tested distributions for PyPI
+        run: |
+          mkdir -p "$RUNNER_TEMP/pycyber-dist"
+          find "$RUNNER_TEMP/python-candidates" -type f \
+            \( -name '*.whl' -o -name '*.tar.gz' \) \
+            -exec cp '{}' "$RUNNER_TEMP/pycyber-dist/" \;
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-release-candidate
+          path: ${{ runner.temp }}/native-evidence
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: installed-e2e-*
+          path: ${{ runner.temp }}/installed-evidence
 
       - name: Show collected distributions
         run: ls -1 "$RUNNER_TEMP/pycyber-dist"
@@ -168,6 +212,47 @@ jobs:
       - name: Verify artifacts against release tag
         run: python3 scripts/release/check_release_version.py --publish --wheelhouse "$RUNNER_TEMP/pycyber-dist"
 
+      - name: Require complete qualification and installation evidence for exact published bytes
+        run: |
+          python3 scripts/testing/qualify_release.py --verify --publish \
+            --report "$RUNNER_TEMP/native-evidence/qualification.json" \
+            --candidate "$RUNNER_TEMP/native-evidence/candidate" \
+            --distributions "$RUNNER_TEMP/pycyber-dist" \
+            --installation-reports "$RUNNER_TEMP/installed-evidence"
+
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: ${{ runner.temp }}/pycyber-dist
+
+  publish-native:
+    needs: publish-pypi
+    if: startsWith(github.ref, 'refs/tags/wheelos_core-v')
+    runs-on: ubuntu-22.04
+    environment: release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-release-candidate
+          path: ${{ runner.temp }}/native-evidence
+      - name: Recheck exact native candidate
+        run: |
+          python3 scripts/testing/qualify_release.py --verify --publish \
+            --report "$RUNNER_TEMP/native-evidence/qualification.json" \
+            --candidate "$RUNNER_TEMP/native-evidence/candidate"
+      - name: Publish qualified native bundle and qualification evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes --draft \
+            "$RUNNER_TEMP"/native-evidence/candidate/core/*.deb \
+            "$RUNNER_TEMP"/native-evidence/candidate/pycyber/*.whl \
+            "$RUNNER_TEMP"/native-evidence/candidate/pycyber/*.tar.gz \
+            "$RUNNER_TEMP/native-evidence/candidate/manifest.txt" \
+            "$RUNNER_TEMP/native-evidence/candidate/SHA256SUMS" \
+            "$RUNNER_TEMP/native-evidence/qualification.json"
+          gh release edit "$GITHUB_REF_NAME" --draft=false

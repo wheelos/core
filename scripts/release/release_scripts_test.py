@@ -2,20 +2,24 @@
 
 import json
 import os
-from pathlib import Path
 import shutil
 import stat
 import subprocess
 import sys
 import tarfile
+import tempfile
 import unittest
 import zipfile
+from pathlib import Path
 
 
 class ReleaseScriptsTest(unittest.TestCase):
     def setUp(self):
-        self.work = Path.cwd() / ".release_scripts_test_work"
-        shutil.rmtree(self.work, ignore_errors=True)
+        directory = tempfile.TemporaryDirectory(
+            prefix="release-scripts-", dir=os.environ.get("TEST_TMPDIR")
+        )
+        self.addCleanup(directory.cleanup)
+        self.work = Path(directory.name)
         self.repo = self.work / "repo"
         self.fake_bin = self.work / "bin"
         self.repo.mkdir(parents=True)
@@ -32,7 +36,8 @@ class ReleaseScriptsTest(unittest.TestCase):
         checker = self.repo / "scripts" / "release" / "check_release_version.py"
         checker.parent.mkdir(parents=True)
         shutil.copyfile(
-            Path(__file__).resolve().with_name("check_release_version.py"), checker
+            Path(__file__).resolve().with_name("check_release_version.py"),
+            checker,
         )
         self._write_executable(
             "git",
@@ -57,11 +62,35 @@ fi
 """,
         )
 
-    def tearDown(self):
-        shutil.rmtree(self.work, ignore_errors=True)
-
     def _script(self, name):
         return Path(__file__).resolve().with_name(name)
+
+    def test_installed_setup_defaults_root_and_preserves_explicit_root(self):
+        prefix = self.work / "installed core"
+        (prefix / "bin").mkdir(parents=True)
+        setup = prefix / "setup.bash"
+        shutil.copyfile(
+            Path(__file__).resolve().parents[1] / "runtime/setup.bash", setup
+        )
+        for configured in ("", str(self.work / "application")):
+            with self.subTest(root=configured):
+                result = subprocess.run(
+                    [
+                        "/bin/bash",
+                        "-c",
+                        'source "$1"; printf "%s" "$APOLLO_ROOT_DIR"',
+                        "bash",
+                        str(setup),
+                    ],
+                    env=self._env(
+                        APOLLO_ROOT_DIR=configured,
+                        GLOG_log_dir=str(self.work / "logs"),
+                    ),
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertEqual(configured or str(prefix), result.stdout)
 
     def _write_executable(self, name, contents):
         path = self.fake_bin / name
@@ -77,8 +106,13 @@ fi
                 "CALL_LOG": str(self.call_log),
             }
         )
-        for name in ("CYBER_RECORD_PLAY_FIXTURE", "PYCYBER_VERSION",
-                     "GITHUB_REF", "MOCK_RELEASE_TAG", "MOCK_GIT_DIRTY"):
+        for name in (
+            "CYBER_RECORD_PLAY_FIXTURE",
+            "PYCYBER_VERSION",
+            "GITHUB_REF",
+            "MOCK_RELEASE_TAG",
+            "MOCK_GIT_DIRTY",
+        ):
             env.pop(name, None)
         env.update(updates)
         return env
@@ -320,7 +354,8 @@ exit 0
 
         self.assertEqual("1.0.5", verify().stdout.strip())
         self.assertEqual(
-            "1.0.5", verify(MOCK_RELEASE_TAG="wheelos_core-v1.0.5").stdout.strip()
+            "1.0.5",
+            verify(MOCK_RELEASE_TAG="wheelos_core-v1.0.5").stdout.strip(),
         )
         wrong_tag = verify(MOCK_RELEASE_TAG="wheelos_core-v1.0.4")
         self.assertNotEqual(0, wrong_tag.returncode)
@@ -454,7 +489,8 @@ exit 0
             archive.add(metadata, arcname="pycyber-1.0.5/PKG-INFO")
             metadata.write_text("Name: pycyber\nVersion: 1.0.5\n", encoding="utf-8")
             archive.add(
-                metadata, arcname="pycyber-1.0.5/staging/src/pycyber.egg-info/PKG-INFO"
+                metadata,
+                arcname="pycyber-1.0.5/staging/src/pycyber.egg-info/PKG-INFO",
             )
         result = subprocess.run(
             [
@@ -478,16 +514,24 @@ exit 0
         version = "1.0.5.dev144+gdeadbee"
         wheel = wheelhouse / f"pycyber-{version}-py3-none-any.whl"
         command = [
-            sys.executable, str(self._script("check_release_version.py")),
-            "--release", "--wheelhouse", str(wheelhouse),
+            sys.executable,
+            str(self._script("check_release_version.py")),
+            "--release",
+            "--wheelhouse",
+            str(wheelhouse),
         ]
         with zipfile.ZipFile(wheel, "w") as archive:
             archive.writestr(
                 f"pycyber-{version}.dist-info/METADATA",
                 "Name: pycyber\nVersion: 1.0.4\n",
             )
-        result = subprocess.run(command, cwd=self.repo, env=self._env(),
-                                capture_output=True, text=True)
+        result = subprocess.run(
+            command,
+            cwd=self.repo,
+            env=self._env(),
+            capture_output=True,
+            text=True,
+        )
         self.assertNotEqual(0, result.returncode)
         self.assertIn("pycyber artifact metadata", result.stderr)
         with zipfile.ZipFile(wheel, "w") as archive:
@@ -500,88 +544,127 @@ exit 0
         metadata.write_text("Name: pycyber\nVersion: 1.0.4\n", encoding="utf-8")
         with tarfile.open(sdist, "w:gz") as archive:
             archive.add(metadata, arcname=f"pycyber-{version}/PKG-INFO")
-        result = subprocess.run(command, cwd=self.repo, env=self._env(),
-                                capture_output=True, text=True)
+        result = subprocess.run(
+            command,
+            cwd=self.repo,
+            env=self._env(),
+            capture_output=True,
+            text=True,
+        )
         self.assertNotEqual(0, result.returncode)
         self.assertIn("pycyber artifact metadata", result.stderr)
-        metadata.write_text(
-            f"Name: pycyber\nVersion: {version}\n", encoding="utf-8"
-        )
+        metadata.write_text(f"Name: pycyber\nVersion: {version}\n", encoding="utf-8")
         with tarfile.open(sdist, "w:gz") as archive:
             archive.add(metadata, arcname=f"pycyber-{version}/PKG-INFO")
             metadata.write_text("Name: pycyber\nVersion: 1.0.4\n", encoding="utf-8")
             archive.add(
-                metadata, arcname=f"pycyber-{version}/staging/src/pycyber.egg-info/PKG-INFO"
+                metadata,
+                arcname=f"pycyber-{version}/staging/src/pycyber.egg-info/PKG-INFO",
             )
-        result = subprocess.run(command, cwd=self.repo, env=self._env(),
-                                capture_output=True, text=True)
+        result = subprocess.run(
+            command,
+            cwd=self.repo,
+            env=self._env(),
+            capture_output=True,
+            text=True,
+        )
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertEqual(
             version,
             subprocess.run(
-                [sys.executable, str(self._script("check_release_version.py")),
-                 "--python-version"],
-                cwd=self.repo, env=self._env(), capture_output=True, text=True,
+                [
+                    sys.executable,
+                    str(self._script("check_release_version.py")),
+                    "--python-version",
+                ],
+                cwd=self.repo,
+                env=self._env(),
+                capture_output=True,
+                text=True,
                 check=True,
             ).stdout.strip(),
         )
 
     def test_publish_requires_matching_tag_ref_and_override(self):
         command = [
-            sys.executable, str(self._script("check_release_version.py")),
+            sys.executable,
+            str(self._script("check_release_version.py")),
             "--publish",
         ]
 
         def verify(**env):
-            return subprocess.run(command, cwd=self.repo, env=self._env(**env),
-                                  capture_output=True, text=True)
+            return subprocess.run(
+                command,
+                cwd=self.repo,
+                env=self._env(**env),
+                capture_output=True,
+                text=True,
+            )
 
         self.assertIn("publish requires", verify().stderr)
         self.assertIn(
             "clean worktree",
-            verify(MOCK_RELEASE_TAG="wheelos_core-v1.0.5",
-                   MOCK_GIT_DIRTY=" M BUILD").stderr,
+            verify(
+                MOCK_RELEASE_TAG="wheelos_core-v1.0.5",
+                MOCK_GIT_DIRTY=" M BUILD",
+            ).stderr,
         )
         self.assertIn(
             "publish ref",
-            verify(MOCK_RELEASE_TAG="wheelos_core-v1.0.5",
-                   GITHUB_REF="refs/tags/wheelos_core-v1.0.4").stderr,
+            verify(
+                MOCK_RELEASE_TAG="wheelos_core-v1.0.5",
+                GITHUB_REF="refs/tags/wheelos_core-v1.0.4",
+            ).stderr,
         )
         self.assertIn(
             "PYCYBER_VERSION",
-            verify(MOCK_RELEASE_TAG="wheelos_core-v1.0.5",
-                   GITHUB_REF="refs/tags/wheelos_core-v1.0.5",
-                   PYCYBER_VERSION="9.9.9").stderr,
+            verify(
+                MOCK_RELEASE_TAG="wheelos_core-v1.0.5",
+                GITHUB_REF="refs/tags/wheelos_core-v1.0.5",
+                PYCYBER_VERSION="9.9.9",
+            ).stderr,
         )
         self.assertEqual(
             0,
-            verify(MOCK_RELEASE_TAG="wheelos_core-v1.0.5",
-                   GITHUB_REF="refs/tags/wheelos_core-v1.0.5").returncode,
+            verify(
+                MOCK_RELEASE_TAG="wheelos_core-v1.0.5",
+                GITHUB_REF="refs/tags/wheelos_core-v1.0.5",
+            ).returncode,
         )
         self.assertEqual(
             "9.9.9",
             subprocess.run(
-                [sys.executable, str(self._script("check_release_version.py")),
-                 "--python-version"], cwd=self.repo,
+                [
+                    sys.executable,
+                    str(self._script("check_release_version.py")),
+                    "--python-version",
+                ],
+                cwd=self.repo,
                 env=self._env(PYCYBER_VERSION="9.9.9"),
-                capture_output=True, text=True, check=True,
+                capture_output=True,
+                text=True,
+                check=True,
             ).stdout.strip(),
         )
 
     def test_publish_entrypoints_reject_untagged_head_before_build(self):
-        for script in ("build_release_artifacts.sh",
-                       "build_and_package_pycyber.sh"):
+        for script in (
+            "build_release_artifacts.sh",
+            "build_and_package_pycyber.sh",
+        ):
             with self.subTest(script=script):
                 result = subprocess.run(
                     ["/bin/bash", str(self._script(script)), "--publish"],
-                    cwd=self.repo, env=self._env(),
-                    capture_output=True, text=True,
+                    cwd=self.repo,
+                    env=self._env(),
+                    capture_output=True,
+                    text=True,
                 )
                 self.assertNotEqual(0, result.returncode)
                 self.assertIn("publish requires", result.stderr)
         self.assertFalse((self.repo / "packaging" / "pycyber" / ".venv").exists())
 
-    def test_baseline_uses_single_core_matrix_and_forwards_fixture(self):
+    def test_baseline_uses_test_layers_and_forwards_fixture(self):
         self._install_fake_bazel()
         self._write_executable(
             "bash",
@@ -601,11 +684,13 @@ exit 0
         )
         self.assertEqual(0, result.returncode, result.stderr)
         calls = self.call_log.read_text(encoding="utf-8")
-        self.assertEqual(1, calls.count("core_tool_matrix_tests"))
-        for target in ("//cyber/node:writer_test",
-                       "//cyber/node:writer_reader_test",
-                       "//cyber/data:channel_buffer_test"):
-            self.assertIn(target, calls)
+        for target in (
+            "//tests:unit",
+            "//tests:integration",
+            "//tests:performance_regression",
+        ):
+            self.assertEqual(1, calls.count(target))
+        self.assertNotIn("core_tool_matrix_tests", calls)
         self.assertNotIn("examples_regression_tests", calls)
         self.assertIn(
             f"--test_env=CYBER_RECORD_PLAY_FIXTURE={fixture}",
@@ -624,19 +709,28 @@ case " $* " in
 esac
 """,
         )
-        for script in ("run_memory_leak_check.sh",
-                       "run_cyber_memory_leak_matrix.sh"):
+        for script in (
+            "run_memory_leak_check.sh",
+            "run_cyber_memory_leak_matrix.sh",
+        ):
             with self.subTest(script=script):
                 result = subprocess.run(
-                    ["/bin/bash", str(self._script(script)),
-                     "--outdir", str(self.repo / script)],
-                    cwd=self.repo, env=self._env(),
-                    capture_output=True, text=True,
+                    [
+                        "/bin/bash",
+                        str(self._script(script)),
+                        "--outdir",
+                        str(self.repo / script),
+                    ],
+                    cwd=self.repo,
+                    env=self._env(),
+                    capture_output=True,
+                    text=True,
                 )
                 self.assertNotEqual(0, result.returncode)
         calls = self.call_log.read_text(encoding="utf-8")
         self.assertEqual(
-            6, calls.count("--errors-for-leak-kinds=definite,indirect,possible")
+            6,
+            calls.count("--errors-for-leak-kinds=definite,indirect,possible"),
         )
 
     def test_downstream_sdk_declares_direct_build_rule_dependencies(self):
@@ -692,9 +786,11 @@ exit 99
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertNotIn(
             "unexpected bazel",
-            self.call_log.read_text(encoding="utf-8")
-            if self.call_log.exists()
-            else "",
+            (
+                self.call_log.read_text(encoding="utf-8")
+                if self.call_log.exists()
+                else ""
+            ),
         )
 
     def test_config_validation_builds_and_queries_same_configuration(self):

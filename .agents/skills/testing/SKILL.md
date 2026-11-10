@@ -15,12 +15,22 @@ Read this when changing runtime, transport, message, example, or test code.
 - The canonical Ubuntu 22.04 CI build and test entrypoint is
   `bash scripts/release/ubuntu2204_baseline.sh`. It checks the release version
   and Bzlmod lockfile, builds `//cyber` and `//:wheelos_core`, and runs the
-  curated unit and integration test matrix, including
+  layered unit and integration test matrix, including
   `//tests/integration_test:core_tool_matrix_tests`.
 - To match GitHub Actions when running Python tests locally, use Python 3.10
-  and an isolated `PYTHONUSERBASE` with `protobuf==5.29.5`; pass that same
+  and an isolated `PYTHONUSERBASE` with `protobuf==7.36.2`; pass that same
   `PYTHONUSERBASE` to Bazel via `--test_env`. The CI setup is defined in
   `.github/workflows/core-ci.yml`.
+- The reproducible entrypoints are
+  `python3 scripts/testing/container_test.py unit` and
+  `python3 scripts/testing/container_test.py integration`. They use
+  `//tests:unit`, `//tests:integration` and `//tests:performance_regression`;
+  assign new explicit test rules in `tests/BUILD`.
+- Installed-package E2E runs via
+  `python3 scripts/testing/container_test.py package`, then
+  `python3 scripts/testing/container_test.py e2e`; its runtime container does
+  not mount the checkout or Bazel outputs. Full release authorization comes
+  from `python3 scripts/testing/qualify_release.py`, not a diagnostic stage.
 - `bazel test //...` runs every Bazel test target and is broader than the
   curated CI baseline; use it when a full repository-wide test run is needed.
 - For small changes, run targets from the nearest `BUILD` file; message changes

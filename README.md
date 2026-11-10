@@ -114,9 +114,12 @@ bazel build //cyber
 bazel test //cyber/message/...
 ```
 
+For containerized unit, integration, installed-package E2E and release gates,
+see the [test ownership and release workflow](docs/guides/release-and-verification.md).
+
 ## Offline / vendor build mode
 
-The default release flow remains unchanged. Vendor mode is an opt-in Bazel
+Vendor mode is an opt-in Bazel
 workflow for offline or air-gapped builds. Generate the lockfile and vendor
 tree while online, then publish a self-contained archive:
 

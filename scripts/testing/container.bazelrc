@@ -1,0 +1,7 @@
+common --repository_cache=/cache/repository
+common --distdir=/cache/distdir
+common --lockfile_mode=error
+build --disk_cache=/cache/disk
+build --symlink_prefix=bazel-
+test --test_env=PYTHONUSERBASE=/opt/python-userbase
+test --test_env=WHEELOS_TEST_IMAGE_ID

@@ -1,0 +1,38 @@
+name: Nightly Release Qualification
+
+on:
+  schedule:
+    - cron: "0 17 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-qualification
+  cancel-in-progress: false
+
+jobs:
+  qualify:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/wheelos-core-testing/repository
+            ~/.cache/wheelos-core-testing/disk
+            ~/.cache/wheelos-core-testing/pip
+          key: qualification-${{ runner.arch }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion') }}-${{ github.sha }}
+          restore-keys: qualification-${{ runner.arch }}-${{ hashFiles('MODULE.bazel.lock', '.bazelversion') }}-
+      - name: Unit, integration, installed artifacts, performance, two-hour stability and leaks
+        run: python3 scripts/testing/qualify_release.py --build-images
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nightly-qualification
+          path: artifacts/testing/
+          retention-days: 14

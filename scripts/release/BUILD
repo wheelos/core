@@ -30,5 +30,6 @@ py_test(
         "run_release_acceptance.sh",
         "ubuntu2204_baseline.sh",
         "validate_runtime_bundle.sh",
+        "//:scripts/runtime/setup.bash",
     ],
 )

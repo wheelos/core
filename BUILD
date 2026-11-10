@@ -193,6 +193,7 @@ pkg_deb(
     built_using = "unzip",
     data = ":wheelos_cyber_runtime",
     depends = [
+        "libatomic1",
         "unzip",
     ],
     description = "Wheelos Core runtime bundle",

@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+if [ "$#" -eq 1 ] && [ "$1" = "--version" ]; then
+  exec /usr/local/bin/bazel --version
+fi
+exec /usr/local/bin/bazel \
+  --output_user_root=/cache/output \
+  --bazelrc=/workspace/.bazelrc \
+  --bazelrc=/workspace/scripts/testing/container.bazelrc \
+  "$@"

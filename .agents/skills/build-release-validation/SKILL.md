@@ -12,7 +12,7 @@ artifacts.
 
 ## Rules / Facts
 
-- Run from the repository root with the repository's Bazel 7/Bzlmod
+- Run from the repository root with the repository-pinned Bazel/Bzlmod
   configuration. Use Python 3.10 for pycyber packaging; Linux auditwheel
   repair requires `patchelf >= 0.14.5`.
 - Check the lockfile first:
@@ -68,8 +68,8 @@ manylinux release.
 
 ### Part 2: Runtime, tools, and examples
 
-Run the shipped runtime and examples in the same clean image, using the named
-non-root `wheelos` user. The canonical runtime acceptance target is:
+Run the shipped runtime and examples in the same clean image, using the invoking
+non-root user's numeric UID/GID mapping. The canonical runtime acceptance target is:
 
 ```bash
 bazel test --config=ci --test_output=errors \
@@ -99,7 +99,7 @@ been qualified for concurrent matrix runs.
 
 Use `--privileged` only when the target also requires other kernel or IPC
 permissions. Keep Bazel analysis and hermetic Python builds as the
-non-root `wheelos` user; running Bazel as root is rejected by `rules_python`.
+invoking non-root user; running Bazel as root is rejected by `rules_python`.
 If an io_uring example passes only as privileged root, record that as an
 environment/UID requirement rather than silently changing the standard
 non-root acceptance result.

@@ -26,6 +26,11 @@ validating deliverables.
   results separately; partial success is not full release success.
 - Keep `MODULE.bazel.lock` synchronized with the Bzlmod configuration; do not
   bypass problems by disabling lockfile checks.
+- For automated release authorization use
+  `python3 scripts/testing/qualify_release.py --publish`, then
+  `python3 scripts/testing/qualify_release.py --verify --publish`. Publication
+  consumes those qualified bytes without rebuilding. Diagnostic acceptance
+  stages do not authorize a release.
 
 ## Sources
 
